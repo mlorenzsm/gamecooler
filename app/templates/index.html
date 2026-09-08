@@ -4,7 +4,7 @@
 {% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
 {% if config.dry_run %}<div class="dry-run">Testmodus aktiv (dry_run) – es wird nicht gedruckt.</div>{% endif %}
 
-<form class="part-form" method="post" action="/parts" id="part-form">
+<form class="part-form" method="post" action="/parts" id="part-form" onsubmit="return confirmPrint()">
   <label>Jäger
     <select name="hunter" required>
       {% for h in config.hunters %}<option>{{ h.name }}</option>{% endfor %}
@@ -46,6 +46,12 @@ function fillPrice() {
 }
 partSelect.addEventListener('change', fillPrice);
 fillPrice();
+
+function confirmPrint() {
+  const form = document.getElementById('part-form');
+  const d = new FormData(form);
+  return confirm(`2 Etiketten drucken?\n\n${d.get('species')} – ${d.get('part')}, ${d.get('weight_kg')} kg zu ${d.get('price_per_kg')} €/kg`);
+}
 
 function showPreview() {
   const form = document.getElementById('part-form');

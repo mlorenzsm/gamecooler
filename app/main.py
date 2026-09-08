@@ -185,6 +185,18 @@ def consume(part_uuid: str):
     )
 
 
+@app.post("/parts/consume-many")
+async def consume_many(request: Request):
+    form = await request.form()
+    uuids = [u.strip().lower() for u in form.getlist("uuid")]
+    if not uuids:
+        return RedirectResponse(url="/inventory?msg=Nichts ausgewählt", status_code=303)
+    changed = registry.mark_consumed_many(uuids)
+    return RedirectResponse(
+        url=f"/inventory?msg={changed} Teilstücke entnommen", status_code=303
+    )
+
+
 @app.get("/parts.json")
 def export():
     return JSONResponse([r.model_dump() for r in registry.load_all()])

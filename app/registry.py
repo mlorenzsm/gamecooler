@@ -43,6 +43,22 @@ def mark_consumed(part_uuid: str) -> tuple[PartRecord, bool] | None:
         return None
 
 
+def mark_consumed_many(part_uuids: list[str]) -> int:
+    """Marks all given uuids consumed in one write; returns count of newly consumed."""
+    wanted = set(part_uuids)
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with _lock:
+        records = load_all()
+        changed = 0
+        for record in records:
+            if record.uuid in wanted and record.consumed_at is None:
+                record.consumed_at = now
+                changed += 1
+        if changed:
+            _write([r.model_dump() for r in records])
+        return changed
+
+
 def inventory() -> list[PartRecord]:
     return [r for r in load_all() if r.consumed_at is None]
 

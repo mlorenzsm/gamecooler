@@ -4,19 +4,55 @@
 {% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
 
 <h2>🧊 Bestand</h2>
-<p>
-  <b>{{ inventory_count }}</b> Teilstücke im Bestand,
-  <b>{{ inventory_weight | de(3) }} kg</b>,
-  Warenwert <b>{{ inventory_value | de }} €</b>
+<p id="summary-line">
+  <b id="sum-count">{{ inventory_count }}</b> Teilstücke,
+  <b id="sum-weight">{{ inventory_weight | de(3) }} kg</b>,
+  Warenwert <b id="sum-value">{{ inventory_value | de }} €</b>
 </p>
+
+<div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-bottom:1rem;">
+  <select id="f-species">
+    <option value="">Alle Wildarten</option>
+    {% for s in config.species %}<option>{{ s }}</option>{% endfor %}
+  </select>
+  <select id="f-part">
+    <option value="">Alle Teilstücke</option>
+    {% for p in config.parts %}<option>{{ p }}</option>{% endfor %}
+  </select>
+  <select id="f-status">
+    <option value="stock">Im Bestand</option>
+    <option value="consumed">Entnommen</option>
+    <option value="">Alle</option>
+  </select>
+  <input id="f-search" type="search" placeholder="Suche…" style="flex:1; min-width:10rem;">
+</div>
+
+<form method="post" action="/parts/consume-many" id="consume-form"
+      onsubmit="return confirm(`${countSelected()} Teilstücke entnehmen?`)">
+  <p id="consume-bar" hidden>
+    <button type="submit" class="print" style="padding:0.5rem 1rem;">
+      🧊 <span id="consume-count"></span> Teilstücke entnehmen
+    </button>
+  </p>
+</form>
 
 <table>
   <tr>
+    <th><input type="checkbox" id="check-all" title="Alle auswählen"></th>
     <th>Datum</th><th>Wildart</th><th>Teilstück</th><th>Jäger</th>
     <th class="num">kg</th><th class="num">€/kg</th><th class="num">€</th><th>ID</th><th>Status</th><th></th>
   </tr>
   {% for r in records %}
-  <tr{% if r.consumed_at %} style="opacity: 0.5;"{% endif %}>
+  <tr class="part-row" {% if r.consumed_at %}style="opacity: 0.5;"{% endif %}
+      data-species="{{ r.species }}" data-part="{{ r.part }}"
+      data-status="{{ 'consumed' if r.consumed_at else 'stock' }}"
+      data-weight="{{ r.weight_kg }}" data-price="{{ r.total_price }}"
+      data-search="{{ (r.species ~ ' ' ~ r.part ~ ' ' ~ r.hunter ~ ' ' ~ r.uuid ~ ' ' ~ r.created_at[:10]) | lower }}">
+    <td>
+      {% if not r.consumed_at %}
+      <input type="checkbox" class="pick" name="uuid" value="{{ r.uuid }}" form="consume-form">
+      {% endif %}
+    </td>
     <td>{{ r.created_at[:10] }}</td>
     <td>{{ r.species }}</td>
     <td>{{ r.part }}</td>
@@ -27,12 +63,78 @@
     <td><code>{{ r.uuid[:8] }}</code></td>
     <td>{% if r.consumed_at %}entnommen {{ r.consumed_at[:10] }}{% else %}im Bestand{% endif %}</td>
     <td>
-      <form method="post" action="/parts/{{ r.uuid }}/reprint">
+      <form method="post" action="/parts/{{ r.uuid }}/reprint"
+            onsubmit="return confirm('2 Etiketten nachdrucken?\n\n{{ r.species }} – {{ r.part }}, {{ r.weight_kg | de(3) }} kg')">
         <button class="small" type="submit">Nachdrucken</button>
       </form>
     </td>
   </tr>
   {% endfor %}
 </table>
+<p id="no-match" hidden>Keine Treffer.</p>
+
+<script>
+const rows = [...document.querySelectorAll('.part-row')];
+const fSpecies = document.getElementById('f-species');
+const fPart = document.getElementById('f-part');
+const fStatus = document.getElementById('f-status');
+const fSearch = document.getElementById('f-search');
+
+function fmt(n, d = 2) { return n.toFixed(d).replace('.', ','); }
+
+function visiblePicks() {
+  return rows.filter(r => !r.hidden).flatMap(r => [...r.querySelectorAll('.pick')]);
+}
+
+function countSelected() {
+  return document.querySelectorAll('.pick:checked').length;
+}
+
+function applyFilter() {
+  const species = fSpecies.value, part = fPart.value, status = fStatus.value;
+  const search = fSearch.value.trim().toLowerCase();
+  let shown = 0, count = 0, weight = 0, value = 0;
+  for (const row of rows) {
+    const match =
+      (!species || row.dataset.species === species) &&
+      (!part || row.dataset.part === part) &&
+      (!status || row.dataset.status === status) &&
+      (!search || row.dataset.search.includes(search));
+    row.hidden = !match;
+    if (match) {
+      shown++;
+      count++;
+      weight += parseFloat(row.dataset.weight);
+      value += parseFloat(row.dataset.price);
+      // hidden rows must not stay selected
+    } else {
+      const cb = row.querySelector('.pick');
+      if (cb) cb.checked = false;
+    }
+  }
+  document.getElementById('no-match').hidden = shown > 0;
+  document.getElementById('sum-count').textContent = count;
+  document.getElementById('sum-weight').textContent = fmt(weight, 3) + ' kg';
+  document.getElementById('sum-value').textContent = fmt(value) + ' €';
+  updateBar();
+}
+
+function updateBar() {
+  const n = countSelected();
+  document.getElementById('consume-bar').hidden = n === 0;
+  document.getElementById('consume-count').textContent = n;
+  const picks = visiblePicks();
+  document.getElementById('check-all').checked = picks.length > 0 && picks.every(cb => cb.checked);
+}
+
+document.querySelectorAll('.pick').forEach(cb => cb.addEventListener('change', updateBar));
+document.getElementById('check-all').addEventListener('change', e => {
+  visiblePicks().forEach(cb => cb.checked = e.target.checked);
+  updateBar();
+});
+[fSpecies, fPart, fStatus].forEach(el => el.addEventListener('change', applyFilter));
+fSearch.addEventListener('input', applyFilter);
+applyFilter();
+</script>
 
 {% endblock %}

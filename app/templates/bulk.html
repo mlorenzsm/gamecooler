@@ -6,7 +6,7 @@
 
 <h2>🖨️ Sammeldruck</h2>
 
-<form method="post" action="/bulk" id="bulk-form">
+<form method="post" action="/bulk" id="bulk-form" onsubmit="return confirmBulkPrint()">
   <div class="part-form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin-bottom: 1rem;">
     <label style="display:flex; flex-direction:column; gap:0.3rem;">Jäger
       <select name="hunter" required>
@@ -57,6 +57,12 @@ function addRow() {
 
 function fmt(n) { return n.toFixed(2).replace('.', ','); }
 function num(s) { return parseFloat((s || '').replace(',', '.')); }
+
+function confirmBulkPrint() {
+  const summary = document.getElementById('summary').textContent;
+  if (!summary) return confirm('Drucken?');
+  return confirm(`Wirklich drucken?\n\n${summary}`);
+}
 
 function updateSummary() {
   let labels = 0, total = 0;
