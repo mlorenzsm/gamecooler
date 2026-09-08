@@ -27,11 +27,14 @@
   <input id="f-search" type="search" placeholder="Suche…" style="flex:1; min-width:10rem;">
 </div>
 
-<form method="post" action="/parts/consume-many" id="consume-form"
-      onsubmit="return confirm(`${countSelected()} Teilstücke entnehmen?`)">
-  <p id="consume-bar" hidden>
-    <button type="submit" class="print" style="padding:0.5rem 1rem;">
+<form method="post" action="/parts/consume-many" id="consume-form">
+  <p id="consume-bar" style="display:none; gap:0.6rem; flex-wrap:wrap;">
+    <button type="submit" class="print" style="padding:0.5rem 1rem;"
+            onclick="return confirm(`${countSelected()} Teilstücke entnehmen?`)">
       🧊 <span id="consume-count"></span> Teilstücke entnehmen
+    </button>
+    <button type="submit" formaction="/sell" class="print" style="padding:0.5rem 1rem;">
+      💶 <span id="sell-count"></span> Teilstücke verkaufen
     </button>
   </p>
 </form>
@@ -121,8 +124,9 @@ function applyFilter() {
 
 function updateBar() {
   const n = countSelected();
-  document.getElementById('consume-bar').hidden = n === 0;
+  document.getElementById('consume-bar').style.display = n === 0 ? 'none' : 'flex';
   document.getElementById('consume-count').textContent = n;
+  document.getElementById('sell-count').textContent = n;
   const picks = visiblePicks();
   document.getElementById('check-all').checked = picks.length > 0 && picks.every(cb => cb.checked);
 }

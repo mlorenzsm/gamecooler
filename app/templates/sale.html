@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="msg">✅ Verkauf Nr. {{ sale.number }} abgeschlossen</div>
+
+<h2>💶 Verkauf Nr. {{ sale.number }}</h2>
+<p style="white-space: pre-line;"><b>{{ sale.buyer_name }}</b>
+{{ sale.buyer_address }}</p>
+{% if sale.delivery_address != sale.buyer_address %}
+<p style="white-space: pre-line;"><b>Lieferadresse:</b>
+{{ sale.delivery_address }}</p>
+{% endif %}
+<p>Datum: {{ sale.created_at[:10] }}</p>
+
+<table>
+  <tr>
+    <th>Wildart</th><th>Teilstück</th><th class="num">kg</th><th class="num">€/kg</th><th class="num">€</th><th>ID</th>
+  </tr>
+  {% for i in sale.items %}
+  <tr>
+    <td>{{ i.species }}</td>
+    <td>{{ i.part }}</td>
+    <td class="num">{{ i.weight_kg | de(3) }}</td>
+    <td class="num">{{ i.price_per_kg | de }}</td>
+    <td class="num">{{ i.total_price | de }}</td>
+    <td><code>{{ i.uuid[:8] }}</code></td>
+  </tr>
+  {% endfor %}
+  <tr>
+    <td colspan="4" style="text-align:right;"><b>Gesamt</b></td>
+    <td class="num"><b>{{ sale.total | de }} €</b></td>
+    <td></td>
+  </tr>
+</table>
+
+<p style="margin-top:1rem;">
+  <a href="/sales/{{ sale.sale_id }}/pdf" target="_blank">
+    <button class="print" type="button" style="padding:0.6rem 1.2rem;">📄 PDF öffnen</button>
+  </a>
+  <a href="/inventory"><button type="button" style="padding:0.6rem 1.2rem;">Zurück zum Bestand</button></a>
+</p>
+
+{% endblock %}

@@ -1,12 +1,30 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h2>📷 Entnahme scannen</h2>
-<p>QR-Etikett vor die Kamera halten — das Teilstück wird aus dem Bestand ausgetragen.</p>
+<h2>📷 Scannen</h2>
+
+<div style="display:flex; gap:0.6rem; margin-bottom:1rem;">
+  <label style="display:flex; align-items:center; gap:0.4rem;">
+    <input type="radio" name="mode" value="consume" checked> 🧊 Entnahme
+  </label>
+  <label style="display:flex; align-items:center; gap:0.4rem;">
+    <input type="radio" name="mode" value="sell"> 💶 Verkauf
+  </label>
+</div>
+<p id="mode-hint">QR-Etikett vor die Kamera halten — das Teilstück wird aus dem Bestand ausgetragen.</p>
 
 <div id="reader" style="max-width: 500px;"></div>
 
 <div id="result" style="margin-top: 1rem;"></div>
+
+<form method="post" action="/sell" id="basket-form" style="display:none; margin-top:1rem;">
+  <h3>💶 Warenkorb</h3>
+  <ul id="basket"></ul>
+  <p><b id="basket-summary"></b></p>
+  <button type="submit" class="print" style="padding:0.6rem 1.2rem;">
+    💶 <span id="basket-count"></span> Teilstücke verkaufen
+  </button>
+</form>
 
 <h3>Zuletzt entnommen</h3>
 <ul id="log"></ul>
@@ -15,12 +33,42 @@
 <script>
 const resultEl = document.getElementById('result');
 const logEl = document.getElementById('log');
+const basketForm = document.getElementById('basket-form');
+const basketEl = document.getElementById('basket');
 let lastScan = { text: null, at: 0 };
+const basket = new Map();
 
 function fmt(n, d = 2) { return n.toFixed(d).replace('.', ','); }
+function mode() { return document.querySelector('input[name=mode]:checked').value; }
 
 function show(html, kind) {
   resultEl.innerHTML = `<div class="${kind}" style="padding:0.8rem 1rem; border-radius:6px;">${html}</div>`;
+}
+
+function updateBasket() {
+  basketForm.style.display = basket.size ? 'block' : 'none';
+  document.getElementById('basket-count').textContent = basket.size;
+  let total = 0;
+  for (const p of basket.values()) total += p.total_price;
+  document.getElementById('basket-summary').textContent =
+    `${basket.size} Teilstücke, ${fmt(total)} €`;
+}
+
+function addToBasket(p) {
+  if (basket.has(p.uuid)) return false;
+  basket.set(p.uuid, p);
+  const li = document.createElement('li');
+  li.innerHTML = `${p.species} – ${p.part}, ${fmt(p.weight_kg, 3)} kg, ${fmt(p.total_price)} € ` +
+    `<input type="hidden" name="uuid" value="${p.uuid}" form="basket-form"> ` +
+    `<button type="button" class="small">✕</button>`;
+  li.querySelector('button').addEventListener('click', () => {
+    basket.delete(p.uuid);
+    li.remove();
+    updateBasket();
+  });
+  basketEl.appendChild(li);
+  updateBasket();
+  return true;
 }
 
 async function onScan(text) {
@@ -28,13 +76,30 @@ async function onScan(text) {
   if (text === lastScan.text && now - lastScan.at < 5000) return;
   lastScan = { text, at: now };
 
-  const uuid = text.trim();
+  const uuid = text.trim().toLowerCase();
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid)) {
     show('Kein gültiger Etiketten-Code', 'dry-run');
     return;
   }
 
   try {
+    if (mode() === 'sell') {
+      const resp = await fetch(`/parts/${encodeURIComponent(uuid)}.json`);
+      const data = await resp.json();
+      if (!data.ok) { show(`❌ ${data.error}`, 'dry-run'); return; }
+      const p = data.part;
+      const desc = `${p.species} – ${p.part}, ${fmt(p.weight_kg, 3)} kg (${p.uuid.slice(0, 8).toUpperCase()})`;
+      if (p.consumed_at) {
+        show(`⚠️ Bereits entnommen am ${p.consumed_at.slice(0, 10)}:<br><b>${desc}</b>`, 'dry-run');
+      } else if (addToBasket(p)) {
+        show(`🛒 Im Warenkorb:<br><b>${desc}</b>`, 'msg');
+        if (navigator.vibrate) navigator.vibrate(100);
+      } else {
+        show(`⚠️ Schon im Warenkorb:<br><b>${desc}</b>`, 'dry-run');
+      }
+      return;
+    }
+
     const resp = await fetch(`/parts/${encodeURIComponent(uuid)}/consume`, { method: 'POST' });
     const data = await resp.json();
     if (!data.ok) {
@@ -53,9 +118,15 @@ async function onScan(text) {
       if (navigator.vibrate) navigator.vibrate(100);
     }
   } catch (e) {
-    show('Fehler beim Austragen — Verbindung prüfen', 'dry-run');
+    show('Fehler — Verbindung prüfen', 'dry-run');
   }
 }
+
+document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', () => {
+  document.getElementById('mode-hint').textContent = mode() === 'sell'
+    ? 'QR-Etiketten scannen und in den Warenkorb legen — dann Verkauf abschließen.'
+    : 'QR-Etikett vor die Kamera halten — das Teilstück wird aus dem Bestand ausgetragen.';
+}));
 
 const scanner = new Html5Qrcode("reader");
 const scanConfig = { fps: 10, qrbox: { width: 250, height: 250 } };

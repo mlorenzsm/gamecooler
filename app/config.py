@@ -7,6 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = BASE_DIR / "config.yaml"
 DATA_DIR = BASE_DIR / "data"
 REGISTRY_PATH = DATA_DIR / "registry.json"
+SALES_PATH = DATA_DIR / "sales.json"
 FONTS_DIR = Path(__file__).resolve().parent / "fonts"
 
 

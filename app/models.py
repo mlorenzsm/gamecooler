@@ -34,6 +34,7 @@ class PartRecord(BaseModel):
     created_at: str
     printed: bool
     consumed_at: str | None = None
+    sale_id: str | None = None
 
     @classmethod
     def from_input(cls, part: PartIn, printed: bool) -> "PartRecord":
@@ -52,3 +53,46 @@ class PartRecord(BaseModel):
 
 def format_de(value: float, decimals: int = 2) -> str:
     return f"{value:.{decimals}f}".replace(".", ",")
+
+
+class SaleItem(BaseModel):
+    uuid: str
+    species: str
+    part: str
+    weight_kg: float
+    price_per_kg: float
+    total_price: float
+
+
+class Sale(BaseModel):
+    sale_id: str
+    number: int
+    hunter: str
+    buyer_name: str
+    buyer_address: str
+    delivery_address: str
+    items: list[SaleItem]
+    total: float
+    created_at: str
+
+    @classmethod
+    def create(
+        cls,
+        number: int,
+        hunter: str,
+        buyer_name: str,
+        buyer_address: str,
+        delivery_address: str,
+        items: list[SaleItem],
+    ) -> "Sale":
+        return cls(
+            sale_id=str(uuid.uuid4()),
+            number=number,
+            hunter=hunter,
+            buyer_name=buyer_name,
+            buyer_address=buyer_address,
+            delivery_address=delivery_address,
+            items=items,
+            total=round(sum(i.total_price for i in items), 2),
+            created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        )

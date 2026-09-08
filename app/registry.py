@@ -59,6 +59,28 @@ def mark_consumed_many(part_uuids: list[str]) -> int:
         return changed
 
 
+def mark_sold(part_uuids: list[str], sale_id: str) -> int:
+    """Marks parts consumed with a sale reference; returns count of newly sold."""
+    wanted = set(part_uuids)
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with _lock:
+        records = load_all()
+        changed = 0
+        for record in records:
+            if record.uuid in wanted and record.consumed_at is None:
+                record.consumed_at = now
+                record.sale_id = sale_id
+                changed += 1
+        if changed:
+            _write([r.model_dump() for r in records])
+        return changed
+
+
+def get_many(part_uuids: list[str]) -> list[PartRecord]:
+    wanted = set(part_uuids)
+    return [r for r in load_all() if r.uuid in wanted]
+
+
 def inventory() -> list[PartRecord]:
     return [r for r in load_all() if r.consumed_at is None]
 

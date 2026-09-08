@@ -7,10 +7,11 @@ from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import registry
+from . import registry, sales
 from .config import Hunter, load_config
 from .labels import render_info_label, render_qr_label
-from .models import PartIn, PartRecord, format_de
+from .models import PartIn, PartRecord, Sale, SaleItem, format_de, parse_german_decimal
+from .pdf import render_sale_pdf
 from .printer import print_labels
 
 logging.basicConfig(level=logging.INFO)
@@ -54,18 +55,26 @@ def inventory_page(request: Request, msg: str = ""):
     )
 
 
+def _decimal_or_zero(v: str) -> float:
+    try:
+        return parse_german_decimal(v)
+    except ValueError:
+        return 0.0
+
+
 @app.get("/preview")
 def preview(
     hunter: str,
     species: str,
     part: str,
-    weight_kg: str,
-    price_per_kg: str,
+    weight_kg: str = "",
+    price_per_kg: str = "",
     type: str = "info",
 ):
     part_in = PartIn(
         hunter=hunter, species=species, part=part,
-        weight_kg=weight_kg, price_per_kg=price_per_kg,
+        weight_kg=_decimal_or_zero(weight_kg),
+        price_per_kg=_decimal_or_zero(price_per_kg),
     )
     record = PartRecord.from_input(part_in, printed=False)
     img = (
@@ -171,6 +180,17 @@ def scan_page(request: Request):
     )
 
 
+@app.get("/parts/{part_uuid}.json")
+def part_lookup(part_uuid: str):
+    record = registry.get(part_uuid.strip().lower())
+    if record is None:
+        return JSONResponse(
+            {"ok": False, "error": "Unbekannter Code — nicht im Bestand"},
+            status_code=404,
+        )
+    return JSONResponse({"ok": True, "part": record.model_dump()})
+
+
 @app.post("/parts/{part_uuid}/consume")
 def consume(part_uuid: str):
     result = registry.mark_consumed(part_uuid.strip().lower())
@@ -194,6 +214,90 @@ async def consume_many(request: Request):
     changed = registry.mark_consumed_many(uuids)
     return RedirectResponse(
         url=f"/inventory?msg={changed} Teilstücke entnommen", status_code=303
+    )
+
+
+@app.post("/sell")
+async def sell_form(request: Request):
+    form = await request.form()
+    uuids = [u.strip().lower() for u in form.getlist("uuid")]
+    records = [r for r in registry.get_many(uuids) if r.consumed_at is None]
+    if not records:
+        return RedirectResponse(url="/inventory?msg=Nichts ausgewählt", status_code=303)
+    return templates.TemplateResponse(
+        request,
+        "sell.html",
+        {
+            "config": config,
+            "active": "inventory",
+            "records": records,
+            "total": sum(r.total_price for r in records),
+        },
+    )
+
+
+@app.post("/sell/confirm")
+async def sell_confirm(request: Request):
+    form = await request.form()
+    uuids = form.getlist("uuid")
+    prices = form.getlist("item_price")
+    records = {r.uuid: r for r in registry.get_many(uuids) if r.consumed_at is None}
+    items = []
+    for u, price in zip(uuids, prices):
+        record = records.get(u)
+        if record is None:
+            continue
+        total = round(parse_german_decimal(price), 2)
+        items.append(
+            SaleItem(
+                uuid=record.uuid,
+                species=record.species,
+                part=record.part,
+                weight_kg=record.weight_kg,
+                price_per_kg=record.price_per_kg,
+                total_price=total,
+            )
+        )
+    if not items:
+        return RedirectResponse(url="/inventory?msg=Keine Teilstücke im Verkauf", status_code=303)
+
+    delivery = str(form.get("delivery_address", "")).strip()
+    buyer_address = str(form.get("buyer_address", "")).strip()
+    sale = Sale.create(
+        number=sales.next_number(),
+        hunter=str(form.get("hunter", "")),
+        buyer_name=str(form.get("buyer_name", "")).strip(),
+        buyer_address=buyer_address,
+        delivery_address=delivery or buyer_address,
+        items=items,
+    )
+    sales.append(sale)
+    registry.mark_sold([i.uuid for i in items], sale.sale_id)
+    return RedirectResponse(url=f"/sales/{sale.sale_id}", status_code=303)
+
+
+@app.get("/sales/{sale_id}")
+def sale_page(request: Request, sale_id: str):
+    sale = sales.get(sale_id)
+    if sale is None:
+        raise HTTPException(status_code=404, detail="Verkauf nicht gefunden")
+    return templates.TemplateResponse(
+        request,
+        "sale.html",
+        {"config": config, "active": "inventory", "sale": sale},
+    )
+
+
+@app.get("/sales/{sale_id}/pdf")
+def sale_pdf(sale_id: str):
+    sale = sales.get(sale_id)
+    if sale is None:
+        raise HTTPException(status_code=404, detail="Verkauf nicht gefunden")
+    pdf_bytes = render_sale_pdf(sale, find_hunter(sale.hunter))
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="verkauf-{sale.number}.pdf"'},
     )
 
 
