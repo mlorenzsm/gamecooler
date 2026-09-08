@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wildbret-Etiketten</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: -apple-system, system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 1rem; }
+    h1 { font-size: 1.4rem; }
+    form.part-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin-bottom: 1.5rem; }
+    form.part-form label { display: flex; flex-direction: column; font-size: 0.9rem; gap: 0.3rem; }
+    input, select, button { font-size: 1.1rem; padding: 0.5rem; }
+    button.print { grid-column: 1 / -1; padding: 0.8rem; font-weight: bold; cursor: pointer; }
+    .msg { background: #d2f8d2; color: #1a5c1a; padding: 0.6rem 1rem; border-radius: 6px; margin-bottom: 1rem; }
+    .dry-run { background: #fff3cd; color: #664d03; padding: 0.6rem 1rem; border-radius: 6px; margin-bottom: 1rem; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+    th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #ccc; }
+    td.num { text-align: right; }
+    .preview-imgs { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+    .preview-imgs img { max-width: 420px; width: 100%; border: 1px solid #ccc; background: white; }
+    button.small { font-size: 0.8rem; padding: 0.2rem 0.5rem; }
+    @media (max-width: 600px) { form.part-form { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <h1>🦌 Wildbret-Etiketten</h1>
+  {% block content %}{% endblock %}
+</body>
+</html>

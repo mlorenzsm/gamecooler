@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+{% if config.dry_run %}<div class="dry-run">Testmodus aktiv (dry_run) – es wird nicht gedruckt.</div>{% endif %}
+
+<form class="part-form" method="post" action="/parts" id="part-form">
+  <label>Jäger
+    <select name="hunter" required>
+      {% for h in config.hunters %}<option>{{ h }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Wildart
+    <select name="species" required>
+      {% for s in config.species %}<option>{{ s }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Teilstück
+    <select name="part" required>
+      {% for p in config.parts %}<option>{{ p }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Gewicht (kg)
+    <input name="weight_kg" required inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="1,25">
+  </label>
+  <label>Preis/kg (€)
+    <input name="price_per_kg" required inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="12,50">
+  </label>
+  <label>&nbsp;
+    <button type="button" onclick="showPreview()">Vorschau</button>
+  </label>
+  <button class="print" type="submit">2 Etiketten drucken &amp; registrieren</button>
+</form>
+
+<div class="preview-imgs" id="preview" hidden>
+  <img id="preview-info" alt="Info-Etikett">
+  <img id="preview-qr" alt="QR-Etikett">
+</div>
+
+<script>
+function showPreview() {
+  const form = document.getElementById('part-form');
+  if (!form.reportValidity()) return;
+  const params = new URLSearchParams(new FormData(form));
+  document.getElementById('preview-info').src = '/preview?' + params + '&type=info';
+  document.getElementById('preview-qr').src = '/preview?' + params + '&type=qr';
+  document.getElementById('preview').hidden = false;
+}
+</script>
+
+<h2>Zuletzt registriert</h2>
+<table>
+  <tr>
+    <th>Datum</th><th>Wildart</th><th>Teilstück</th><th>Jäger</th>
+    <th class="num">kg</th><th class="num">€/kg</th><th class="num">€</th><th>ID</th><th></th>
+  </tr>
+  {% for r in recent %}
+  <tr>
+    <td>{{ r.created_at[:10] }}</td>
+    <td>{{ r.species }}</td>
+    <td>{{ r.part }}</td>
+    <td>{{ r.hunter }}</td>
+    <td class="num">{{ r.weight_kg | de(3) }}</td>
+    <td class="num">{{ r.price_per_kg | de }}</td>
+    <td class="num">{{ r.total_price | de }}</td>
+    <td><code>{{ r.uuid[:8] }}</code></td>
+    <td>
+      <form method="post" action="/parts/{{ r.uuid }}/reprint">
+        <button class="small" type="submit">Nachdrucken</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% endblock %}
