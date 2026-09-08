@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import yaml
@@ -25,23 +26,54 @@ class PrinterConfig(BaseModel):
     label: str = "39x90"
 
 
+class PartDefaults(BaseModel):
+    price: float
+    weight_kg: float | None = None
+
+    @field_validator("price", "weight_kg", mode="before")
+    @classmethod
+    def _german_decimal(cls, v):
+        if v is None or v == "":
+            return None
+        return float(str(v).replace(",", "."))
+
+
 class Config(BaseModel):
     hunters: list[Hunter]
     species: list[str]
-    parts: dict[str, float]
+    parts: dict[str, PartDefaults]
     printer: PrinterConfig = PrinterConfig()
     best_before_months: int = 12
     dry_run: bool = True
 
     @field_validator("parts", mode="before")
     @classmethod
-    def _german_prices(cls, v):
+    def _scalar_is_price(cls, v):
         return {
-            name: float(str(price).replace(",", "."))
-            for name, price in v.items()
+            name: entry if isinstance(entry, dict) else {"price": entry}
+            for name, entry in v.items()
         }
 
 
 def load_config() -> Config:
     with open(CONFIG_PATH, encoding="utf-8") as f:
         return Config.model_validate(yaml.safe_load(f))
+
+
+def save_config(config: Config) -> None:
+    data = {
+        "hunters": [h.model_dump() for h in config.hunters],
+        "species": config.species,
+        "parts": {
+            name: {"price": p.price}
+            | ({"weight_kg": p.weight_kg} if p.weight_kg is not None else {})
+            for name, p in config.parts.items()
+        },
+        "printer": config.printer.model_dump(),
+        "best_before_months": config.best_before_months,
+        "dry_run": config.dry_run,
+    }
+    tmp_path = CONFIG_PATH.with_suffix(".yaml.tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
+    os.replace(tmp_path, CONFIG_PATH)

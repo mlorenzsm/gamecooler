@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import registry, sales
-from .config import Hunter, load_config
+from .config import Hunter, PartDefaults, load_config, save_config
 from .labels import render_info_label, render_qr_label
 from .models import PartIn, PartRecord, Sale, SaleItem, format_de, parse_german_decimal
 from .pdf import render_sale_pdf
@@ -20,6 +20,13 @@ app = FastAPI(title="Wildbret-Etiketten")
 app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static")
 templates = Jinja2Templates(directory=Path(__file__).resolve().parent / "templates")
 templates.env.filters["de"] = format_de
+
+
+def parts_json(parts: dict[str, PartDefaults]) -> dict:
+    return {name: p.model_dump() for name, p in parts.items()}
+
+
+templates.env.filters["parts_json"] = parts_json
 
 config = load_config()
 
@@ -111,7 +118,7 @@ async def bulk_print(request: Request):
     for count, part, weight, price in zip(counts, parts, weights, prices):
         if not part or not weight:
             continue
-        price = price.strip() or format_de(config.parts[part])
+        price = price.strip() or format_de(config.parts[part].price)
         part_in = PartIn(
             hunter=hunter, species=species, part=part,
             weight_kg=weight, price_per_kg=price,
@@ -299,6 +306,90 @@ def sale_pdf(sale_id: str):
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="verkauf-{sale.number}.pdf"'},
     )
+
+
+@app.get("/settings")
+def settings_page(request: Request, msg: str = ""):
+    return templates.TemplateResponse(
+        request,
+        "settings.html",
+        {"config": config, "msg": msg, "active": "settings"},
+    )
+
+
+def _settings_redirect(msg: str) -> RedirectResponse:
+    save_config(config)
+    return RedirectResponse(url=f"/settings?msg={msg}", status_code=303)
+
+
+@app.post("/settings/hunters")
+def settings_hunter_save(
+    original_name: str = Form(""),
+    name: str = Form(...),
+    address: str = Form(...),
+    phone: str = Form(""),
+    email: str = Form(""),
+):
+    hunter = Hunter(name=name.strip(), address=address.strip(), phone=phone.strip(), email=email.strip())
+    existing = find_hunter(original_name)
+    if existing:
+        config.hunters[config.hunters.index(existing)] = hunter
+    else:
+        config.hunters.append(hunter)
+    return _settings_redirect(f"Jäger „{hunter.name}“ gespeichert")
+
+
+@app.post("/settings/hunters/delete")
+def settings_hunter_delete(name: str = Form(""), original_name: str = Form("")):
+    name = original_name or name
+    hunter = find_hunter(name)
+    if hunter is None:
+        raise HTTPException(status_code=404, detail="Jäger nicht gefunden")
+    if len(config.hunters) == 1:
+        return RedirectResponse(url="/settings?msg=Der letzte Jäger kann nicht gelöscht werden", status_code=303)
+    config.hunters.remove(hunter)
+    return _settings_redirect(f"Jäger „{name}“ gelöscht")
+
+
+@app.post("/settings/species")
+def settings_species_add(name: str = Form(...)):
+    name = name.strip()
+    if name and name not in config.species:
+        config.species.append(name)
+        return _settings_redirect(f"Wildart „{name}“ hinzugefügt")
+    return RedirectResponse(url="/settings?msg=Wildart existiert bereits", status_code=303)
+
+
+@app.post("/settings/species/delete")
+def settings_species_delete(name: str = Form(...)):
+    if name not in config.species:
+        raise HTTPException(status_code=404, detail="Wildart nicht gefunden")
+    config.species.remove(name)
+    return _settings_redirect(f"Wildart „{name}“ gelöscht")
+
+
+@app.post("/settings/parts")
+def settings_part_save(
+    original_name: str = Form(""),
+    name: str = Form(...),
+    price: str = Form(...),
+    weight_kg: str = Form(""),
+):
+    name = name.strip()
+    defaults = PartDefaults(price=price, weight_kg=weight_kg.strip() or None)
+    if original_name and original_name != name:
+        config.parts.pop(original_name, None)
+    config.parts[name] = defaults
+    return _settings_redirect(f"Teilstück „{name}“ gespeichert")
+
+
+@app.post("/settings/parts/delete")
+def settings_part_delete(name: str = Form(""), original_name: str = Form("")):
+    name = original_name or name
+    if name not in config.parts:
+        raise HTTPException(status_code=404, detail="Teilstück nicht gefunden")
+    del config.parts[name]
+    return _settings_redirect(f"Teilstück „{name}“ gelöscht")
 
 
 @app.get("/parts.json")

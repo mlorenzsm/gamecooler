@@ -33,22 +33,30 @@
 </form>
 
 <script>
-const PARTS = {{ config.parts | tojson }};
+const PARTS = {{ config.parts | parts_json | tojson }};
+
+function defaultWeight(part) {
+  const w = PARTS[part].weight_kg;
+  return w != null ? w.toFixed(3).replace('.', ',') : '';
+}
 
 function addRow() {
   const table = document.getElementById('rows');
   const row = table.insertRow(-1);
+  const firstPart = Object.keys(PARTS)[0];
   const partOptions = Object.keys(PARTS)
     .map(p => `<option>${p}</option>`).join('');
   row.innerHTML = `
     <td><input name="count" type="number" min="1" value="1" required style="width:4.5rem"></td>
     <td><select name="part" required>${partOptions}</select></td>
-    <td><input name="weight_kg" required inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="0,4" style="width:7rem"></td>
-    <td><input name="price_per_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="${fmt(PARTS[Object.keys(PARTS)[0]])}" style="width:7rem"></td>
+    <td><input name="weight_kg" required inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="0,4" value="${defaultWeight(firstPart)}" style="width:7rem"></td>
+    <td><input name="price_per_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="${fmt(PARTS[firstPart].price)}" style="width:7rem"></td>
     <td><button type="button" class="small" onclick="this.closest('tr').remove(); updateSummary()">✕</button></td>
   `;
   row.querySelector('select[name=part]').addEventListener('change', e => {
-    e.target.closest('tr').querySelector('input[name=price_per_kg]').placeholder = fmt(PARTS[e.target.value]);
+    const tr = e.target.closest('tr');
+    tr.querySelector('input[name=price_per_kg]').placeholder = fmt(PARTS[e.target.value].price);
+    tr.querySelector('input[name=weight_kg]').value = defaultWeight(e.target.value);
     updateSummary();
   });
   row.querySelectorAll('input').forEach(i => i.addEventListener('input', updateSummary));
@@ -71,7 +79,7 @@ function updateSummary() {
     const part = row.querySelector('select[name=part]')?.value;
     const weight = num(row.querySelector('input[name=weight_kg]')?.value);
     if (!count || !part || !weight) continue;
-    const price = num(row.querySelector('input[name=price_per_kg]')?.value) || PARTS[part];
+    const price = num(row.querySelector('input[name=price_per_kg]')?.value) || PARTS[part].price;
     labels += count * 2;
     total += count * weight * price;
   }
