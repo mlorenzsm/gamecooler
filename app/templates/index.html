@@ -26,13 +26,10 @@
   <label>Preis/kg (€)
     <input name="price_per_kg" required inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="12,50" id="price-input">
   </label>
-  <label>&nbsp;
-    <button type="button" onclick="showPreview()">Vorschau</button>
-  </label>
   <button class="print" type="submit">2 Etiketten drucken &amp; registrieren</button>
 </form>
 
-<div class="preview-imgs" id="preview" hidden>
+<div class="preview-imgs" id="preview">
   <img id="preview-info" alt="Info-Etikett">
   <img id="preview-qr" alt="QR-Etikett">
 </div>
@@ -55,12 +52,20 @@ function confirmPrint() {
 
 function showPreview() {
   const form = document.getElementById('part-form');
-  if (!form.reportValidity()) return;
   const params = new URLSearchParams(new FormData(form));
   document.getElementById('preview-info').src = '/preview?' + params + '&type=info';
   document.getElementById('preview-qr').src = '/preview?' + params + '&type=qr';
-  document.getElementById('preview').hidden = false;
 }
+
+let previewTimer;
+function schedulePreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(showPreview, 300);
+}
+const form = document.getElementById('part-form');
+form.addEventListener('input', schedulePreview);
+form.addEventListener('change', schedulePreview);
+showPreview();
 </script>
 
 {% endblock %}
