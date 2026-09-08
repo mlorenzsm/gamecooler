@@ -1,8 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 
-<p><a href="/">&larr; Zurück</a></p>
-<h2>Entnahme scannen</h2>
+<h2>📷 Entnahme scannen</h2>
 <p>QR-Etikett vor die Kamera halten — das Teilstück wird aus dem Bestand ausgetragen.</p>
 
 <div id="reader" style="max-width: 500px;"></div>
@@ -59,14 +58,27 @@ async function onScan(text) {
 }
 
 const scanner = new Html5Qrcode("reader");
-scanner.start(
-  { facingMode: "environment" },
-  { fps: 10, qrbox: { width: 250, height: 250 } },
-  onScan,
-  () => {}
-).catch(err => {
-  show(`Kamera konnte nicht gestartet werden: ${err}`, 'dry-run');
-});
+const scanConfig = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+async function startScanner() {
+  if (!window.isSecureContext) {
+    show('Kamera erfordert HTTPS oder localhost — Seite über http://localhost:8010/scan öffnen.', 'dry-run');
+    return;
+  }
+  try {
+    // getCameras triggers the permission prompt and lists real devices
+    const cameras = await Html5Qrcode.getCameras();
+    if (!cameras.length) throw new Error('Keine Kamera gefunden');
+    // prefer a back camera if present (phone), otherwise first camera (Mac)
+    const back = cameras.find(c => /back|rear|rück/i.test(c.label));
+    await scanner.start((back || cameras[0]).id, scanConfig, onScan, () => {});
+  } catch (err) {
+    show(`Kamera konnte nicht gestartet werden: ${err}<br>` +
+         'Kamerazugriff für den Browser erlauben (macOS: Systemeinstellungen → Datenschutz &amp; Sicherheit → Kamera).', 'dry-run');
+  }
+}
+
+startScanner();
 </script>
 
 {% endblock %}

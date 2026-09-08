@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import registry
-from .config import load_config
+from .config import Hunter, load_config
 from .labels import render_info_label, render_qr_label
 from .models import PartIn, PartRecord, format_de
 from .printer import print_labels
@@ -23,18 +23,33 @@ templates.env.filters["de"] = format_de
 config = load_config()
 
 
+def find_hunter(name: str) -> Hunter | None:
+    return next((h for h in config.hunters if h.name == name), None)
+
+
 @app.get("/")
 def index(request: Request, msg: str = ""):
-    inventory = registry.inventory()
     return templates.TemplateResponse(
         request,
         "index.html",
+        {"config": config, "msg": msg, "active": "index"},
+    )
+
+
+@app.get("/inventory")
+def inventory_page(request: Request, msg: str = ""):
+    inventory = registry.inventory()
+    return templates.TemplateResponse(
+        request,
+        "inventory.html",
         {
             "config": config,
-            "recent": registry.recent(20),
             "msg": msg,
+            "active": "inventory",
+            "records": list(reversed(registry.load_all())),
             "inventory_count": len(inventory),
             "inventory_weight": sum(r.weight_kg for r in inventory),
+            "inventory_value": sum(r.total_price for r in inventory),
         },
     )
 
@@ -53,7 +68,11 @@ def preview(
         weight_kg=weight_kg, price_per_kg=price_per_kg,
     )
     record = PartRecord.from_input(part_in, printed=False)
-    img = render_info_label(record) if type == "info" else render_qr_label(record)
+    img = (
+        render_info_label(record, find_hunter(hunter))
+        if type == "info"
+        else render_qr_label(record, config.best_before_months)
+    )
     buf = io.BytesIO()
     img.convert("L").save(buf, format="PNG")
     buf.seek(0)
@@ -65,7 +84,7 @@ def bulk_form(request: Request, msg: str = ""):
     return templates.TemplateResponse(
         request,
         "bulk.html",
-        {"config": config, "msg": msg},
+        {"config": config, "msg": msg, "active": "bulk"},
     )
 
 
@@ -94,10 +113,11 @@ async def bulk_print(request: Request):
     if not records:
         return RedirectResponse(url="/bulk?msg=Keine gültigen Zeilen", status_code=303)
 
+    hunter_config = find_hunter(hunter)
     images = []
     for record in records:
-        images.append(render_info_label(record))
-        images.append(render_qr_label(record))
+        images.append(render_info_label(record, hunter_config))
+        images.append(render_qr_label(record, config.best_before_months))
     print_labels(images, config.printer, config.dry_run)
     registry.append_many(records)
 
@@ -123,7 +143,7 @@ def create_part(
         weight_kg=weight_kg, price_per_kg=price_per_kg,
     )
     record = PartRecord.from_input(part_in, printed=not config.dry_run)
-    images = [render_info_label(record), render_qr_label(record)]
+    images = [render_info_label(record, find_hunter(hunter)), render_qr_label(record, config.best_before_months)]
     print_labels(images, config.printer, config.dry_run)
     registry.append(record)
     msg = "Gedruckt & gespeichert" if not config.dry_run else "Gespeichert (Testmodus, nicht gedruckt)"
@@ -135,7 +155,10 @@ def reprint(part_uuid: str):
     record = registry.get(part_uuid)
     if record is None:
         raise HTTPException(status_code=404, detail="Teilstück nicht gefunden")
-    images = [render_info_label(record), render_qr_label(record)]
+    images = [
+        render_info_label(record, find_hunter(record.hunter)),
+        render_qr_label(record, config.best_before_months),
+    ]
     print_labels(images, config.printer, config.dry_run)
     msg = "Erneut gedruckt" if not config.dry_run else "Testmodus: nicht gedruckt"
     return RedirectResponse(url=f"/?msg={msg}", status_code=303)
@@ -143,7 +166,9 @@ def reprint(part_uuid: str):
 
 @app.get("/scan")
 def scan_page(request: Request):
-    return templates.TemplateResponse(request, "scan.html", {"config": config})
+    return templates.TemplateResponse(
+        request, "scan.html", {"config": config, "active": "scan"}
+    )
 
 
 @app.post("/parts/{part_uuid}/consume")

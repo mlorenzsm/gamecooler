@@ -4,14 +4,13 @@
 {% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
 {% if config.dry_run %}<div class="dry-run">Testmodus aktiv (dry_run) – es wird nicht gedruckt.</div>{% endif %}
 
-<p><a href="/">&larr; Einzeldruck</a></p>
-<h2>Sammeldruck</h2>
+<h2>🖨️ Sammeldruck</h2>
 
 <form method="post" action="/bulk" id="bulk-form">
   <div class="part-form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin-bottom: 1rem;">
     <label style="display:flex; flex-direction:column; gap:0.3rem;">Jäger
       <select name="hunter" required>
-        {% for h in config.hunters %}<option>{{ h }}</option>{% endfor %}
+        {% for h in config.hunters %}<option>{{ h.name }}</option>{% endfor %}
       </select>
     </label>
     <label style="display:flex; flex-direction:column; gap:0.3rem;">Wildart

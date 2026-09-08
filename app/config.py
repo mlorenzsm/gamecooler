@@ -10,6 +10,13 @@ REGISTRY_PATH = DATA_DIR / "registry.json"
 FONTS_DIR = Path(__file__).resolve().parent / "fonts"
 
 
+class Hunter(BaseModel):
+    name: str
+    address: str
+    phone: str
+    email: str = ""
+
+
 class PrinterConfig(BaseModel):
     model: str = "QL-800"
     identifier: str = "usb://0x04f9:0x209b"
@@ -18,10 +25,11 @@ class PrinterConfig(BaseModel):
 
 
 class Config(BaseModel):
-    hunters: list[str]
+    hunters: list[Hunter]
     species: list[str]
     parts: dict[str, float]
     printer: PrinterConfig = PrinterConfig()
+    best_before_months: int = 12
     dry_run: bool = True
 
     @field_validator("parts", mode="before")

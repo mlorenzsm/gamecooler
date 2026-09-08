@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+
+<h2>🧊 Bestand</h2>
+<p>
+  <b>{{ inventory_count }}</b> Teilstücke im Bestand,
+  <b>{{ inventory_weight | de(3) }} kg</b>,
+  Warenwert <b>{{ inventory_value | de }} €</b>
+</p>
+
+<table>
+  <tr>
+    <th>Datum</th><th>Wildart</th><th>Teilstück</th><th>Jäger</th>
+    <th class="num">kg</th><th class="num">€/kg</th><th class="num">€</th><th>ID</th><th>Status</th><th></th>
+  </tr>
+  {% for r in records %}
+  <tr{% if r.consumed_at %} style="opacity: 0.5;"{% endif %}>
+    <td>{{ r.created_at[:10] }}</td>
+    <td>{{ r.species }}</td>
+    <td>{{ r.part }}</td>
+    <td>{{ r.hunter }}</td>
+    <td class="num">{{ r.weight_kg | de(3) }}</td>
+    <td class="num">{{ r.price_per_kg | de }}</td>
+    <td class="num">{{ r.total_price | de }}</td>
+    <td><code>{{ r.uuid[:8] }}</code></td>
+    <td>{% if r.consumed_at %}entnommen {{ r.consumed_at[:10] }}{% else %}im Bestand{% endif %}</td>
+    <td>
+      <form method="post" action="/parts/{{ r.uuid }}/reprint">
+        <button class="small" type="submit">Nachdrucken</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% endblock %}
