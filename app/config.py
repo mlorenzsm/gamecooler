@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = BASE_DIR / "config.yaml"
@@ -20,9 +20,17 @@ class PrinterConfig(BaseModel):
 class Config(BaseModel):
     hunters: list[str]
     species: list[str]
-    parts: list[str]
+    parts: dict[str, float]
     printer: PrinterConfig = PrinterConfig()
     dry_run: bool = True
+
+    @field_validator("parts", mode="before")
+    @classmethod
+    def _german_prices(cls, v):
+        return {
+            name: float(str(price).replace(",", "."))
+            for name, price in v.items()
+        }
 
 
 def load_config() -> Config:

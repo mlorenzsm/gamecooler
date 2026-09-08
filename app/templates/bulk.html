@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+{% if config.dry_run %}<div class="dry-run">Testmodus aktiv (dry_run) – es wird nicht gedruckt.</div>{% endif %}
+
+<p><a href="/">&larr; Einzeldruck</a></p>
+<h2>Sammeldruck</h2>
+
+<form method="post" action="/bulk" id="bulk-form">
+  <div class="part-form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin-bottom: 1rem;">
+    <label style="display:flex; flex-direction:column; gap:0.3rem;">Jäger
+      <select name="hunter" required>
+        {% for h in config.hunters %}<option>{{ h }}</option>{% endfor %}
+      </select>
+    </label>
+    <label style="display:flex; flex-direction:column; gap:0.3rem;">Wildart
+      <select name="species" required>
+        {% for s in config.species %}<option>{{ s }}</option>{% endfor %}
+      </select>
+    </label>
+  </div>
+
+  <table id="rows">
+    <tr>
+      <th>Anzahl</th><th>Teilstück</th><th>Gewicht/Stück (kg)</th><th>Preis/kg (€, leer = Standard)</th><th></th>
+    </tr>
+  </table>
+  <p>
+    <button type="button" onclick="addRow()">+ Zeile</button>
+  </p>
+  <p id="summary"></p>
+  <button class="print" type="submit" style="width:100%; padding:0.8rem; font-weight:bold;">Alle Etiketten drucken &amp; registrieren</button>
+</form>
+
+<script>
+const PARTS = {{ config.parts | tojson }};
+
+function addRow() {
+  const table = document.getElementById('rows');
+  const row = table.insertRow(-1);
+  const partOptions = Object.keys(PARTS)
+    .map(p => `<option>${p}</option>`).join('');
+  row.innerHTML = `
+    <td><input name="count" type="number" min="1" value="1" required style="width:4.5rem"></td>
+    <td><select name="part" required>${partOptions}</select></td>
+    <td><input name="weight_kg" required inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="0,4" style="width:7rem"></td>
+    <td><input name="price_per_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="${fmt(PARTS[Object.keys(PARTS)[0]])}" style="width:7rem"></td>
+    <td><button type="button" class="small" onclick="this.closest('tr').remove(); updateSummary()">✕</button></td>
+  `;
+  row.querySelector('select[name=part]').addEventListener('change', e => {
+    e.target.closest('tr').querySelector('input[name=price_per_kg]').placeholder = fmt(PARTS[e.target.value]);
+    updateSummary();
+  });
+  row.querySelectorAll('input').forEach(i => i.addEventListener('input', updateSummary));
+  updateSummary();
+}
+
+function fmt(n) { return n.toFixed(2).replace('.', ','); }
+function num(s) { return parseFloat((s || '').replace(',', '.')); }
+
+function updateSummary() {
+  let labels = 0, total = 0;
+  for (const row of document.querySelectorAll('#rows tr')) {
+    const count = parseInt(row.querySelector('input[name=count]')?.value);
+    const part = row.querySelector('select[name=part]')?.value;
+    const weight = num(row.querySelector('input[name=weight_kg]')?.value);
+    if (!count || !part || !weight) continue;
+    const price = num(row.querySelector('input[name=price_per_kg]')?.value) || PARTS[part];
+    labels += count * 2;
+    total += count * weight * price;
+  }
+  document.getElementById('summary').textContent =
+    labels ? `${labels / 2} Teilstücke → ${labels} Etiketten, Gesamtwert ${fmt(total)} €` : '';
+}
+
+addRow();
+</script>
+
+{% endblock %}

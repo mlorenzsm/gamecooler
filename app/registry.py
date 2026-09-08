@@ -16,9 +16,13 @@ def load_all() -> list[PartRecord]:
 
 
 def append(record: PartRecord) -> None:
+    append_many([record])
+
+
+def append_many(records: list[PartRecord]) -> None:
     with _lock:
         entries = [r.model_dump() for r in load_all()]
-        entries.append(record.model_dump())
+        entries.extend(r.model_dump() for r in records)
         DATA_DIR.mkdir(exist_ok=True)
         tmp_path = REGISTRY_PATH.with_suffix(".json.tmp")
         with open(tmp_path, "w", encoding="utf-8") as f:

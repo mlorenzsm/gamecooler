@@ -55,6 +55,56 @@ def preview(
     return StreamingResponse(buf, media_type="image/png")
 
 
+@app.get("/bulk")
+def bulk_form(request: Request, msg: str = ""):
+    return templates.TemplateResponse(
+        request,
+        "bulk.html",
+        {"config": config, "msg": msg},
+    )
+
+
+@app.post("/bulk")
+async def bulk_print(request: Request):
+    form = await request.form()
+    hunter = form["hunter"]
+    species = form["species"]
+    counts = form.getlist("count")
+    parts = form.getlist("part")
+    weights = form.getlist("weight_kg")
+    prices = form.getlist("price_per_kg")
+
+    records: list[PartRecord] = []
+    for count, part, weight, price in zip(counts, parts, weights, prices):
+        if not part or not weight:
+            continue
+        price = price.strip() or format_de(config.parts[part])
+        part_in = PartIn(
+            hunter=hunter, species=species, part=part,
+            weight_kg=weight, price_per_kg=price,
+        )
+        for _ in range(int(count)):
+            records.append(PartRecord.from_input(part_in, printed=not config.dry_run))
+
+    if not records:
+        return RedirectResponse(url="/bulk?msg=Keine gültigen Zeilen", status_code=303)
+
+    images = []
+    for record in records:
+        images.append(render_info_label(record))
+        images.append(render_qr_label(record))
+    print_labels(images, config.printer, config.dry_run)
+    registry.append_many(records)
+
+    n = len(records)
+    msg = (
+        f"{n} Teilstücke ({2 * n} Etiketten) gedruckt & gespeichert"
+        if not config.dry_run
+        else f"{n} Teilstücke gespeichert (Testmodus, nicht gedruckt)"
+    )
+    return RedirectResponse(url=f"/?msg={msg}", status_code=303)
+
+
 @app.post("/parts")
 def create_part(
     hunter: str = Form(...),

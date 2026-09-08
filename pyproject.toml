@@ -13,3 +13,8 @@ dependencies = [
     "qrcode[pil]>=8.2",
     "uvicorn>=0.52.4",
 ]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.12.0",
+]
