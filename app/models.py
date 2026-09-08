@@ -33,6 +33,7 @@ class PartRecord(BaseModel):
     total_price: float
     created_at: str
     printed: bool
+    consumed_at: str | None = None
 
     @classmethod
     def from_input(cls, part: PartIn, printed: bool) -> "PartRecord":

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
+
+<p><a href="/">&larr; Zurück</a></p>
+<h2>Entnahme scannen</h2>
+<p>QR-Etikett vor die Kamera halten — das Teilstück wird aus dem Bestand ausgetragen.</p>
+
+<div id="reader" style="max-width: 500px;"></div>
+
+<div id="result" style="margin-top: 1rem;"></div>
+
+<h3>Zuletzt entnommen</h3>
+<ul id="log"></ul>
+
+<script src="/static/html5-qrcode.min.js"></script>
+<script>
+const resultEl = document.getElementById('result');
+const logEl = document.getElementById('log');
+let lastScan = { text: null, at: 0 };
+
+function fmt(n, d = 2) { return n.toFixed(d).replace('.', ','); }
+
+function show(html, kind) {
+  resultEl.innerHTML = `<div class="${kind}" style="padding:0.8rem 1rem; border-radius:6px;">${html}</div>`;
+}
+
+async function onScan(text) {
+  const now = Date.now();
+  if (text === lastScan.text && now - lastScan.at < 5000) return;
+  lastScan = { text, at: now };
+
+  const uuid = text.trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid)) {
+    show('Kein gültiger Etiketten-Code', 'dry-run');
+    return;
+  }
+
+  try {
+    const resp = await fetch(`/parts/${encodeURIComponent(uuid)}/consume`, { method: 'POST' });
+    const data = await resp.json();
+    if (!data.ok) {
+      show(`❌ ${data.error}`, 'dry-run');
+      return;
+    }
+    const p = data.part;
+    const desc = `${p.species} – ${p.part}, ${fmt(p.weight_kg, 3)} kg (${p.uuid.slice(0, 8).toUpperCase()})`;
+    if (data.already_consumed) {
+      show(`⚠️ Bereits entnommen am ${p.consumed_at.slice(0, 10)}:<br><b>${desc}</b>`, 'dry-run');
+    } else {
+      show(`✅ Entnommen:<br><b>${desc}</b>`, 'msg');
+      const li = document.createElement('li');
+      li.textContent = desc;
+      logEl.prepend(li);
+      if (navigator.vibrate) navigator.vibrate(100);
+    }
+  } catch (e) {
+    show('Fehler beim Austragen — Verbindung prüfen', 'dry-run');
+  }
+}
+
+const scanner = new Html5Qrcode("reader");
+scanner.start(
+  { facingMode: "environment" },
+  { fps: 10, qrbox: { width: 250, height: 250 } },
+  onScan,
+  () => {}
+).catch(err => {
+  show(`Kamera konnte nicht gestartet werden: ${err}`, 'dry-run');
+});
+</script>
+
+{% endblock %}

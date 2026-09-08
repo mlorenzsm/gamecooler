@@ -4,7 +4,11 @@
 {% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
 {% if config.dry_run %}<div class="dry-run">Testmodus aktiv (dry_run) – es wird nicht gedruckt.</div>{% endif %}
 
-<p><a href="/bulk">Sammeldruck &rarr;</a></p>
+<p>
+  <a href="/bulk">Sammeldruck &rarr;</a> &nbsp;|&nbsp;
+  <a href="/scan">Entnahme scannen &rarr;</a>
+</p>
+<p>Bestand: <b>{{ inventory_count }}</b> Teilstücke, <b>{{ inventory_weight | de(3) }} kg</b></p>
 
 <form class="part-form" method="post" action="/parts" id="part-form">
   <label>Jäger
@@ -63,10 +67,10 @@ function showPreview() {
 <table>
   <tr>
     <th>Datum</th><th>Wildart</th><th>Teilstück</th><th>Jäger</th>
-    <th class="num">kg</th><th class="num">€/kg</th><th class="num">€</th><th>ID</th><th></th>
+    <th class="num">kg</th><th class="num">€/kg</th><th class="num">€</th><th>ID</th><th>Status</th><th></th>
   </tr>
   {% for r in recent %}
-  <tr>
+  <tr{% if r.consumed_at %} style="opacity: 0.5;"{% endif %}>
     <td>{{ r.created_at[:10] }}</td>
     <td>{{ r.species }}</td>
     <td>{{ r.part }}</td>
@@ -75,6 +79,7 @@ function showPreview() {
     <td class="num">{{ r.price_per_kg | de }}</td>
     <td class="num">{{ r.total_price | de }}</td>
     <td><code>{{ r.uuid[:8] }}</code></td>
+    <td>{% if r.consumed_at %}entnommen {{ r.consumed_at[:10] }}{% else %}im Bestand{% endif %}</td>
     <td>
       <form method="post" action="/parts/{{ r.uuid }}/reprint">
         <button class="small" type="submit">Nachdrucken</button>

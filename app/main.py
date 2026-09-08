@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import registry
@@ -15,6 +16,7 @@ from .printer import print_labels
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(title="Wildbret-Etiketten")
+app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static")
 templates = Jinja2Templates(directory=Path(__file__).resolve().parent / "templates")
 templates.env.filters["de"] = format_de
 
@@ -23,6 +25,7 @@ config = load_config()
 
 @app.get("/")
 def index(request: Request, msg: str = ""):
+    inventory = registry.inventory()
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -30,6 +33,8 @@ def index(request: Request, msg: str = ""):
             "config": config,
             "recent": registry.recent(20),
             "msg": msg,
+            "inventory_count": len(inventory),
+            "inventory_weight": sum(r.weight_kg for r in inventory),
         },
     )
 
@@ -134,6 +139,25 @@ def reprint(part_uuid: str):
     print_labels(images, config.printer, config.dry_run)
     msg = "Erneut gedruckt" if not config.dry_run else "Testmodus: nicht gedruckt"
     return RedirectResponse(url=f"/?msg={msg}", status_code=303)
+
+
+@app.get("/scan")
+def scan_page(request: Request):
+    return templates.TemplateResponse(request, "scan.html", {"config": config})
+
+
+@app.post("/parts/{part_uuid}/consume")
+def consume(part_uuid: str):
+    result = registry.mark_consumed(part_uuid.strip().lower())
+    if result is None:
+        return JSONResponse(
+            {"ok": False, "error": "Unbekannter Code — nicht im Bestand"},
+            status_code=404,
+        )
+    record, already_consumed = result
+    return JSONResponse(
+        {"ok": True, "already_consumed": already_consumed, "part": record.model_dump()}
+    )
 
 
 @app.get("/parts.json")

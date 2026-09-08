@@ -1,6 +1,7 @@
 import json
 import os
 import threading
+from datetime import datetime, timezone
 
 from .config import DATA_DIR, REGISTRY_PATH
 from .models import PartRecord
@@ -23,11 +24,35 @@ def append_many(records: list[PartRecord]) -> None:
     with _lock:
         entries = [r.model_dump() for r in load_all()]
         entries.extend(r.model_dump() for r in records)
-        DATA_DIR.mkdir(exist_ok=True)
-        tmp_path = REGISTRY_PATH.with_suffix(".json.tmp")
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(entries, f, ensure_ascii=False, indent=2)
-        os.replace(tmp_path, REGISTRY_PATH)
+        _write(entries)
+
+
+def mark_consumed(part_uuid: str) -> tuple[PartRecord, bool] | None:
+    """Returns (record, was_already_consumed), or None if unknown."""
+    with _lock:
+        records = load_all()
+        for record in records:
+            if record.uuid == part_uuid:
+                if record.consumed_at is not None:
+                    return record, True
+                record.consumed_at = datetime.now(timezone.utc).isoformat(
+                    timespec="seconds"
+                )
+                _write([r.model_dump() for r in records])
+                return record, False
+        return None
+
+
+def inventory() -> list[PartRecord]:
+    return [r for r in load_all() if r.consumed_at is None]
+
+
+def _write(entries: list[dict]) -> None:
+    DATA_DIR.mkdir(exist_ok=True)
+    tmp_path = REGISTRY_PATH.with_suffix(".json.tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(entries, f, ensure_ascii=False, indent=2)
+    os.replace(tmp_path, REGISTRY_PATH)
 
 
 def get(part_uuid: str) -> PartRecord | None:
