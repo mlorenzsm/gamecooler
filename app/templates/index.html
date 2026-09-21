@@ -20,11 +20,11 @@
       {% for p in config.parts %}<option>{{ p }}</option>{% endfor %}
     </select>
   </label>
-  <label>Gewicht (kg)
-    <input name="weight_kg" required inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="1,25" id="weight-input">
+  <label>Gewicht (kg) <span style="font-weight:400; color:#888;">(leer = kein Gewicht auf dem Etikett)</span>
+    <input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="1,25" id="weight-input">
   </label>
-  <label>Preis/kg (€)
-    <input name="price_per_kg" required inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="12,50" id="price-input">
+  <label>Preis/kg (€) <span style="font-weight:400; color:#888;">(leer = kein Preis auf dem Etikett)</span>
+    <input name="price_per_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="12,50" id="price-input">
   </label>
   <button class="print" type="submit">2 Etiketten drucken &amp; registrieren</button>
 </form>
@@ -41,7 +41,7 @@ const weightInput = document.getElementById('weight-input');
 const partSelect = document.getElementById('part-select');
 function fillDefaults() {
   const p = PARTS[partSelect.value];
-  priceInput.value = p.price.toFixed(2).replace('.', ',');
+  priceInput.value = p.price != null ? p.price.toFixed(2).replace('.', ',') : '';
   weightInput.value = p.weight_kg != null ? p.weight_kg.toFixed(3).replace('.', ',') : '';
 }
 partSelect.addEventListener('change', fillDefaults);
@@ -50,7 +50,11 @@ fillDefaults();
 function confirmPrint() {
   const form = document.getElementById('part-form');
   const d = new FormData(form);
-  return confirm(`2 Etiketten drucken?\n\n${d.get('species')} – ${d.get('part')}, ${d.get('weight_kg')} kg zu ${d.get('price_per_kg')} €/kg`);
+  const weight = d.get('weight_kg');
+  const price = d.get('price_per_kg');
+  let details = 'ohne Gewicht und Preis';
+  if (weight) details = `${weight} kg ` + (price ? `zu ${price} €/kg` : 'ohne Preis');
+  return confirm(`2 Etiketten drucken?\n\n${d.get('species')} – ${d.get('part')}, ${details}`);
 }
 
 function showPreview() {

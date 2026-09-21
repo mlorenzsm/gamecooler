@@ -48,17 +48,26 @@ function show(html, kind) {
 function updateBasket() {
   basketForm.style.display = basket.size ? 'block' : 'none';
   document.getElementById('basket-count').textContent = basket.size;
-  let total = 0;
-  for (const p of basket.values()) total += p.total_price;
+  let total = 0, unweighed = 0, unpriced = 0;
+  for (const p of basket.values()) {
+    if (p.weight_kg == null) unweighed++;
+    else if (p.total_price == null) unpriced++;
+    else total += p.total_price;
+  }
+  const notes = [];
+  if (unweighed) notes.push(`${unweighed} ohne Gewicht`);
+  if (unpriced) notes.push(`${unpriced} ohne Preis`);
   document.getElementById('basket-summary').textContent =
-    `${basket.size} Teilstücke, ${fmt(total)} €`;
+    `${basket.size} Teilstücke, ${fmt(total)} €` + (notes.length ? ` (${notes.join(', ')})` : '');
 }
 
 function addToBasket(p) {
   if (basket.has(p.uuid)) return false;
   basket.set(p.uuid, p);
   const li = document.createElement('li');
-  li.innerHTML = `${p.species} – ${p.part}, ${fmt(p.weight_kg, 3)} kg, ${fmt(p.total_price)} € ` +
+  const priceText = p.total_price == null ? 'ohne Preis' : `${fmt(p.total_price)} €`;
+  const weightText = p.weight_kg == null ? 'ohne Gewicht' : `${fmt(p.weight_kg, 3)} kg`;
+  li.innerHTML = `${p.species} – ${p.part}, ${weightText}, ${priceText} ` +
     `<input type="hidden" name="uuid" value="${p.uuid}" form="basket-form"> ` +
     `<button type="button" class="small">✕</button>`;
   li.querySelector('button').addEventListener('click', () => {

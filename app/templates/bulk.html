@@ -6,6 +6,17 @@
 
 <h2>🖨️ Sammeldruck</h2>
 
+{% if config.presets %}
+<div style="display:flex; align-items:center; gap:0.6rem; margin-bottom:1rem;">
+  <label style="font-size:0.9rem; font-weight:500; color:#636363;">Vorgabe</label>
+  <select id="preset-select" style="max-width:20rem;">
+    <option value="">— Auswahl leeren —</option>
+    {% for p in config.presets %}<option value="{{ p.name }}">{{ p.name }}</option>{% endfor %}
+  </select>
+  <button type="button" id="preset-apply" style="font-size:0.85rem;">Übernehmen</button>
+</div>
+{% endif %}
+
 <form method="post" action="/bulk" id="bulk-form" onsubmit="return confirmBulkPrint()">
   <div class="part-form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin-bottom: 1rem;">
     <label style="display:flex; flex-direction:column; gap:0.3rem;">Jäger
@@ -22,7 +33,7 @@
 
   <table id="rows">
     <tr>
-      <th>Anzahl</th><th>Teilstück</th><th>Gewicht/Stück (kg)</th><th>Preis/kg (€, leer = Standard)</th><th></th>
+      <th>Anzahl</th><th>Teilstück</th><th>Gewicht/Stück (kg)</th><th>Preis/kg (€, leer = Standard)</th><th>kein Preis</th><th></th>
     </tr>
   </table>
   <p>
@@ -34,29 +45,46 @@
 
 <script>
 const PARTS = {{ config.parts | parts_json | tojson }};
+const PRESETS = {{ config.presets | presets_json | tojson }};
 
 function defaultWeight(part) {
   const w = PARTS[part].weight_kg;
   return w != null ? w.toFixed(3).replace('.', ',') : '';
 }
 
-function addRow() {
+function pricePlaceholder(part) {
+  const p = PARTS[part].price;
+  return p != null ? fmt(p) : 'kein Preis';
+}
+
+function addRow(item = { part: null, count: 1 }) {
   const table = document.getElementById('rows');
   const row = table.insertRow(-1);
   const firstPart = Object.keys(PARTS)[0];
   const partOptions = Object.keys(PARTS)
     .map(p => `<option>${p}</option>`).join('');
   row.innerHTML = `
-    <td><input name="count" type="number" min="1" value="1" required style="width:4.5rem"></td>
+    <td><input name="count" type="number" min="1" value="${item.count}" required style="width:4.5rem"></td>
     <td><select name="part" required>${partOptions}</select></td>
-    <td><input name="weight_kg" required inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="0,4" value="${defaultWeight(firstPart)}" style="width:7rem"></td>
-    <td><input name="price_per_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="${fmt(PARTS[firstPart].price)}" style="width:7rem"></td>
+    <td><input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="0,4" value="${defaultWeight(item.part || firstPart)}" style="width:7rem"></td>
+    <td><input name="price_per_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="${pricePlaceholder(item.part || firstPart)}" style="width:7rem"></td>
+    <td style="text-align:center;">
+      <input type="checkbox" class="no-price" title="Kein Preis auf dem Etikett">
+      <input type="hidden" name="no_price" value="">
+    </td>
     <td><button type="button" class="small" onclick="this.closest('tr').remove(); updateSummary()">✕</button></td>
   `;
+  if (item.part) row.querySelector('select[name=part]').value = item.part;
   row.querySelector('select[name=part]').addEventListener('change', e => {
     const tr = e.target.closest('tr');
-    tr.querySelector('input[name=price_per_kg]').placeholder = fmt(PARTS[e.target.value].price);
+    tr.querySelector('input[name=price_per_kg]').placeholder = pricePlaceholder(e.target.value);
     tr.querySelector('input[name=weight_kg]').value = defaultWeight(e.target.value);
+    updateSummary();
+  });
+  const priceField = row.querySelector('input[name=price_per_kg]');
+  const noPriceBox = row.querySelector('.no-price');
+  noPriceBox.addEventListener('change', () => {
+    if (noPriceBox.checked) priceField.value = '';
     updateSummary();
   });
   row.querySelectorAll('input').forEach(i => i.addEventListener('input', updateSummary));
@@ -66,28 +94,73 @@ function addRow() {
 function fmt(n) { return n.toFixed(2).replace('.', ','); }
 function num(s) { return parseFloat((s || '').replace(',', '.')); }
 
+function rowPrice(row) {
+  const part = row.querySelector('select[name=part]')?.value;
+  if (row.querySelector('.no-price')?.checked) return null;
+  const entered = num(row.querySelector('input[name=price_per_kg]')?.value);
+  if (!isNaN(entered)) return entered;
+  return PARTS[part].price;  // may be null
+}
+
 function confirmBulkPrint() {
+  renumberNoPrice();
   const summary = document.getElementById('summary').textContent;
   if (!summary) return confirm('Drucken?');
   return confirm(`Wirklich drucken?\n\n${summary}`);
 }
 
 function updateSummary() {
-  let labels = 0, total = 0;
-  for (const row of document.querySelectorAll('#rows tr')) {
+  let labels = 0, total = 0, unweighed = 0, unpriced = 0;
+  for (const row of document.querySelectorAll('#rows tr:not(:first-child)')) {
     const count = parseInt(row.querySelector('input[name=count]')?.value);
     const part = row.querySelector('select[name=part]')?.value;
+    if (!count || !part) continue;
     const weight = num(row.querySelector('input[name=weight_kg]')?.value);
-    if (!count || !part || !weight) continue;
-    const price = num(row.querySelector('input[name=price_per_kg]')?.value) || PARTS[part].price;
+    const price = rowPrice(row);
     labels += count * 2;
-    total += count * weight * price;
+    if (isNaN(weight)) unweighed += count;       // no weight -> no price on the label
+    else if (price == null) unpriced += count;
+    else total += count * weight * price;
   }
+  const parts = labels / 2;
+  const notes = [];
+  if (unweighed) notes.push(`${unweighed} ohne Gewicht`);
+  if (unpriced) notes.push(`${unpriced} ohne Preis`);
+  const partsText = `${parts} Teilstücke` + (notes.length ? ` (${notes.join(', ')})` : '');
   document.getElementById('summary').textContent =
-    labels ? `${labels / 2} Teilstücke → ${labels} Etiketten, Gesamtwert ${fmt(total)} €` : '';
+    labels ? `${partsText} → ${labels} Etiketten, Gesamtwert ${fmt(total)} €` : '';
+}
+
+// the backend matches no_price entries to rows by position in the lists;
+// unchecked rows submit nothing, so they are disabled just before sending
+function renumberNoPrice() {
+  [...document.querySelectorAll('#rows tr:not(:first-child)')].forEach((row, i) => {
+    const checked = row.querySelector('.no-price').checked;
+    const hidden = row.querySelector('input[name=no_price]');
+    hidden.value = i;
+    hidden.disabled = !checked;
+  });
 }
 
 addRow();
+
+const presetSelect = document.getElementById('preset-select');
+const presetApply = document.getElementById('preset-apply');
+if (presetApply) {
+  presetApply.addEventListener('click', () => {
+    const name = presetSelect.value;
+    if (!name) {
+      if (confirm('Alle Zeilen löschen?')) {
+        document.querySelectorAll('#rows tr:not(:first-child)').forEach(tr => tr.remove());
+        updateSummary();
+      }
+      return;
+    }
+    if (!confirm(`Vorgabe „${name}“ übernehmen?`)) return;
+    document.querySelectorAll('#rows tr:not(:first-child)').forEach(tr => tr.remove());
+    PRESETS[name].forEach(item => addRow({ part: item.part, count: item.count }));
+  });
+}
 </script>
 
 {% endblock %}

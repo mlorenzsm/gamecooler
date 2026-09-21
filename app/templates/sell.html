@@ -40,9 +40,9 @@
       <td class="num">{{ r.price_per_kg | de }}</td>
       <td class="num">
         <input type="hidden" name="uuid" value="{{ r.uuid }}">
-        <input name="item_price" class="item-price num" required inputmode="decimal"
-               pattern="[0-9]+([.,][0-9]+)?" value="{{ r.total_price | de }}"
-               style="width:6rem; text-align:right;">
+        <input name="item_price" class="item-price num" inputmode="decimal"
+               pattern="[0-9]+([.,][0-9]+)?" value="{{ r.total_price | de if r.total_price is not none else '' }}"
+               placeholder="0,00" style="width:6rem; text-align:right;">
       </td>
       <td><code>{{ r.uuid[:8] }}</code></td>
     </tr>

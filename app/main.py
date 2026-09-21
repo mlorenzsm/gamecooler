@@ -1,5 +1,6 @@
 import io
 import logging
+import re
 from pathlib import Path
 
 from fastapi import FastAPI, Form, HTTPException, Request
@@ -8,9 +9,16 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import registry, sales
-from .config import Hunter, PartDefaults, load_config, save_config
+from .config import Hunter, PartDefaults, Preset, PresetItem, load_config, save_config
 from .labels import render_info_label, render_qr_label
-from .models import PartIn, PartRecord, Sale, SaleItem, format_de, parse_german_decimal
+from .models import (
+    PartIn,
+    PartRecord,
+    Sale,
+    SaleItem,
+    format_de,
+    parse_optional_decimal,
+)
 from .pdf import render_sale_pdf
 from .printer import print_labels
 
@@ -26,7 +34,17 @@ def parts_json(parts: dict[str, PartDefaults]) -> dict:
     return {name: p.model_dump() for name, p in parts.items()}
 
 
+def presets_json(presets: list[Preset]) -> dict:
+    return {p.name: [i.model_dump() for i in p.items] for p in presets}
+
+
+def preset_text(preset: Preset) -> str:
+    return ", ".join(f"{i.count}x {i.part}" for i in preset.items)
+
+
 templates.env.filters["parts_json"] = parts_json
+templates.env.filters["presets_json"] = presets_json
+templates.env.filters["preset_text"] = preset_text
 
 config = load_config()
 
@@ -44,6 +62,17 @@ def index(request: Request, msg: str = ""):
     )
 
 
+def _inventory_hint(records: list[PartRecord]) -> str:
+    unweighed = sum(1 for r in records if r.weight_kg is None)
+    unpriced = sum(1 for r in records if r.weight_kg is not None and r.total_price is None)
+    notes = []
+    if unweighed:
+        notes.append(f"{unweighed} ohne Gewicht")
+    if unpriced:
+        notes.append(f"{unpriced} ohne Preis")
+    return f" ({', '.join(notes)})" if notes else ""
+
+
 @app.get("/inventory")
 def inventory_page(request: Request, msg: str = ""):
     inventory = registry.inventory()
@@ -56,17 +85,11 @@ def inventory_page(request: Request, msg: str = ""):
             "active": "inventory",
             "records": list(reversed(registry.load_all())),
             "inventory_count": len(inventory),
-            "inventory_weight": sum(r.weight_kg for r in inventory),
-            "inventory_value": sum(r.total_price for r in inventory),
+            "inventory_weight": sum(r.weight_kg for r in inventory if r.weight_kg is not None),
+            "inventory_value": sum(r.total_price for r in inventory if r.total_price is not None),
+            "inventory_hint": _inventory_hint(inventory),
         },
     )
-
-
-def _decimal_or_zero(v: str) -> float:
-    try:
-        return parse_german_decimal(v)
-    except ValueError:
-        return 0.0
 
 
 @app.get("/preview")
@@ -80,8 +103,8 @@ def preview(
 ):
     part_in = PartIn(
         hunter=hunter, species=species, part=part,
-        weight_kg=_decimal_or_zero(weight_kg),
-        price_per_kg=_decimal_or_zero(price_per_kg),
+        weight_kg=parse_optional_decimal(weight_kg),
+        price_per_kg=parse_optional_decimal(price_per_kg),
     )
     record = PartRecord.from_input(part_in, printed=False)
     img = (
@@ -113,12 +136,17 @@ async def bulk_print(request: Request):
     parts = form.getlist("part")
     weights = form.getlist("weight_kg")
     prices = form.getlist("price_per_kg")
+    no_prices = form.getlist("no_price")
+    no_price_rows = {int(i) for i in no_prices}
 
     records: list[PartRecord] = []
-    for count, part, weight, price in zip(counts, parts, weights, prices):
-        if not part or not weight:
+    for i, (count, part, weight, price) in enumerate(zip(counts, parts, weights, prices)):
+        if not part or not count:
             continue
-        price = price.strip() or format_de(config.parts[part].price)
+        if i in no_price_rows:
+            price = None
+        else:
+            price = price.strip() or config.parts[part].price
         part_in = PartIn(
             hunter=hunter, species=species, part=part,
             weight_kg=weight, price_per_kg=price,
@@ -151,8 +179,8 @@ def create_part(
     hunter: str = Form(...),
     species: str = Form(...),
     part: str = Form(...),
-    weight_kg: str = Form(...),
-    price_per_kg: str = Form(...),
+    weight_kg: str = Form(""),
+    price_per_kg: str = Form(""),
 ):
     part_in = PartIn(
         hunter=hunter, species=species, part=part,
@@ -238,7 +266,7 @@ async def sell_form(request: Request):
             "config": config,
             "active": "inventory",
             "records": records,
-            "total": sum(r.total_price for r in records),
+            "total": sum(r.total_price for r in records if r.total_price is not None),
         },
     )
 
@@ -254,7 +282,7 @@ async def sell_confirm(request: Request):
         record = records.get(u)
         if record is None:
             continue
-        total = round(parse_german_decimal(price), 2)
+        total = round(parse_optional_decimal(price) or 0.0, 2)
         items.append(
             SaleItem(
                 uuid=record.uuid,
@@ -306,6 +334,40 @@ def sale_pdf(sale_id: str):
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="verkauf-{sale.number}.pdf"'},
     )
+
+
+def parse_preset_items(text: str) -> list[PresetItem] | None:
+    items: list[PresetItem] = []
+    for chunk in text.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        m = re.match(r"^(\d+)\s*x\s*(.+)$", chunk)
+        if not m:
+            return None
+        items.append(PresetItem(part=m.group(2).strip(), count=int(m.group(1))))
+    return items or None
+
+
+@app.post("/settings/presets")
+def settings_preset_save(
+    original_name: str = Form(""),
+    name: str = Form(...),
+    items_text: str = Form(...),
+):
+    items = parse_preset_items(items_text)
+    if items is None:
+        return RedirectResponse(url="/settings?msg=Ungültiges Format — erwartet z. B. „2x Keule, 1x Rücken“", status_code=303)
+    preset = Preset(name=name.strip(), items=items)
+    config.presets = [p for p in config.presets if p.name != original_name]
+    config.presets.append(preset)
+    return _settings_redirect(f"Vorgabe „{preset.name}“ gespeichert")
+
+
+@app.post("/settings/presets/delete")
+def settings_preset_delete(name: str = Form(...)):
+    config.presets = [p for p in config.presets if p.name != name]
+    return _settings_redirect(f"Vorgabe „{name}“ gelöscht")
 
 
 @app.get("/settings")
@@ -372,11 +434,14 @@ def settings_species_delete(name: str = Form(...)):
 def settings_part_save(
     original_name: str = Form(""),
     name: str = Form(...),
-    price: str = Form(...),
+    price: str = Form(""),
     weight_kg: str = Form(""),
 ):
     name = name.strip()
-    defaults = PartDefaults(price=price, weight_kg=weight_kg.strip() or None)
+    defaults = PartDefaults(
+        price=parse_optional_decimal(price),
+        weight_kg=parse_optional_decimal(weight_kg),
+    )
     if original_name and original_name != name:
         config.parts.pop(original_name, None)
     config.parts[name] = defaults

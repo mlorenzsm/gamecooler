@@ -27,7 +27,7 @@ class PrinterConfig(BaseModel):
 
 
 class PartDefaults(BaseModel):
-    price: float
+    price: float | None = None
     weight_kg: float | None = None
 
     @field_validator("price", "weight_kg", mode="before")
@@ -38,10 +38,21 @@ class PartDefaults(BaseModel):
         return float(str(v).replace(",", "."))
 
 
+class PresetItem(BaseModel):
+    part: str
+    count: int
+
+
+class Preset(BaseModel):
+    name: str
+    items: list[PresetItem]
+
+
 class Config(BaseModel):
     hunters: list[Hunter]
     species: list[str]
     parts: dict[str, PartDefaults]
+    presets: list[Preset] = []
     printer: PrinterConfig = PrinterConfig()
     best_before_months: int = 12
     dry_run: bool = True
@@ -51,7 +62,7 @@ class Config(BaseModel):
     def _scalar_is_price(cls, v):
         return {
             name: entry if isinstance(entry, dict) else {"price": entry}
-            for name, entry in v.items()
+            for name, entry in (v or {}).items()
         }
 
 
@@ -65,10 +76,11 @@ def save_config(config: Config) -> None:
         "hunters": [h.model_dump() for h in config.hunters],
         "species": config.species,
         "parts": {
-            name: {"price": p.price}
+            name: ({"price": p.price} if p.price is not None else {})
             | ({"weight_kg": p.weight_kg} if p.weight_kg is not None else {})
             for name, p in config.parts.items()
         },
+        "presets": [p.model_dump() for p in config.presets],
         "printer": config.printer.model_dump(),
         "best_before_months": config.best_before_months,
         "dry_run": config.dry_run,

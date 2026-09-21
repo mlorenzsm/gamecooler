@@ -71,13 +71,20 @@ def render_info_label(record: PartRecord, hunter: Hunter | None = None) -> Image
     title_font = _fit_text(draw, title, 52, WIDTH - MARGIN - title_x, bold=True, min_size=30)
     draw.text((title_x, MARGIN - 4), title, font=title_font, fill=0)
 
-    # 2x2 grid: Gewicht / Datum | Preis/kg / Preis
-    grid = [
-        (("Gewicht", f"{format_de(record.weight_kg, 3)} kg", False),
-         ("Preis/kg", f"{format_de(record.price_per_kg)} €", False)),
-        (("Datum", _format_date(record.created_at), False),
-         ("Preis", f"{format_de(record.total_price)} €", True)),
-    ]
+    # 2x2 grid: Gewicht / Preis/kg then Datum / Preis. Weight and price depend on
+    # each other (total = weight x price), so both drop out if either is unset.
+    date_cell = ("Datum", _format_date(record.created_at), False)
+    if record.weight_kg is not None and record.price_per_kg is not None:
+        grid = [
+            (("Gewicht", f"{format_de(record.weight_kg, 3)} kg", False),
+             ("Preis/kg", f"{format_de(record.price_per_kg)} €", False)),
+            (date_cell, ("Preis", f"{format_de(record.total_price or 0.0)} €", True)),
+        ]
+    elif record.weight_kg is not None:
+        grid = [(("Gewicht", f"{format_de(record.weight_kg, 3)} kg", False), date_cell)]
+    else:
+        grid = [(date_cell,)]
+
     label_font = _font(36)
     col_x = (MARGIN, MARGIN + inner_width // 2)
     label_width = 185
@@ -126,13 +133,14 @@ def render_qr_label(record: PartRecord, best_before_months: int = 12) -> Image.I
     short_id = record.uuid.split("-")[0].upper()
     draw.text((text_x, MARGIN + 10), short_id, font=_font(72, bold=True), fill=0)
 
+    lines = [f"{record.species} – {record.part}"]
+    if record.weight_kg is not None:
+        lines.append(f"{format_de(record.weight_kg, 3)} kg")
+    lines.append(f"Mind. haltbar bis: {_best_before(record.created_at, best_before_months)}")
+
     info_font = _font(32)
     y = MARGIN + 120
-    for line in (
-        f"{record.species} – {record.part}",
-        f"{format_de(record.weight_kg, 3)} kg",
-        f"Mind. haltbar bis: {_best_before(record.created_at, best_before_months)}",
-    ):
+    for line in lines:
         draw.text((text_x, y), line, font=info_font, fill=0)
         y += 48
 

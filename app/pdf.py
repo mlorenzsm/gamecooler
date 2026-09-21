@@ -63,7 +63,7 @@ def render_sale_pdf(sale: Sale, hunter: Hunter | None) -> bytes:
         cells = (
             str(i),
             f"{item.species} – {item.part}",
-            f"{format_de(item.weight_kg, 3)} kg",
+            f"{format_de(item.weight_kg, 3)} kg" if item.weight_kg is not None else "–",
             format_de(item.price_per_kg),
             f"{format_de(item.total_price)} €",
             item.uuid[:8].upper(),

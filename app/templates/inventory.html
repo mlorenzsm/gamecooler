@@ -8,6 +8,7 @@
   <b id="sum-count">{{ inventory_count }}</b> Teilstücke,
   <b id="sum-weight">{{ inventory_weight | de(3) }} kg</b>,
   Warenwert <b id="sum-value">{{ inventory_value | de }} €</b>
+  <span id="sum-hint" style="color:#888; font-size:0.85rem;">{{ inventory_hint }}</span>
 </p>
 
 <div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-bottom:1rem;">
@@ -49,7 +50,10 @@
   <tr class="part-row" {% if r.consumed_at %}style="opacity: 0.5;"{% endif %}
       data-species="{{ r.species }}" data-part="{{ r.part }}"
       data-status="{{ 'consumed' if r.consumed_at else 'stock' }}"
-      data-weight="{{ r.weight_kg }}" data-price="{{ r.total_price }}"
+      data-unpriced="{{ 1 if r.total_price is none else 0 }}"
+      data-weight="{{ r.weight_kg if r.weight_kg is not none else 0 }}"
+    data-price="{{ r.total_price if r.total_price is not none else 0 }}"
+    data-unweighed="{{ 1 if r.weight_kg is none else 0 }}"
       data-search="{{ (r.species ~ ' ' ~ r.part ~ ' ' ~ r.hunter ~ ' ' ~ r.uuid ~ ' ' ~ r.created_at[:10]) | lower }}">
     <td>
       {% if not r.consumed_at %}
@@ -96,7 +100,7 @@ function countSelected() {
 function applyFilter() {
   const species = fSpecies.value, part = fPart.value, status = fStatus.value;
   const search = fSearch.value.trim().toLowerCase();
-  let shown = 0, count = 0, weight = 0, value = 0;
+  let shown = 0, count = 0, weight = 0, value = 0, unweighed = 0, unpriced = 0;
   for (const row of rows) {
     const match =
       (!species || row.dataset.species === species) &&
@@ -109,16 +113,22 @@ function applyFilter() {
       count++;
       weight += parseFloat(row.dataset.weight);
       value += parseFloat(row.dataset.price);
+      if (row.dataset.unweighed === '1') unweighed++;
+      else if (row.dataset.unpriced === '1') unpriced++;
       // hidden rows must not stay selected
     } else {
       const cb = row.querySelector('.pick');
       if (cb) cb.checked = false;
     }
   }
+  const notes = [];
+  if (unweighed) notes.push(`${unweighed} ohne Gewicht`);
+  if (unpriced) notes.push(`${unpriced} ohne Preis`);
   document.getElementById('no-match').hidden = shown > 0;
   document.getElementById('sum-count').textContent = count;
   document.getElementById('sum-weight').textContent = fmt(weight, 3) + ' kg';
   document.getElementById('sum-value').textContent = fmt(value) + ' €';
+  document.getElementById('sum-hint').textContent = notes.length ? ` (${notes.join(', ')})` : '';
   updateBar();
 }
 

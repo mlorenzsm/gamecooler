@@ -67,6 +67,7 @@
 <form method="post" action="/settings/parts" id="part-new"></form>
 <table style="max-width:45rem;">
   <tr><th>Name</th><th class="num">Preis/kg (€)</th><th class="num">Standardgewicht (kg)</th><th></th></tr>
+  {# empty price = part printed without any price on the label #}
   {% for name, p in config.parts.items() %}
   {% set f = 'part-' ~ loop.index %}
   <tr>
@@ -74,8 +75,9 @@
       <input type="hidden" name="original_name" value="{{ name }}" form="{{ f }}">
       <input name="name" required value="{{ name }}" form="{{ f }}" style="width:11rem">
     </td>
-    <td class="num"><input name="price" required inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
-                           value="{{ p.price | de }}" form="{{ f }}" style="width:6rem; text-align:right;"></td>
+    <td class="num"><input name="price" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
+                           value="{{ p.price | de if p.price is not none else '' }}"
+                           placeholder="–" form="{{ f }}" style="width:6rem; text-align:right;"></td>
     <td class="num"><input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
                            value="{{ p.weight_kg | de(3) if p.weight_kg is not none else '' }}"
                            placeholder="–" form="{{ f }}" style="width:6rem; text-align:right;"></td>
@@ -88,13 +90,50 @@
   {% endfor %}
   <tr>
     <td><input name="name" required placeholder="Neues Teilstück" form="part-new" style="width:11rem"></td>
-    <td class="num"><input name="price" required inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
-                           placeholder="0,00" form="part-new" style="width:6rem; text-align:right;"></td>
+    <td class="num"><input name="price" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
+                           placeholder="–" form="part-new" style="width:6rem; text-align:right;"></td>
     <td class="num"><input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
                            placeholder="optional" form="part-new" style="width:6rem; text-align:right;"></td>
     <td><button class="small" type="submit" form="part-new">+ Hinzufügen</button></td>
   </tr>
 </table>
+
+<h3 style="margin-top:2rem;">📋 Vorgaben (Sammeldruck)</h3>
+{% for preset in config.presets %}
+<form method="post" action="/settings/presets" id="preset-{{ loop.index }}"></form>
+{% endfor %}
+<form method="post" action="/settings/presets" id="preset-new"></form>
+<table style="max-width:45rem;">
+  {% for preset in config.presets %}
+  {% set f = 'preset-' ~ loop.index %}
+  <tr>
+    <td>
+      <input type="hidden" name="original_name" value="{{ preset.name }}" form="{{ f }}">
+      <input name="name" required value="{{ preset.name }}" form="{{ f }}" style="width:10rem">
+    </td>
+    <td>
+      <textarea name="items_text" required rows="2" style="width:100%;"
+                placeholder="z. B. 2x Keule, 1x Rücken, 6x Hackfleisch" form="{{ f }}">{{ preset | preset_text }}</textarea>
+    </td>
+    <td style="white-space:nowrap;">
+      <button class="small" type="submit" form="{{ f }}">Speichern</button>
+      <button class="small" type="submit" form="{{ f }}" formaction="/settings/presets/delete" formnovalidate
+              onclick="return confirm('Vorgabe „{{ preset.name }}“ löschen?')">✕</button>
+    </td>
+  </tr>
+  {% endfor %}
+  <tr>
+    <td><input name="name" required placeholder="Name, z. B. Reh komplett" form="preset-new" style="width:10rem"></td>
+    <td>
+      <textarea name="items_text" required rows="2" style="width:100%;"
+                placeholder="z. B. 2x Keule, 1x Rücken, 6x Hackfleisch" form="preset-new"></textarea>
+    </td>
+    <td><button class="small" type="submit" form="preset-new">+ Hinzufügen</button></td>
+  </tr>
+</table>
+<p style="font-size:0.8rem; color:#888; margin-top:0.3rem;">
+  Format: <code>2x Keule, 1x Rücken</code> — durch Kommas getrennt.
+</p>
 
 <p style="margin-top:1.5rem; font-size:0.85rem; color:#888;">
   Änderungen werden direkt in die <code>config.yaml</code> geschrieben.

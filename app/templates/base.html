@@ -4,37 +4,152 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Wildbret-Etiketten</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@600;700&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    :root { color-scheme: light dark; }
-    body { font-family: -apple-system, system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 1rem; }
-    h1 { font-size: 1.4rem; }
-    form.part-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin-bottom: 1.5rem; }
-    form.part-form label { display: flex; flex-direction: column; font-size: 0.9rem; gap: 0.3rem; }
-    input, select, button { font-size: 1.1rem; padding: 0.5rem; }
-    button.print { grid-column: 1 / -1; padding: 0.8rem; font-weight: bold; cursor: pointer; }
-    .msg { background: #d2f8d2; color: #1a5c1a; padding: 0.6rem 1rem; border-radius: 6px; margin-bottom: 1rem; }
-    .dry-run { background: #fff3cd; color: #664d03; padding: 0.6rem 1rem; border-radius: 6px; margin-bottom: 1rem; }
+    :root {
+      --green: #378537;
+      --green-dark: #2a662a;
+      --forest: #1e2a20;
+      --amber: #fabb00;
+      --ink: #262626;
+      --muted: #636363;
+      --paper: #f6f6f4;
+      --card: #ffffff;
+      --line: #e7e7e2;
+      --radius: 14px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(30,42,32,0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Poppins', -apple-system, system-ui, sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 1rem 3rem;
+      line-height: 1.55;
+    }
+    h1, h2, h3 {
+      font-family: 'Josefin Sans', 'Poppins', sans-serif;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      color: var(--forest);
+    }
+    h1 { font-size: 1.5rem; margin: 0; }
+    h2 { font-size: 1.35rem; margin: 0 0 1rem; }
+    h3 { font-size: 1.05rem; margin: 1.8rem 0 0.6rem; }
+
+    header.site {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      padding: 1.1rem 0 0.9rem;
+    }
+    nav { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    nav a {
+      text-decoration: none;
+      padding: 0.45rem 0.95rem;
+      border-radius: 999px;
+      color: var(--forest);
+      font-size: 0.92rem;
+      font-weight: 500;
+      transition: background 0.15s;
+    }
+    nav a:hover { background: rgba(55,133,55,0.10); }
+    nav a.active { background: var(--green); color: #fff; }
+
+    main.card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.6rem 1.6rem 1.8rem;
+    }
+
+    form.part-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; margin-bottom: 1.5rem; }
+    form.part-form label { display: flex; flex-direction: column; font-size: 0.85rem; font-weight: 500; color: var(--muted); gap: 0.35rem; }
+
+    input, select, textarea {
+      font: inherit;
+      font-size: 1rem;
+      padding: 0.55rem 0.75rem;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--ink);
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--green);
+      box-shadow: 0 0 0 3px rgba(55,133,55,0.15);
+    }
+    input[type=checkbox], input[type=radio] { accent-color: var(--green); width: 1.05rem; height: 1.05rem; }
+
+    button {
+      font: inherit;
+      font-size: 0.95rem;
+      font-weight: 500;
+      padding: 0.55rem 1.1rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--forest);
+      cursor: pointer;
+      transition: background 0.15s, transform 0.05s;
+    }
+    button:hover { background: var(--paper); }
+    button:active { transform: scale(0.98); }
+    button.print {
+      grid-column: 1 / -1;
+      background: var(--green);
+      border-color: var(--green);
+      color: #fff;
+      font-weight: 600;
+      padding: 0.8rem 1.4rem;
+      box-shadow: 0 4px 14px rgba(55,133,55,0.35);
+    }
+    button.print:hover { background: var(--green-dark); }
+    button.small { font-size: 0.8rem; padding: 0.25rem 0.7rem; }
+
+    .msg { background: #e5f4e5; color: #1f4d1f; border-left: 4px solid var(--green); padding: 0.7rem 1rem; border-radius: 10px; margin-bottom: 1.2rem; }
+    .dry-run { background: #fdf3d7; color: #6b5200; border-left: 4px solid var(--amber); padding: 0.7rem 1rem; border-radius: 10px; margin-bottom: 1.2rem; }
+
     table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
-    th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #ccc; }
-    td.num { text-align: right; }
+    th { font-family: 'Josefin Sans', sans-serif; font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+    th, td { text-align: left; padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--line); }
+    tr:hover > td { background: rgba(55,133,55,0.04); }
+    td.num, th.num { text-align: right; }
+    code { background: var(--paper); padding: 0.1rem 0.35rem; border-radius: 6px; font-size: 0.85em; }
+
     .preview-imgs { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
-    .preview-imgs img { max-width: 420px; width: 100%; border: 1px solid #ccc; background: white; }
-    button.small { font-size: 0.8rem; padding: 0.2rem 0.5rem; }
-    nav { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1.2rem; }
-    nav a { text-decoration: none; padding: 0.4rem 0.8rem; border-radius: 6px; border: 1px solid #ccc; color: inherit; }
-    nav a.active { background: #2b6cb0; border-color: #2b6cb0; color: white; }
-    @media (max-width: 600px) { form.part-form { grid-template-columns: 1fr; } }
+    .preview-imgs img { max-width: 430px; width: 100%; border: 1px solid var(--line); border-radius: 10px; background: white; box-shadow: var(--shadow); }
+
+    a { color: var(--green-dark); }
+
+    @media (max-width: 640px) {
+      form.part-form { grid-template-columns: 1fr; }
+      main.card { padding: 1.1rem; }
+      header.site { justify-content: center; }
+    }
   </style>
 </head>
 <body>
-  <h1>🦌 Wildbret-Etiketten</h1>
-  <nav>
-    <a href="/" {% if active == 'index' %}class="active"{% endif %}>🏷️ Einzeldruck</a>
-    <a href="/bulk" {% if active == 'bulk' %}class="active"{% endif %}>🖨️ Sammeldruck</a>
-    <a href="/scan" {% if active == 'scan' %}class="active"{% endif %}>📷 Entnahme</a>
-    <a href="/inventory" {% if active == 'inventory' %}class="active"{% endif %}>🧊 Bestand</a>
-    <a href="/settings" {% if active == 'settings' %}class="active"{% endif %}>⚙️ Einstellungen</a>
-  </nav>
+  <header class="site">
+    <h1>🦌 Wildbret-Etiketten</h1>
+    <nav>
+      <a href="/" {% if active == 'index' %}class="active"{% endif %}>🏷️ Einzeldruck</a>
+      <a href="/bulk" {% if active == 'bulk' %}class="active"{% endif %}>🖨️ Sammeldruck</a>
+      <a href="/scan" {% if active == 'scan' %}class="active"{% endif %}>📷 Entnahme</a>
+      <a href="/inventory" {% if active == 'inventory' %}class="active"{% endif %}>🧊 Bestand</a>
+      <a href="/settings" {% if active == 'settings' %}class="active"{% endif %}>⚙️ Einstellungen</a>
+    </nav>
+  </header>
+  <main class="card">
   {% block content %}{% endblock %}
+  </main>
 </body>
 </html>
