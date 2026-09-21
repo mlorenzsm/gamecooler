@@ -27,6 +27,25 @@ def append_many(records: list[PartRecord]) -> None:
         _write(entries)
 
 
+def mark_printed(part_uuids: list[str]) -> int:
+    """Records that the initial print succeeded for these parts.
+
+    Parts are stored before printing, so `printed` is set afterwards — it must
+    reflect whether the labels actually came out, not whether we tried.
+    """
+    wanted = set(part_uuids)
+    with _lock:
+        records = load_all()
+        changed = 0
+        for record in records:
+            if record.uuid in wanted and not record.printed:
+                record.printed = True
+                changed += 1
+        if changed:
+            _write([r.model_dump() for r in records])
+        return changed
+
+
 def mark_consumed(part_uuid: str) -> tuple[PartRecord, bool] | None:
     """Returns (record, was_already_consumed), or None if unknown."""
     with _lock:

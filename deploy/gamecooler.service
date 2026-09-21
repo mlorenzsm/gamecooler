@@ -1,0 +1,33 @@
+[Unit]
+Description=Gamecooler Webapp
+Documentation=file:/opt/gamecooler/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=gamecooler
+Group=gamecooler
+WorkingDirectory=/opt/gamecooler
+
+# uv mit absolutem Pfad: systemd hat ein minimales PATH.
+# uv run hält die Umgebung aktuell und reicht SIGTERM an uvicorn weiter.
+Environment=GAMECOOLER_STATE_DIR=/var/lib/gamecooler
+Environment=UV_PROJECT_ENVIRONMENT=/opt/gamecooler/.venv
+Environment=UV_NO_DEV=1
+ExecStart=/usr/local/bin/uv run uvicorn app.main:app --host 127.0.0.1 --port 8010
+
+Restart=on-failure
+RestartSec=5
+
+# Schreibzugriff nur auf das Zustandsverzeichnis. Die .venv ist zusätzlich
+# freigegeben, weil uv run bei geänderter uv.lock sonst nicht synchronisieren
+# kann und mit einer irreführenden Meldung abbricht.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/gamecooler /opt/gamecooler/.venv
+
+[Install]
+WantedBy=multi-user.target

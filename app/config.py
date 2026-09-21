@@ -2,11 +2,15 @@ import os
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-CONFIG_PATH = BASE_DIR / "config.yaml"
-DATA_DIR = BASE_DIR / "data"
+# A container mounts a state directory and points these at it. Keep config.yaml
+# and data/ inside one directory: save_config() writes a temp file and renames
+# it over CONFIG_PATH, which fails on a bind-mounted single file (EBUSY).
+STATE_DIR = Path(os.environ.get("GAMECOOLER_STATE_DIR", BASE_DIR))
+CONFIG_PATH = STATE_DIR / "config.yaml"
+DATA_DIR = STATE_DIR / "data"
 REGISTRY_PATH = DATA_DIR / "registry.json"
 SALES_PATH = DATA_DIR / "sales.json"
 FONTS_DIR = Path(__file__).resolve().parent / "fonts"
@@ -19,11 +23,22 @@ class Hunter(BaseModel):
     email: str = ""
 
 
-class PrinterConfig(BaseModel):
+class PrinterTarget(BaseModel):
+    """A printer the app can send labels to.
+
+    ``backend`` decides how the raster instructions reach the device:
+
+    - ``pyusb`` / ``linux_kernel`` — directly attached, via brother_ql
+    - ``network`` — a printer or print server speaking raw TCP (port 9100)
+    - ``agent`` — a hardware bridge on another machine (e.g. the Mac),
+      reached over HTTP because USB cannot be shared across hosts
+    """
+
+    name: str
     model: str = "QL-800"
-    identifier: str = "usb://0x04f9:0x209b"
-    backend: str = "pyusb"
     label: str = "39x90"
+    backend: str = "pyusb"
+    identifier: str = "usb://0x04f9:0x209b"
 
 
 class PartDefaults(BaseModel):
@@ -53,7 +68,8 @@ class Config(BaseModel):
     species: list[str]
     parts: dict[str, PartDefaults]
     presets: list[Preset] = []
-    printer: PrinterConfig = PrinterConfig()
+    printers: list[PrinterTarget] = []
+    default_printer: str = ""
     best_before_months: int = 12
     dry_run: bool = True
 
@@ -64,6 +80,40 @@ class Config(BaseModel):
             name: entry if isinstance(entry, dict) else {"price": entry}
             for name, entry in (v or {}).items()
         }
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_single_printer(cls, data):
+        """Accept the pre-multi-printer config shape."""
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        old = data.pop("printer", None)
+        if old and not data.get("printers"):
+            target = dict(old)
+            target.setdefault("name", "Standard")
+            data["printers"] = [target]
+            data.setdefault("default_printer", target["name"])
+        return data
+
+    @model_validator(mode="after")
+    def _ensure_default_printer(self):
+        if not self.printers:
+            self.printers = [PrinterTarget(name="Standard")]
+        if not any(p.name == self.default_printer for p in self.printers):
+            self.default_printer = self.printers[0].name
+        return self
+
+    def printer(self, name: str | None = None) -> PrinterTarget:
+        """Resolve a printer by name, falling back to the default."""
+        wanted = name or self.default_printer
+        for p in self.printers:
+            if p.name == wanted:
+                return p
+        for p in self.printers:
+            if p.name == self.default_printer:
+                return p
+        return self.printers[0]
 
 
 def load_config() -> Config:
@@ -81,7 +131,8 @@ def save_config(config: Config) -> None:
             for name, p in config.parts.items()
         },
         "presets": [p.model_dump() for p in config.presets],
-        "printer": config.printer.model_dump(),
+        "printers": [p.model_dump() for p in config.printers],
+        "default_printer": config.default_printer,
         "best_before_months": config.best_before_months,
         "dry_run": config.dry_run,
     }

@@ -23,11 +23,28 @@ from .pdf import render_sale_pdf
 from .printer import print_labels
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Wildbret-Etiketten")
+app = FastAPI(title="Gamecooler")
 app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static")
 templates = Jinja2Templates(directory=Path(__file__).resolve().parent / "templates")
 templates.env.filters["de"] = format_de
+
+
+def print_safely(images: list, printer, dry_run: bool) -> str | None:
+    """Print, returning an error message instead of raising.
+
+    Records are saved before printing, so a printer that is off or a print
+    agent that is unreachable must not fail the request — that would report an
+    error for parts that were in fact stored. Callers surface the returned
+    message and point at the reprint action in the inventory.
+    """
+    try:
+        print_labels(images, printer, dry_run)
+    except Exception as e:
+        logger.exception("print failed on %s", printer.name)
+        return str(e)
+    return None
 
 
 def parts_json(parts: dict[str, PartDefaults]) -> dict:
@@ -138,6 +155,7 @@ async def bulk_print(request: Request):
     prices = form.getlist("price_per_kg")
     no_prices = form.getlist("no_price")
     no_price_rows = {int(i) for i in no_prices}
+    printer = config.printer(form.get("printer"))
 
     records: list[PartRecord] = []
     for i, (count, part, weight, price) in enumerate(zip(counts, parts, weights, prices)):
@@ -152,7 +170,7 @@ async def bulk_print(request: Request):
             weight_kg=weight, price_per_kg=price,
         )
         for _ in range(int(count)):
-            records.append(PartRecord.from_input(part_in, printed=not config.dry_run))
+            records.append(PartRecord.from_input(part_in, printed=False))
 
     if not records:
         return RedirectResponse(url="/bulk?msg=Keine gültigen Zeilen", status_code=303)
@@ -162,15 +180,24 @@ async def bulk_print(request: Request):
     for record in records:
         images.append(render_info_label(record, hunter_config))
         images.append(render_qr_label(record, config.best_before_months))
-    print_labels(images, config.printer, config.dry_run)
+
+    # Save first: printing can fail (printer off, agent host asleep) and must
+    # not take the recorded parts down with it.
     registry.append_many(records)
+    error = print_safely(images, printer, config.dry_run)
+    if not error and not config.dry_run:
+        registry.mark_printed([r.uuid for r in records])
 
     n = len(records)
-    msg = (
-        f"{n} Teilstücke ({2 * n} Etiketten) gedruckt & gespeichert"
-        if not config.dry_run
-        else f"{n} Teilstücke gespeichert (Testmodus, nicht gedruckt)"
-    )
+    if error:
+        msg = (
+            f"{n} Teilstücke gespeichert, aber Druck fehlgeschlagen ({error}) "
+            f"— über Bestand nachdrucken"
+        )
+    elif config.dry_run:
+        msg = f"{n} Teilstücke gespeichert (Testmodus, nicht gedruckt)"
+    else:
+        msg = f"{n} Teilstücke ({2 * n} Etiketten) gedruckt & gespeichert"
     return RedirectResponse(url=f"/?msg={msg}", status_code=303)
 
 
@@ -181,21 +208,29 @@ def create_part(
     part: str = Form(...),
     weight_kg: str = Form(""),
     price_per_kg: str = Form(""),
+    printer: str = Form(""),
 ):
     part_in = PartIn(
         hunter=hunter, species=species, part=part,
         weight_kg=weight_kg, price_per_kg=price_per_kg,
     )
-    record = PartRecord.from_input(part_in, printed=not config.dry_run)
+    record = PartRecord.from_input(part_in, printed=False)
     images = [render_info_label(record, find_hunter(hunter)), render_qr_label(record, config.best_before_months)]
-    print_labels(images, config.printer, config.dry_run)
     registry.append(record)
-    msg = "Gedruckt & gespeichert" if not config.dry_run else "Gespeichert (Testmodus, nicht gedruckt)"
+    error = print_safely(images, config.printer(printer), config.dry_run)
+    if not error and not config.dry_run:
+        registry.mark_printed([record.uuid])
+    if error:
+        msg = f"Gespeichert, aber Druck fehlgeschlagen ({error}) — über Bestand nachdrucken"
+    elif config.dry_run:
+        msg = "Gespeichert (Testmodus, nicht gedruckt)"
+    else:
+        msg = "Gedruckt & gespeichert"
     return RedirectResponse(url=f"/?msg={msg}", status_code=303)
 
 
 @app.post("/parts/{part_uuid}/reprint")
-def reprint(part_uuid: str):
+def reprint(part_uuid: str, printer: str = Form("")):
     record = registry.get(part_uuid)
     if record is None:
         raise HTTPException(status_code=404, detail="Teilstück nicht gefunden")
@@ -203,8 +238,13 @@ def reprint(part_uuid: str):
         render_info_label(record, find_hunter(record.hunter)),
         render_qr_label(record, config.best_before_months),
     ]
-    print_labels(images, config.printer, config.dry_run)
-    msg = "Erneut gedruckt" if not config.dry_run else "Testmodus: nicht gedruckt"
+    error = print_safely(images, config.printer(printer), config.dry_run)
+    if error:
+        msg = f"Nachdruck fehlgeschlagen ({error})"
+    elif config.dry_run:
+        msg = "Testmodus: nicht gedruckt"
+    else:
+        msg = "Erneut gedruckt"
     return RedirectResponse(url=f"/?msg={msg}", status_code=303)
 
 

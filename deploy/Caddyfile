@@ -1,0 +1,30 @@
+# Caddy als TLS-Terminator vor der App.
+#
+# Wichtig: HTTPS ist hier keine Kosmetik. Die Scan-Seite nutzt die Handykamera
+# über getUserMedia, und Browser erlauben das nur in einem "secure context"
+# (HTTPS oder localhost). Über reines HTTP startet der Scanner stillschweigend
+# nicht — siehe app/templates/scan.html.
+#
+# Der Hostname muss auf dem Handy auflösbar sein. IP-Adressen funktionieren
+# nicht, weil ein TLS-Zertifikat auf einen Namen ausgestellt wird (siehe
+# docs/deploy.md, Abschnitt "Hostname").
+#
+# Anpassen: der Name muss identisch in Pi-hole (Local DNS), hier und im
+# Browser stehen. home.arpa ist der von RFC 8375 vorgesehene Namensraum für
+# Heimnetze — nicht .local (mDNS, Android löst das nicht auf) und nicht .lan.
+
+wildbret.home.arpa {
+	# Caddy holt sich hier automatisch ein Zertifikat von seiner internen CA
+	# (kein ACME, kein Internet nötig).
+
+	encode zstd gzip
+
+	reverse_proxy 127.0.0.1:8010 {
+		# Der App ist es egal, unter welchem Namen sie erreicht wird.
+		header_up Host {host}
+	}
+
+	log {
+		output file /var/log/caddy/wildbret.log
+	}
+}

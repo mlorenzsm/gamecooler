@@ -630,7 +630,7 @@ wheels = [
 ]
 
 [[package]]
-name = "wildgame-labels"
+name = "gamecooler"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

@@ -29,6 +29,15 @@
         {% for s in config.species %}<option>{{ s }}</option>{% endfor %}
       </select>
     </label>
+    {% if config.printers | length > 1 %}
+    <label style="display:flex; flex-direction:column; gap:0.3rem;">Drucker
+      <select name="printer">
+        {% for p in config.printers %}
+        <option value="{{ p.name }}" {% if p.name == config.default_printer %}selected{% endif %}>{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
   </div>
 
   <table id="rows">
