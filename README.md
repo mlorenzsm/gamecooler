@@ -48,3 +48,8 @@ aber nicht gedruckt. Für echten Druck auf `dry_run: false` stellen.
 
 - `data/registry.json` — alle registrierten Teilstücke
 - `GET /parts.json` — Export über die Webapp
+
+## Geplant
+
+- [Waagen-Anbindung](docs/scale.md) — Gewicht direkt von einer RS-232-Waage
+  übernehmen (Recherche, Waage noch nicht gekauft)
