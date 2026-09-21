@@ -13,7 +13,12 @@ Jedes gedruckte Teilstück wird in `data/registry.json` für die Buchhaltung reg
 ```sh
 brew install libusb          # für den pyusb-Backend
 uv sync
+cp config.yaml.example config.yaml
 ```
+
+`config.yaml` ist **nicht** versioniert — dort stehen die Jäger mit Adresse und
+Telefonnummer. Die Vorlage enthält Platzhalter; für den ersten Start reicht sie
+so, wie sie ist (`dry_run: true` druckt nichts).
 
 Drucker per USB anschließen und dann:
 

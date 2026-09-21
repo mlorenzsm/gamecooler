@@ -1,4 +1,10 @@
 .venv/
 __pycache__/
 *.pyc
+
+# Echte Einstellungen: Jäger mit Adresse, Telefon, E-Mail. Nicht versionieren —
+# die Vorlage ist config.yaml.example.
+config.yaml
+
+# Registrierung und Verkäufe. sales.json enthält Käuferdaten.
 data/

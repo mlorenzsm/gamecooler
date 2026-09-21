@@ -1,0 +1,72 @@
+# Vorlage für config.yaml. Kopieren und anpassen:
+#
+#   cp config.yaml.example config.yaml
+#
+# config.yaml selbst ist nicht versioniert — dort stehen die echten Jäger mit
+# Adresse und Telefonnummer. Diese Datei enthält nur Platzhalter.
+
+hunters:
+- name: Max Mustermann
+  address: Musterweg 1, 12345 Musterstadt
+  phone: 0123 456789
+  email: max@example.com
+
+species:
+- Reh
+- Wildschwein
+- Rotwild
+- Damwild
+- Hase
+- Wildente
+- Fasan
+
+# Preis pro kg. Leer lassen ({}), wenn das Teilstück ohne Vorgabe sein soll —
+# dann muss der Preis beim Erfassen eingetippt werden.
+parts:
+  Keule:
+    price: 16.0
+  Rücken:
+    price: 22.0
+  Schulter/Blatt:
+    price: 12.0
+  Filet:
+    price: 28.0
+  Hals/Träger:
+    price: 9.0
+  Bauch:
+    price: 9.0
+  Gulasch:
+    price: 11.0
+  Hackfleisch:
+    price: 9.5
+
+# Vorgaben für den Sammeldruck: erscheinen als Knopf, der die Zeilen vorbelegt.
+presets:
+- name: Reh komplett
+  items:
+  - part: Keule
+    count: 2
+  - part: Schulter/Blatt
+    count: 2
+  - part: Rücken
+    count: 1
+  - part: Filet
+    count: 1
+  - part: Hackfleisch
+    count: 6
+
+# backend: pyusb | linux_kernel | network | agent   (siehe README)
+# identifier: usb://0x04f9:0x209b  ist die QL-800-Kennung, auf jedem Gerät gleich
+printers:
+- name: Mac
+  model: QL-800
+  label: 39x90
+  backend: pyusb
+  identifier: usb://0x04f9:0x209b
+default_printer: Mac
+
+# Haltbarkeit auf dem Etikett, in Monaten.
+best_before_months: 12
+
+# true = nur registrieren, nicht drucken. Zum Ausprobieren zunächst true lassen.
+dry_run: true
