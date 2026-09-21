@@ -146,7 +146,7 @@ async def bulk_print(request: Request):
         if i in no_price_rows:
             price = None
         else:
-            price = price.strip() or config.parts[part].price
+            price = price.strip() or getattr(config.parts.get(part), "price", None)
         part_in = PartIn(
             hunter=hunter, species=species, part=part,
             weight_kg=weight, price_per_kg=price,
