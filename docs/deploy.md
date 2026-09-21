@@ -276,13 +276,18 @@ apt update && apt install -y curl ca-certificates git
 curl -LsSf https://astral.sh/uv/install.sh | UV_INSTALL_DIR=/usr/local sh
 
 useradd --system --create-home --shell /usr/sbin/nologin gamecooler
-git clone <repo> /opt/gamecooler
+
+# HTTPS, nicht SSH: das Repo ist öffentlich und der Container hat keinen
+# SSH-Key. Anonymous clone funktioniert ohne Token.
+git clone https://github.com/mlorenzsm/gamecooler.git /opt/gamecooler
 cd /opt/gamecooler
 uv sync --locked --no-dev
 chown -R gamecooler:gamecooler /opt/gamecooler
 
-# config.yaml einmalig ins Zustands-Volume, sonst legt die App eine leere an
-cp /opt/gamecooler/config.yaml /var/lib/gamecooler/config.yaml
+# config.yaml liegt NICHT im Repo — dort stehen Jäger mit Adresse und
+# Telefonnummer (siehe .gitignore). Also die Vorlage nehmen und im
+# Zustands-Volume ausfüllen. Ohne die Datei legt die App eine leere an.
+cp /opt/gamecooler/config.yaml.example /var/lib/gamecooler/config.yaml
 chown gamecooler:gamecooler /var/lib/gamecooler/config.yaml
 ```
 
