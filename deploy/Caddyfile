@@ -12,10 +12,35 @@
 # Anpassen: der Name muss identisch in Pi-hole (Local DNS), hier und im
 # Browser stehen. home.arpa ist der von RFC 8375 vorgesehene Namensraum für
 # Heimnetze — nicht .local (mDNS, Android löst das nicht auf) und nicht .lan.
+#
+# __HOST__ ist ein Platzhalter und wird beim Deploy durch den Namen dieser
+# Umgebung ersetzt (deploy/autodeploy.sh, apply_caddy). Dieselbe Datei gilt
+# damit in beiden Umgebungen, ohne dass der Name hier feststeht.
+#
+#   Test: gamecooler-test.home.arpa
+#   Prod: wildbret.home.arpa
+#
+# Der Name kommt aus /etc/default/gamecooler-autodeploy (GAMECOOLER_HOST).
+#
+# Bewusst KEIN {$VAR:default} von Caddy: das Debian-Paket liest
+# /etc/default/caddy nicht — die Unit hat kein EnvironmentFile, --environ gibt
+# die Umgebung nur aus. {$GAMECOOLER_HOST:default} fällt deshalb immer still auf
+# den Default zurück. Genau so hat der Test-Container eine Zeitlang unter dem
+# Prod-Namen gelauscht: erreichbar, aber unter dem falschen Namen, und der
+# Health-Check (der nur 127.0.0.1:8010 prüft) merkt davon nichts.
+#
+# Ein Platzhalter kann so nicht fehlschlagen: fehlt GAMECOOLER_HOST, bricht der
+# Deploy ab, statt einen falschen Namen zu installieren.
 
-wildbret.home.arpa {
-	# Caddy holt sich hier automatisch ein Zertifikat von seiner internen CA
-	# (kein ACME, kein Internet nötig).
+__HOST__ {
+	# Ohne diese Zeile versucht Caddy ACME (Let's Encrypt / ZeroSSL) und
+	# scheitert: Let's Encrypt lehnt .arpa mit "rejectedIdentifier ...
+	# forbidden by policy" ab, ZeroSSL verlangt EAB-Zugangsdaten. Caddy nimmt
+	# die interne CA nur bei Namen ohne Punkt, bei "localhost" oder bei
+	# explizitem tls internal automatisch — home.arpa fällt in keinen dieser
+	# Fälle. Der Handshake bricht dann mit "tlsv1 alert internal error" ab,
+	# weil kein Zertifikat vorliegt.
+	tls internal
 
 	encode zstd gzip
 
@@ -24,7 +49,11 @@ wildbret.home.arpa {
 		header_up Host {host}
 	}
 
+	# Getrennte Logdateien pro Umgebung, abgeleitet aus demselben Namen — so
+	# gibt es nur einen Schalter pro Umgebung statt zwei. Ein Hostname ist ein
+	# gültiger Dateiname, das Ergebnis ist also wildbret.home.arpa.log bzw.
+	# gamecooler-test.home.arpa.log.
 	log {
-		output file /var/log/caddy/wildbret.log
+		output file /var/log/caddy/__HOST__.log
 	}
 }

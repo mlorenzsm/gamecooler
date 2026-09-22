@@ -28,26 +28,26 @@
     </label>
   </div>
 
-  <table>
+  <table class="responsive sale-items">
     <tr>
       <th>Wildart</th><th>Teilstück</th><th class="num">kg</th><th class="num">€/kg</th><th class="num">Preis (€)</th><th>ID</th>
     </tr>
     {% for r in records %}
     <tr>
-      <td>{{ r.species }}</td>
-      <td>{{ r.part }}</td>
-      <td class="num">{{ r.weight_kg | de(3) }}</td>
-      <td class="num">{{ r.price_per_kg | de }}</td>
-      <td class="num">
+      <td data-label="Wildart">{{ r.species }}</td>
+      <td data-label="Teilstück">{{ r.part }}</td>
+      <td class="num" data-label="kg">{{ r.weight_kg | de(3) }}</td>
+      <td class="num" data-label="€/kg">{{ r.price_per_kg | de }}</td>
+      <td class="num" data-label="Preis (€)">
         <input type="hidden" name="uuid" value="{{ r.uuid }}">
         <input name="item_price" class="item-price num" inputmode="decimal"
                pattern="[0-9]+([.,][0-9]+)?" value="{{ r.total_price | de if r.total_price is not none else '' }}"
                placeholder="0,00" style="width:6rem; text-align:right;">
       </td>
-      <td><code>{{ r.uuid[:8] }}</code></td>
+      <td data-label="ID"><code>{{ r.uuid[:8] }}</code></td>
     </tr>
     {% endfor %}
-    <tr>
+    <tr class="total-row">
       <td colspan="4" style="text-align:right;"><b>Gesamt</b></td>
       <td class="num"><b id="total">{{ total | de }} €</b></td>
       <td></td>

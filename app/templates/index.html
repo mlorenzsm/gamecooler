@@ -21,10 +21,10 @@
     </select>
   </label>
   <label>Gewicht (kg) <span style="font-weight:400; color:#888;">(leer = kein Gewicht auf dem Etikett)</span>
-    <input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="1,25" id="weight-input">
+    <input name="weight_kg" inputmode="decimal" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?" placeholder="1,25" id="weight-input">
   </label>
   <label>Preis/kg (€) <span style="font-weight:400; color:#888;">(leer = kein Preis auf dem Etikett)</span>
-    <input name="price_per_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="12,50" id="price-input">
+    <input name="price_per_kg" inputmode="decimal" enterkeyhint="done" pattern="[0-9]+([.,][0-9]+)?" placeholder="12,50" id="price-input">
   </label>
   {% if config.printers | length > 1 %}
   <label>Drucker

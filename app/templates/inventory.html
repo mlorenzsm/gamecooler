@@ -40,7 +40,7 @@
   </p>
 </form>
 
-<table>
+<table class="responsive inventory">
   <tr>
     <th><input type="checkbox" id="check-all" title="Alle auswählen"></th>
     <th>Datum</th><th>Wildart</th><th>Teilstück</th><th>Jäger</th>
@@ -55,21 +55,24 @@
     data-price="{{ r.total_price if r.total_price is not none else 0 }}"
     data-unweighed="{{ 1 if r.weight_kg is none else 0 }}"
       data-search="{{ (r.species ~ ' ' ~ r.part ~ ' ' ~ r.hunter ~ ' ' ~ r.uuid ~ ' ' ~ r.created_at[:10]) | lower }}">
-    <td>
+    <td data-label="">
       {% if not r.consumed_at %}
       <input type="checkbox" class="pick" name="uuid" value="{{ r.uuid }}" form="consume-form">
       {% endif %}
     </td>
-    <td>{{ r.created_at[:10] }}</td>
-    <td>{{ r.species }}</td>
-    <td>{{ r.part }}</td>
-    <td>{{ r.hunter }}</td>
-    <td class="num">{{ r.weight_kg | de(3) }}</td>
-    <td class="num">{{ r.price_per_kg | de }}</td>
-    <td class="num">{{ r.total_price | de }}</td>
-    <td><code>{{ r.uuid[:8] }}</code></td>
-    <td>{% if r.consumed_at %}entnommen {{ r.consumed_at[:10] }}{% else %}im Bestand{% endif %}</td>
-    <td>
+    <td data-label="Datum">{{ r.created_at[:10] }}</td>
+    <td data-label="Wildart">{{ r.species }}</td>
+    <td data-label="Teilstück">{{ r.part }}</td>
+    {# Erzwingt auf dem Telefon den Umbruch nach der Titelzeile. Am Desktop
+       ausgeblendet, damit die Spalten unverändert bleiben. #}
+    <td class="row-break" aria-hidden="true"></td>
+    <td data-label="Jäger">{{ r.hunter }}</td>
+    <td class="num" data-label="kg">{{ r.weight_kg | de(3) }}</td>
+    <td class="num" data-label="€/kg">{{ r.price_per_kg | de }}</td>
+    <td class="num" data-label="€">{{ r.total_price | de }}</td>
+    <td data-label="ID"><code>{{ r.uuid[:8] }}</code></td>
+    <td data-label="Status">{% if r.consumed_at %}entnommen {{ r.consumed_at[:10] }}{% else %}im Bestand{% endif %}</td>
+    <td data-label="">
       <form method="post" action="/parts/{{ r.uuid }}/reprint"
             onsubmit="return confirm('2 Etiketten nachdrucken?\n\n{{ r.species }} – {{ r.part }}, {{ r.weight_kg | de(3) }} kg')">
         <button class="small" type="submit">Nachdrucken</button>
