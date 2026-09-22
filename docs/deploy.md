@@ -273,7 +273,16 @@ apt update && apt install -y curl ca-certificates git
 
 # uv systemweit. Der Installer legt es sonst nach $HOME/.local/bin,
 # das sieht der Dienst wegen ProtectHome=yes nicht.
-curl -LsSf https://astral.sh/uv/install.sh | UV_INSTALL_DIR=/usr/local sh
+#
+# Achtung: UV_INSTALL_DIR ist das Verzeichnis, in dem uv SELBST landet —
+# nicht dessen Elternverzeichnis. Der Installer erzwingt dabei das "flat"-
+# Layout (install.sh:1228), das heißt KEIN zusätzliches /bin darunter.
+#   UV_INSTALL_DIR=/usr/local      -> /usr/local/uv        (falsch)
+#   UV_INSTALL_DIR=/usr/local/bin  -> /usr/local/bin/uv    (richtig)
+# Passt das nicht zu ExecStart, bricht der Dienst mit
+# status=203/EXEC "Unable to locate executable" ab.
+curl -LsSf https://astral.sh/uv/install.sh | UV_INSTALL_DIR=/usr/local/bin sh
+command -v uv && uv --version        # muss /usr/local/bin/uv zeigen
 
 useradd --system --create-home --shell /usr/sbin/nologin gamecooler
 
@@ -288,6 +297,27 @@ chown -R gamecooler:gamecooler /opt/gamecooler
 # Telefonnummer (siehe .gitignore). Also die Vorlage nehmen und im
 # Zustands-Volume ausfüllen. Ohne die Datei legt die App eine leere an.
 cp /opt/gamecooler/config.yaml.example /var/lib/gamecooler/config.yaml
+
+# WICHTIG: das VERZEICHNIS, nicht nur die Datei. Die App legt beim ersten
+# Schreiben data/ selbst an (registry.py:108, DATA_DIR.mkdir()), und dafür
+# braucht sie Schreibrecht auf dem Elternverzeichnis. Nur config.yaml zu
+# chownen reicht nicht — dann kommt beim ersten Druck:
+#
+#   File "app/registry.py", line 108, in _write
+#     DATA_DIR.mkdir(exist_ok=True)
+#   PermissionError: [Errno 13] Permission denied: '/var/lib/gamecooler/data'
+#
+# Ohne -R, gezielt die zwei Einträge. Ein "chown -R" scheitert an
+# lost+found: das gehört zum ext4-Dateisystem des Volumes, und in einem
+# unprivilegierten Container erscheint es als nicht zugeordneter UID (nicht
+# als root), sodass selbst Container-root es nicht lesen darf:
+#
+#   chown: cannot read directory '/var/lib/gamecooler/lost+found': Permission denied
+#
+# Die Meldung sieht nach Fehlschlag aus, der Rest wird aber gesetzt. data/
+# legt die App beim ersten Schreiben selbst an — es muss also nichts
+# rekursiv gesetzt werden.
+chown gamecooler:gamecooler /var/lib/gamecooler
 chown gamecooler:gamecooler /var/lib/gamecooler/config.yaml
 ```
 
@@ -309,17 +339,97 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8010/
 Muss `200` liefern, bevor Caddy dazukommt. Die App lauscht nur auf
 `127.0.0.1` — nach außen geht ausschließlich Caddy.
 
+**Der Dienst startet uvicorn direkt aus der `.venv`, nicht über `uv run`.**
+Grund: `uv` legt seinen Cache unter `$HOME/.cache/uv` an, und `ProtectHome=yes`
+sperrt `$HOME` — der Dienst stirbt dann mit
+
+```
+error: Failed to initialize cache at `/home/gamecooler/.cache/uv`
+  cause: failed to create directory `/home/gamecooler/.cache/uv`: Permission denied
+status=2/INVALIDARGUMENT
+```
+
+und der Restart-Zähler läuft hoch. Alternativen, die man *nicht* brauchen
+sollte: `ProtectHome=yes` aufgeben (schwächt die Isolation) oder
+`Environment=UV_CACHE_DIR=/var/lib/gamecooler/.cache` setzen (mehr
+Schreibpfade, mehr Zustand). Die `.venv` ist beim Deployment ohnehin fertig
+gebaut — zur Laufzeit braucht der Dienst `uv` gar nicht.
+
+Zwei Fehlerbilder zum Unterscheiden:
+
+| Meldung | Ursache |
+|---|---|
+| `Unable to locate executable '/usr/local/bin/uv'` / `status=203/EXEC` | `uv` liegt woanders (falsches `UV_INSTALL_DIR`, siehe Phase 4) |
+| `Failed to initialize cache ... Permission denied` / `status=2` | `uv run` trotz `ProtectHome=yes` — `ExecStart` auf die `.venv` umstellen |
+
 ### Phase 6 — Caddy + Zertifikat
 
 ```sh
 apt install -y caddy
 cp /opt/gamecooler/deploy/Caddyfile /etc/caddy/Caddyfile
-nano /etc/caddy/Caddyfile          # wildbret.local -> wildbret.home.arpa
-systemctl reload caddy
+caddy validate --config /etc/caddy/Caddyfile   # muss "Valid configuration" sagen
+systemctl restart caddy            # reload reicht nicht, siehe unten
 ```
 
-Caddy holt das Zertifikat automatisch von seiner internen CA — kein ACME,
-kein Internet nötig.
+**Immer `caddy validate` vor dem Restart.** Ein Syntaxfehler lässt den Dienst
+sonst mit `status=1/FAILURE` sterben, und man sucht den Fehler im Zertifikat
+statt in der Datei. Die Meldung nennt Zeile und Direktive, z.B.:
+
+```
+Error: adapting config using caddyfile: /etc/caddy/Caddyfile:17:
+unrecognized directive: \ttls
+```
+
+Das `\t` ist der Hinweis: dort steht ein **literales** `\t` statt eines echten
+Tabs. Caddy braucht echte Tabs — beim Einfügen über `sed` oder Heredoc leicht
+kaputtzumachen. Gegenprobe mit `sed -n '16,20p' /etc/caddy/Caddyfile | cat -A`
+— echte Tabs erscheinen als `^I`, ein literales als `\tt`.
+
+Kein `nano`-Schritt: der Hostname steht schon als `wildbret.home.arpa` in der
+Datei und muss nur zu Pi-hole passen.
+
+**`tls internal` muss im Caddyfile stehen** — sonst versucht Caddy ACME. Die
+Regel, wann Caddy die interne CA von selbst nimmt, ist enger, als man denkt:
+
+| Site-Adresse | Caddy nimmt |
+|---|---|
+| `localhost`, `127.0.0.1` | interne CA |
+| ein Name **ohne** Punkt (z.B. `wildbret`) | interne CA |
+| `wildbret.home.arpa` | **ACME** — Let's Encrypt lehnt `.arpa` ab |
+
+Die Fehlerspur ohne `tls internal`:
+
+```
+could not get certificate from issuer ... acme-v02.api.letsencrypt.org-directory
+  error: HTTP 400 ... rejectedIdentifier ... "wildbret.home.arpa":
+  The ACME server refuses to issue a certificate for this domain name,
+  because it is forbidden by policy
+could not get certificate from issuer ... acme.zerossl.com-v2-DV90
+  error: ... failed getting EAB credentials: HTTP 422: caddy_legacy_user_removed
+```
+
+Beide Aussteller scheitern, Caddy wiederholt mit wachsendem Abstand
+(`retrying_in` 60 → 120 → 300 → …), und **es entsteht kein Zertifikat**. Im
+Browser und bei `curl` sieht man nur:
+
+```
+curl: (35) TLS connect error: error:0A000438:SSL routines::tlsv1 alert internal error
+```
+
+Das ist die Signatur für „kein Zertifikat für diesen Namen" — **nicht** für
+„Zertifikat nicht vertraut". Ein vorhandenes, aber unbekanntes Zertifikat
+ergibt `curl: (60) self-signed certificate`. Die Unterscheidung spart viel
+Suchen: `internal error` heißt Caddy-Konfiguration, `self-signed` heißt
+Geräte-Vertrauen.
+
+Der `tls internal`-Block muss **innerhalb** des Site-Blocks stehen (siehe
+`deploy/Caddyfile`). Prüfen, dass wirklich ein Zertifikat da ist:
+
+```sh
+ls -R /var/lib/caddy/.local/share/caddy/certificates/
+```
+
+Vorher war das Verzeichnis leer.
 
 **Root-Zertifikat auf jedes Gerät:**
 

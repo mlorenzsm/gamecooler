@@ -14,8 +14,14 @@
 # Heimnetze — nicht .local (mDNS, Android löst das nicht auf) und nicht .lan.
 
 wildbret.home.arpa {
-	# Caddy holt sich hier automatisch ein Zertifikat von seiner internen CA
-	# (kein ACME, kein Internet nötig).
+	# Ohne diese Zeile versucht Caddy ACME (Let's Encrypt / ZeroSSL) und
+	# scheitert: Let's Encrypt lehnt .arpa mit "rejectedIdentifier ...
+	# forbidden by policy" ab, ZeroSSL verlangt EAB-Zugangsdaten. Caddy nimmt
+	# die interne CA nur bei Namen ohne Punkt, bei "localhost" oder bei
+	# explizitem tls internal automatisch — home.arpa fällt in keinen dieser
+	# Fälle. Der Handshake bricht dann mit "tlsv1 alert internal error" ab,
+	# weil kein Zertifikat vorliegt.
+	tls internal
 
 	encode zstd gzip
 
