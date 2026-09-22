@@ -122,5 +122,7 @@ aber nicht gedruckt. Für echten Druck auf `dry_run: false` stellen.
 
 - [Deployment auf Proxmox](docs/deploy.md) — App in eine LXC, Caddy als
   TLS-Terminator, Drucker bleibt per Agent am Mac
+- [Autodeploy](docs/autodeploy.md) — Push auf `dev` aktualisiert den
+  Test-Container, `main` später Prod
 - [Waagen-Anbindung](docs/scale.md) — Gewicht direkt von einer RS-232-Waage
   übernehmen (Recherche, Waage noch nicht gekauft)

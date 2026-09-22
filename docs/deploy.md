@@ -385,8 +385,18 @@ Tabs. Caddy braucht echte Tabs — beim Einfügen über `sed` oder Heredoc leich
 kaputtzumachen. Gegenprobe mit `sed -n '16,20p' /etc/caddy/Caddyfile | cat -A`
 — echte Tabs erscheinen als `^I`, ein literales als `\tt`.
 
-Kein `nano`-Schritt: der Hostname steht schon als `wildbret.home.arpa` in der
-Datei und muss nur zu Pi-hole passen.
+**Der Hostname steht nicht mehr fest in der Datei**, sondern kommt aus der
+Umgebung: `{$GAMECOOLER_HOST:wildbret.home.arpa}`. Der Prod-Name ist der
+Default, eine andere Umgebung setzt nur `GAMECOOLER_HOST`:
+
+```sh
+echo 'GAMECOOLER_HOST=gamecooler-test.home.arpa' > /etc/default/caddy
+systemctl restart caddy      # reload liest die EnvironmentFile NICHT neu
+```
+
+Ohne diese Trennung würde ein Deploy in den Test-Container dessen Hostnamen mit
+dem Prod-Namen überschreiben und ihn unerreichbar machen. Siehe
+[autodeploy.md](autodeploy.md).
 
 **`tls internal` muss im Caddyfile stehen** — sonst versucht Caddy ACME. Die
 Regel, wann Caddy die interne CA von selbst nimmt, ist enger, als man denkt:

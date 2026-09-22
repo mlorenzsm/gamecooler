@@ -12,8 +12,23 @@
 # Anpassen: der Name muss identisch in Pi-hole (Local DNS), hier und im
 # Browser stehen. home.arpa ist der von RFC 8375 vorgesehene Namensraum für
 # Heimnetze — nicht .local (mDNS, Android löst das nicht auf) und nicht .lan.
+#
+# Der Name kommt aus der Umgebung, damit dieselbe Datei in beiden Umgebungen
+# gilt. Ohne das überschreibt ein Deploy in den Test-Container dessen Hostnamen
+# mit dem Prod-Namen, und der Container ist danach nicht mehr erreichbar.
+#
+#   GAMECOOLER_HOST=wildbret.home.arpa        (Prod, auch der Default)
+#   GAMECOOLER_HOST=gamecooler-test.home.arpa (Test)
+#
+# Gesetzt wird die Variable in /etc/default/caddy — das Debian-Paket liest die
+# Datei über EnvironmentFile=-/etc/default/caddy. Nach einer Änderung dort ist
+# ein "systemctl restart caddy" nötig; ein reload liest die Datei nicht neu.
+#
+# Die Syntax ist {$VAR:default}: der Wert nach dem Doppelpunkt greift, wenn die
+# Variable leer oder nicht gesetzt ist. Der Prod-Name bleibt damit der Default,
+# eine Umgebung muss nur von ihm abweichen.
 
-wildbret.home.arpa {
+{$GAMECOOLER_HOST:wildbret.home.arpa} {
 	# Ohne diese Zeile versucht Caddy ACME (Let's Encrypt / ZeroSSL) und
 	# scheitert: Let's Encrypt lehnt .arpa mit "rejectedIdentifier ...
 	# forbidden by policy" ab, ZeroSSL verlangt EAB-Zugangsdaten. Caddy nimmt
@@ -30,7 +45,11 @@ wildbret.home.arpa {
 		header_up Host {host}
 	}
 
+	# Getrennte Logdateien pro Umgebung, abgeleitet aus demselben Namen — so
+	# gibt es nur einen Schalter pro Umgebung statt zwei. Ein Hostname ist ein
+	# gültiger Dateiname, das Ergebnis ist also wildbret.home.arpa.log bzw.
+	# gamecooler-test.home.arpa.log.
 	log {
-		output file /var/log/caddy/wildbret.log
+		output file /var/log/caddy/{$GAMECOOLER_HOST:wildbret.home.arpa}.log
 	}
 }
