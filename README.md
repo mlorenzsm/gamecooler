@@ -118,11 +118,19 @@ aber nicht gedruckt. Für echten Druck auf `dry_run: false` stellen.
 - `data/registry.json` — alle registrierten Teilstücke
 - `GET /parts.json` — Export über die Webapp
 
-## Geplant
+## Betrieb
 
 - [Deployment auf Proxmox](docs/deploy.md) — App in eine LXC, Caddy als
   TLS-Terminator, Drucker bleibt per Agent am Mac
-- [Autodeploy](docs/autodeploy.md) — Push auf `dev` aktualisiert den
-  Test-Container, `main` später Prod
+- [Autodeploy](docs/autodeploy.md) — ein Push auf `dev` aktualisiert den
+  Test-Container innerhalb von fünf Minuten, mit Rollback bei
+  fehlgeschlagenem Health-Check. `main` bedient dieselbe Mechanik für Prod;
+  dort ist sie noch nicht aktiviert (Branch und Name in
+  `/etc/default/gamecooler-autodeploy` setzen, Timer starten).
+
+## Geplant
+
 - [Waagen-Anbindung](docs/scale.md) — Gewicht direkt von einer RS-232-Waage
   übernehmen (Recherche, Waage noch nicht gekauft)
+- `/version`-Endpunkt mit dem laufenden Git-SHA — der Health-Check prüft
+  derzeit nur, *dass* die App antwortet, nicht welcher Commit läuft.
