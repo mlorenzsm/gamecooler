@@ -30,17 +30,22 @@ GitHub, kein fremder Code im LAN.
 Der Timer startet `gamecooler-autodeploy.service`, das
 `/usr/local/bin/gamecooler-autodeploy` aufruft. Das Skript:
 
-1. Liest `GAMECOOLER_BRANCH` aus `/etc/default/gamecooler-autodeploy`.
+1. Liest `GAMECOOLER_BRANCH` und `GAMECOOLER_HOST` aus
+   `/etc/default/gamecooler-autodeploy`. Fehlt einer der beiden: `exit 2`.
 2. Prüft, ob die App **jetzt** gesund ist. Wenn nicht: Abbruch ohne Deploy.
-3. Holt den SHA von `origin/<branch>` per `git ls-remote` — das überträgt
+3. Prüft, ob diese Instanz unter ihrem **eigenen Namen** erreichbar ist. Wenn
+   nicht: Caddyfile neu rendern, Caddy neu laden, erneut prüfen. Bleibt es
+   unerreichbar: Abbruch mit `exit 1` — ohne Rollback und ohne Merker.
+4. Holt den SHA von `origin/<branch>` per `git ls-remote` — das überträgt
    keine Objekte und ist der billigste Weg festzustellen, dass nichts zu tun
    ist. Ist der SHA gleich dem lokalen HEAD: fertig.
-4. Ist der SHA als fehlerhaft markiert: überspringen (siehe Rollback).
-5. `git fetch` + `checkout`, `uv sync --locked --no-dev`.
-6. Caddyfile nach `/etc/caddy/`, `caddy validate`, `systemctl reload caddy`.
-7. `gamecooler.service` nach `/etc/systemd/system/`, `daemon-reload`,
+5. Ist der SHA als fehlerhaft markiert: überspringen (siehe Rollback).
+6. `git fetch` + `checkout`, `uv sync --locked --no-dev`.
+7. Caddyfile rendern (Platzhalter `__HOST__` → `GAMECOOLER_HOST`) nach
+   `/etc/caddy/`, `caddy validate`, `systemctl reload caddy`.
+8. `gamecooler.service` nach `/etc/systemd/system/`, `daemon-reload`,
    `systemctl restart gamecooler`.
-8. Health-Check (10 Versuche, 1s Abstand). Schlägt er fehl: zurückrollen.
+9. Health-Check (10 Versuche, 1s Abstand). Schlägt er fehl: zurückrollen.
 
 ### Warum der Health-Check *vor* dem Deploy läuft
 
@@ -48,6 +53,30 @@ Ist die App bereits kaputt, würde der Health-Check nach dem Update
 fehlschlagen, das Skript auf den vorherigen Commit zurückrollen — also auf
 einen Stand, der genauso kaputt ist — und der eigentliche Fehler wäre verdeckt.
 Ein Deploy auf eine kranke Instanz macht die Diagnose schwerer, nicht leichter.
+
+### Warum zwei getrennte Health-Checks
+
+Schritt 2 und 3 prüfen verschiedene Dinge, und nur einer von beiden ist ein
+Grund zurückzurollen:
+
+| Prüfung | Fragt | Bei Fehlschlag |
+|---|---|---|
+| App (`http://127.0.0.1:8010/`) | Läuft der Code? | Rollback |
+| Site (`https://<HOST>/`) | Ist die Instanz unter ihrem Namen erreichbar? | Caddyfile neu rendern |
+
+Der zweite kam später dazu, nachdem ein Container wochenlang auf dem richtigen
+Commit stand und trotzdem unter seinem eigenen Namen nicht erreichbar war: das
+Caddyfile trug noch den Namen der Vorgänger-Installation. Der App-Health-Check
+sieht Caddy nie und meldete brav Erfolg.
+
+Ein Fehlschlag der Site-Prüfung führt bewusst **nicht** in den Rollback: der
+Rollback rendert dasselbe Caddyfile mit demselben Namen und liefe im Kreis.
+Und er schreibt **keinen** Merker — der Commit ist in Ordnung, die
+Konfiguration ist es nicht; ein Merker würde einen guten Commit sperren.
+
+Die Prüfung läuft auf **jedem** Weg, auch im „nichts zu tun"- und im
+übersprungenen Zweig. Stünde sie nur im Deploy-Pfad, bliebe genau der Container
+stumm, der den Timer nie beschäftigt.
 
 ### Rollback und der Fehlermerker
 
@@ -100,35 +129,56 @@ git config --global --add safe.directory /opt/gamecooler
 git fetch --depth=1 origin dev && git checkout -B dev FETCH_HEAD
 ls deploy/gamecooler-autodeploy.service        # muss existieren
 
-# 2. Name dieser Umgebung. Ohne das gilt der Prod-Default aus dem Caddyfile.
-echo 'GAMECOOLER_HOST=gamecooler-test.home.arpa' > /etc/default/caddy
+# 2. Branch und Name dieser Umgebung. Beide Werte sind Pflicht — fehlt einer,
+#    bricht das Skript mit exit 2 ab, statt etwas Falsches auszurollen.
+printf 'GAMECOOLER_BRANCH=dev\nGAMECOOLER_HOST=gamecooler-test.home.arpa\n' \
+  > /etc/default/gamecooler-autodeploy
 
-# 3. Branch, dem dieser Container folgt.
-echo 'GAMECOOLER_BRANCH=dev' > /etc/default/gamecooler-autodeploy
-
-# 4. Caddy neu starten, damit die Variable gelesen wird.
-#    "reload" reicht NICHT — die EnvironmentFile wird nur beim Start gelesen.
-systemctl restart caddy
-
-# 5. Wrapper installieren.
+# 3. Wrapper installieren.
 printf '#!/bin/sh\ninstall -m755 /opt/gamecooler/deploy/autodeploy.sh /run/gamecooler-autodeploy.sh\nexec /run/gamecooler-autodeploy.sh "$@"\n' \
   > /usr/local/bin/gamecooler-autodeploy
 chmod 755 /usr/local/bin/gamecooler-autodeploy
 
-# 6. Timer installieren und starten.
+# 4. Timer installieren und starten.
 cp /opt/gamecooler/deploy/gamecooler-autodeploy.service /etc/systemd/system/
 cp /opt/gamecooler/deploy/gamecooler-autodeploy.timer   /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now gamecooler-autodeploy.timer
+
+# 5. Ersten Lauf von Hand auslösen — der rendert das Caddyfile mit dem Namen
+#    aus Schritt 2 und lädt Caddy neu. Ohne das stünde in /etc/caddy/Caddyfile
+#    noch der Name der Vorgänger-Installation.
+systemctl start gamecooler-autodeploy.service
 ```
 
-Prüfen, dass der Name angekommen ist — **vor** dem ersten Deploy, denn ein
-Deploy überschreibt das Caddyfile:
+**Der Name kommt nicht mehr aus Caddys Umgebung.** Frühere Fassungen setzten
+`GAMECOOLER_HOST` in `/etc/default/caddy` und verließen sich darauf, dass Caddy
+die Datei liest. Das tut sie nicht: die Unit des Debian-Pakets hat kein
+`EnvironmentFile`, und `--environ` gibt die Umgebung nur aus. Ein
+`{$GAMECOOLER_HOST:default}` im Caddyfile fällt damit **immer** auf den Default
+zurück — der Test-Container lauschte unter `wildbret.home.arpa` und bekam unter
+`gamecooler-test.home.arpa` kein Zertifikat (`tlsv1 alert internal error`).
+
+Jetzt setzt `autodeploy.sh` den Namen selbst in `deploy/Caddyfile` ein
+(Platzhalter `__HOST__`) und installiert das Ergebnis. Deshalb gibt es
+`/etc/default/caddy` nicht mehr — **eine** Konfigurationsdatei pro Container.
+
+Prüfen, dass der Name angekommen ist — **nach** Schritt 5, denn erst der Deploy
+rendert das Caddyfile:
 
 ```sh
-grep GAMECOOLER_HOST /etc/caddy/Caddyfile
+grep -n 'home.arpa' /etc/caddy/Caddyfile | head -2   # -> gamecooler-test…
 curl -sI https://gamecooler-test.home.arpa/ | head -1     # -> HTTP/2 405
 curl -s  https://gamecooler-test.home.arpa/ -o /dev/null -w '%{http_code}\n'  # -> 200
+```
+
+**Gegenprobe, dass der Container *nicht* unter dem Prod-Namen lauscht** — das
+war der Fehler, und er ist von innen unsichtbar:
+
+```sh
+curl -sk --resolve wildbret.home.arpa:443:127.0.0.1 \
+  -o /dev/null -w 'prod=%{http_code}\n' https://wildbret.home.arpa/
+# -> 000. Kommt hier 200, bedient dieser Container den falschen Namen.
 ```
 
 `405` auf `curl -I` ist erwartet: FastAPI registriert kein HEAD, `-I` sendet
@@ -149,10 +199,16 @@ Ergebnis und belegt, dass der SHA-Vergleich greift:
 Wenn der Test-Container zufriedenstellend läuft:
 
 ```sh
-echo 'GAMECOOLER_HOST=wildbret.home.arpa' > /etc/default/caddy
-echo 'GAMECOOLER_BRANCH=main'            > /etc/default/gamecooler-autodeploy
-systemctl restart caddy
+printf 'GAMECOOLER_BRANCH=main\nGAMECOOLER_HOST=wildbret.home.arpa\n' \
+  > /etc/default/gamecooler-autodeploy
 systemctl enable --now gamecooler-autodeploy.timer
+```
+
+Den ersten Lauf von Hand auslösen, damit das Caddyfile sofort mit dem richtigen
+Namen gerendert wird, statt bis zum nächsten Timer-Schlag zu warten:
+
+```sh
+systemctl start gamecooler-autodeploy.service
 ```
 
 Das Skript selbst ändert sich nicht — die Umgebung ist reine Konfiguration.
@@ -186,6 +242,9 @@ in unter einer Sekunde.
 | `App antwortet nicht auf ... — kein Deploy` | Die App war **vor** dem Deploy schon krank. Ursache suchen, nicht deployen. |
 | `Commit <sha> ist als fehlerhaft markiert` | Der Rollback hat gegriffen. Fix auf den Branch pushen; der Merker löst sich von selbst auf. |
 | `Caddyfile ungültig — nicht geladen` | Syntaxfehler im Repo-Caddyfile. Caddy läuft mit der alten Konfiguration weiter. |
+| `GAMECOOLER_HOST fehlt in ...` / `exit 2` | Der Name dieser Umgebung ist nicht gesetzt. Absicht: ohne ihn würde ein falscher Name installiert. |
+| `Caddyfile enthält noch __HOST__` | Der Platzhalter wurde nicht ersetzt — Tippfehler im Caddyfile. Es wurde **nichts** installiert. |
+| `Caddyfile gerendert für <host>` | Normal, kein Fehler: zeigt, welchen Namen der Lauf installiert hat. |
 | `Health-Check fehlgeschlagen nach <sha> — Rollback` | Der neue Commit startet nicht. Läuft wieder auf dem alten Stand. |
 | `auch der Rollback ist nicht gesund` | Ernster Fall: beide Stände krank. Von Hand eingreifen. |
 | `uv sync fehlgeschlagen` | Meist ein `uv.lock`, das nicht zum Commit passt (`--locked` bricht dann ab). Lokal `uv lock` laufen lassen und nachpushen. |

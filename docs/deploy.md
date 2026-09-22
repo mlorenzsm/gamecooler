@@ -385,18 +385,34 @@ Tabs. Caddy braucht echte Tabs — beim Einfügen über `sed` oder Heredoc leich
 kaputtzumachen. Gegenprobe mit `sed -n '16,20p' /etc/caddy/Caddyfile | cat -A`
 — echte Tabs erscheinen als `^I`, ein literales als `\tt`.
 
-**Der Hostname steht nicht mehr fest in der Datei**, sondern kommt aus der
-Umgebung: `{$GAMECOOLER_HOST:wildbret.home.arpa}`. Der Prod-Name ist der
-Default, eine andere Umgebung setzt nur `GAMECOOLER_HOST`:
+**Der Hostname steht nicht mehr fest in der Datei**, sondern ist der
+Platzhalter `__HOST__`. Wer ihn ersetzt, entscheidet die Umgebung:
 
 ```sh
-echo 'GAMECOOLER_HOST=gamecooler-test.home.arpa' > /etc/default/caddy
-systemctl restart caddy      # reload liest die EnvironmentFile NICHT neu
+# Von Hand (Phase 6 eines neuen Containers):
+sed "s|__HOST__|gamecooler-test.home.arpa|g" \
+  /opt/gamecooler/deploy/Caddyfile > /etc/caddy/Caddyfile
+
+# Im Autodeploy macht das Skript selbst, aus GAMECOOLER_HOST.
 ```
 
 Ohne diese Trennung würde ein Deploy in den Test-Container dessen Hostnamen mit
 dem Prod-Namen überschreiben und ihn unerreichbar machen. Siehe
 [autodeploy.md](autodeploy.md).
+
+**Nicht `{$GAMECOOLER_HOST:default}` schreiben.** Das sieht eleganter aus, geht
+aber schief: die Unit des Debian-Pakets hat kein `EnvironmentFile` (nur
+`--environ`, das die Umgebung bloß ausgibt), also ist die Variable nie gesetzt
+und der Default greift **immer**. Der Test-Container hat so eine Zeitlang unter
+`wildbret.home.arpa` gelauscht und bekam unter seinem eigenen Namen kein
+Zertifikat — von innen unsichtbar, weil der Health-Check nur `127.0.0.1:8010`
+prüft. Gegenprobe:
+
+```sh
+curl -sk --resolve wildbret.home.arpa:443:127.0.0.1 \
+  -o /dev/null -w '%{http_code}\n' https://wildbret.home.arpa/
+# -> 000. Kommt 200, bedient dieser Container den falschen Namen.
+```
 
 **`tls internal` muss im Caddyfile stehen** — sonst versucht Caddy ACME. Die
 Regel, wann Caddy die interne CA von selbst nimmt, ist enger, als man denkt:

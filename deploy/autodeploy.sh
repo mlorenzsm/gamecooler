@@ -45,10 +45,12 @@ die() { echo "[autodeploy] FEHLER: $*" >&2; exit 1; }
 # --- Konfiguration lesen ----------------------------------------------------
 
 BRANCH=dev
+HOST=
 if [ -r "$BRANCH_FILE" ]; then
 	# shellcheck disable=SC1090
 	. "$BRANCH_FILE"
 	BRANCH="${GAMECOOLER_BRANCH:-dev}"
+	HOST="${GAMECOOLER_HOST:-}"
 fi
 
 # Nur die beiden Branches, die es wirklich gibt. Ein Tippfehler soll nicht
@@ -60,6 +62,17 @@ case "$BRANCH" in
 		exit 2
 		;;
 esac
+
+# Ohne Hostname wird nicht deployt. Hier ist bewusst KEIN Default: ein
+# stillschweigender Rückfall auf den Prod-Namen hat den Test-Container schon
+# einmal unter falschem Namen lauschen lassen — erreichbar, aber unter
+# wildbret.home.arpa, während gamecooler-test.home.arpa kein Zertifikat bekam.
+# Ein fehlender Wert muss lauter scheitern als ein falscher.
+if [ -z "$HOST" ]; then
+	echo "usage: GAMECOOLER_HOST fehlt in $BRANCH_FILE" >&2
+	echo "       z.B. GAMECOOLER_HOST=gamecooler-test.home.arpa" >&2
+	exit 2
+fi
 
 # --- Health-Check als Funktion ----------------------------------------------
 
@@ -74,6 +87,93 @@ app_healthy() {
 		sleep 1
 	done
 	return 1
+}
+
+# Prüft, dass Caddy unter dem Namen DIESER Umgebung antwortet.
+#
+# Der Health-Check oben geht gegen 127.0.0.1:8010 und sieht Caddy nie. Genau
+# deshalb blieb lange unbemerkt, dass der Test-Container unter dem Prod-Namen
+# lauschte: die App war gesund, nur der Name stimmte nicht.
+#
+# --resolve zeigt auf 127.0.0.1 statt auf Pi-hole — der Name wird also direkt
+# gegen Caddy geprüft und nicht gegen DNS oder die Container-Firewall (die
+# denselben Namen von innen nicht zurückleitet, siehe docs/autodeploy.md).
+#
+# -k überspringt die Vertrauensprüfung, aber NICHT die Frage, ob es für diesen
+# Namen überhaupt ein Zertifikat gibt: ohne Site bricht der Handshake mit
+# "tlsv1 alert internal error" ab. Genau der Fehler, den es zu fangen gilt.
+site_healthy() {
+	local tries="${1:-5}" i
+	for ((i = 1; i <= tries; i++)); do
+		if curl -sk -o /dev/null --max-time 3 \
+			--resolve "$HOST:443:127.0.0.1" \
+			"https://$HOST/" 2>/dev/null; then
+			return 0
+		fi
+		sleep 1
+	done
+	return 1
+}
+
+# --- Caddyfile rendern ------------------------------------------------------
+
+# Setzt den Namen dieser Umgebung in deploy/Caddyfile ein und lädt Caddy neu.
+#
+# Der Name wird hier eingesetzt, nicht von Caddy aus der Umgebung gelesen. Die
+# Unit des Debian-Pakets hat kein EnvironmentFile, ein {$VAR:default} im
+# Caddyfile fällt also immer still auf den Default zurück — so hat der
+# Test-Container eine Zeitlang unter dem Prod-Namen gelauscht: erreichbar, aber
+# unter wildbret.home.arpa, während gamecooler-test.home.arpa kein Zertifikat
+# bekam.
+#
+# Eigene Funktion, weil sie aus zwei Richtungen gebraucht wird: beim Ausrollen
+# und in der Vorabprüfung. Der zweite Fall ist der wichtigere — ein Container,
+# dessen /etc/caddy/Caddyfile noch den Namen der Vorgänger-Installation trägt,
+# steht auf dem richtigen Commit, hat also nichts zu tun und würde ohne diesen
+# Aufruf nie wieder geradegerückt.
+apply_caddy() {
+	[ -r "$REPO/deploy/Caddyfile" ] || {
+		log "Caddyfile fehlt im Repo"
+		return 1
+	}
+
+	# Erst in eine temporäre Datei rendern, dann installieren: schlägt sed
+	# fehl, bleibt /etc/caddy/Caddyfile unangetastet statt halb geschrieben.
+	local rendered
+	rendered=$(mktemp) || {
+		log "mktemp fehlgeschlagen"
+		return 1
+	}
+	if ! sed "s|__HOST__|$HOST|g" "$REPO/deploy/Caddyfile" >"$rendered"; then
+		log "Caddyfile konnte nicht gerendert werden"
+		rm -f "$rendered"
+		return 1
+	fi
+	# Kontrolle, dass wirklich gerendert wurde: ein vergessenes __HOST__ oder
+	# ein Tippfehler im Platzhalter würde sonst als Site-Name durchgehen.
+	if grep -q '__HOST__' "$rendered"; then
+		log "Caddyfile enthält noch __HOST__ — Platzhalter nicht ersetzt?"
+		rm -f "$rendered"
+		return 1
+	fi
+	if ! install -m644 "$rendered" /etc/caddy/Caddyfile; then
+		log "Caddyfile konnte nicht installiert werden"
+		rm -f "$rendered"
+		return 1
+	fi
+	rm -f "$rendered"
+
+	# validate vor dem Reload: ein Syntaxfehler würde Caddy sonst beim Neuladen
+	# sterben lassen, und man sucht den Fehler im Zertifikat statt in der Datei.
+	caddy validate --config /etc/caddy/Caddyfile || {
+		log "Caddyfile ungültig"
+		return 1
+	}
+	systemctl reload caddy || {
+		log "Caddy-Reload fehlgeschlagen"
+		return 1
+	}
+	return 0
 }
 
 cd "$REPO" || die "$REPO fehlt"
@@ -102,6 +202,30 @@ PREV=$(git rev-parse HEAD)
 if ! app_healthy 3; then
 	log "App antwortet nicht auf $HEALTH_URL — kein Deploy. Erst reparieren."
 	exit 1
+fi
+
+# Dasselbe für die Konfiguration, und zwar hier statt in einem der Zweige
+# unten: "Code ist aktuell" und "richtig konfiguriert" sind zwei Fragen. Ein
+# Container kann auf dem richtigen Commit stehen, einen als fehlerhaft
+# markierten Commit überspringen oder gar nichts zu tun haben — und trotzdem
+# unter dem falschen Namen lauschen. Stünde die Prüfung nur im
+# "nichts zu tun"-Zweig, bliebe ein Container mit gesetztem Merker für immer
+# stumm.
+#
+# Kein Rollback und kein Merker bei Fehlschlag: der Commit ist in Ordnung, die
+# Konfiguration ist es nicht. Ein Rollback würde dasselbe Caddyfile mit
+# demselben Namen rendern und liefe im Kreis; ein Merker würde einen guten
+# Commit sperren.
+if ! site_healthy 3; then
+	log "Caddy antwortet nicht auf https://$HOST/ — Caddyfile neu rendern"
+	if apply_caddy && site_healthy 5; then
+		log "geradegerückt — erreichbar als $HOST"
+	else
+		log "WARNUNG: https://$HOST/ bleibt unerreichbar."
+		log "WARNUNG: prüfen: grep -n home.arpa /etc/caddy/Caddyfile"
+		log "WARNUNG: und GAMECOOLER_HOST in $BRANCH_FILE"
+		exit 1
+	fi
 fi
 
 # --- Neuen Stand holen ------------------------------------------------------
@@ -160,20 +284,9 @@ apply_release() {
 		return 1
 	}
 
-	install -m644 "$REPO/deploy/Caddyfile" /etc/caddy/Caddyfile || {
-		log "Caddyfile fehlt im Repo"
+	if ! apply_caddy; then
 		return 1
-	}
-	# validate vor dem Reload: ein Syntaxfehler würde Caddy sonst beim Neuladen
-	# sterben lassen, und man sucht den Fehler im Zertifikat statt in der Datei.
-	caddy validate --config /etc/caddy/Caddyfile || {
-		log "Caddyfile ungültig"
-		return 1
-	}
-	systemctl reload caddy || {
-		log "Caddy-Reload fehlgeschlagen"
-		return 1
-	}
+	fi
 
 	install -m644 "$REPO/deploy/gamecooler.service" /etc/systemd/system/gamecooler.service || {
 		log "gamecooler.service fehlt im Repo"
@@ -188,7 +301,21 @@ apply_release() {
 }
 
 if apply_release && app_healthy 10; then
-	log "OK — läuft auf $NEU"
+	# Der Name wird separat geprüft, und ein Fehlschlag führt NICHT in den
+	# Rollback: der Rollback rendert dasselbe Caddyfile mit demselben Namen,
+	# kann eine falsche Konfiguration also nicht reparieren — er liefe im
+	# Kreis. Der Commit ist in Ordnung, die Konfiguration ist es nicht, und der
+	# Merker bleibt deshalb ungeschrieben: er würde einen guten Commit sperren.
+	if ! site_healthy 5; then
+		log "WARNUNG: die App läuft, aber Caddy antwortet nicht auf https://$HOST/"
+		log "WARNUNG: erwartet wird ein Zertifikat für '$HOST' — kommt"
+		log "WARNUNG: 'tlsv1 alert internal error', bedient Caddy einen anderen Namen."
+		log "WARNUNG: prüfen: grep -n home.arpa /etc/caddy/Caddyfile"
+		log "WARNUNG: und GAMECOOLER_HOST in $BRANCH_FILE"
+		exit 1
+	fi
+
+	log "OK — läuft auf $NEU, erreichbar als $HOST"
 	rm -f "$BAD_MARKER"
 	exit 0
 fi
