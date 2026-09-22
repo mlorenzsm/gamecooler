@@ -23,6 +23,16 @@
 
 set -euo pipefail
 
+# systemd setzt HOME nicht, wenn die Unit kein User= hat — dann läuft der
+# Dienst als root ohne HOME. Das bricht sofort ab:
+#
+#   fatal: $HOME not set      (exit 128, schon beim ersten git-Kommando)
+#
+# Betroffen sind beide Werkzeuge, die hier gebraucht werden: git config
+# --global sucht ~/.gitconfig über HOME, und uv legt seinen Cache unter
+# $HOME/.cache/uv an. Ein einziger Default erschlägt beide.
+export HOME="${HOME:-/root}"
+
 REPO=/opt/gamecooler
 STATE=/var/lib/gamecooler
 HEALTH_URL=http://127.0.0.1:8010/
@@ -128,31 +138,56 @@ log "Deploy $BRANCH: $PREV -> $NEU"
 git fetch --depth=1 origin "$BRANCH" || die "git fetch fehlgeschlagen"
 git checkout -q -B "$BRANCH" FETCH_HEAD || die "git checkout fehlgeschlagen"
 
-# --- Abhängigkeiten ---------------------------------------------------------
+# Übernimmt den ausgecheckten Stand: Abhängigkeiten, Caddyfile, Unit, Neustart.
+#
+# Bewusst eine Funktion mit Rückgabewert statt einer Folge von Befehlen mit
+# "|| die". Bricht die Folge in der Mitte ab, steht das Repo schon auf dem neuen
+# Commit, während der Dienst noch den alten Code fährt — und der nächste Lauf
+# sieht NEU == PREV und meldet "nichts zu tun". Der halb ausgerollte Zustand
+# bliebe für immer stehen. Als Funktion landet jeder Teilfehler im selben
+# Rollback wie ein fehlgeschlagener Health-Check.
+#
+# Deshalb hier auch kein "set -e"-Abbruch: jeder Schritt meldet selbst.
+apply_release() {
+	# --locked bricht ab, wenn uv.lock nicht zum Stand passt, statt still
+	# aufzulösen. Ein vergessenes "uv lock" fällt damit hier auf.
+	uv sync --locked --no-dev || {
+		log "uv sync fehlgeschlagen"
+		return 1
+	}
+	chown -R gamecooler:gamecooler "$REPO" || {
+		log "chown fehlgeschlagen"
+		return 1
+	}
 
-# --locked bricht ab, wenn uv.lock nicht zum Stand passt, statt still
-# aufzulösen. Ein vergessenes "uv lock" fällt damit hier auf und nicht erst
-# durch ein seltsames Laufzeitverhalten.
-uv sync --locked --no-dev || die "uv sync fehlgeschlagen"
-chown -R gamecooler:gamecooler "$REPO"
+	install -m644 "$REPO/deploy/Caddyfile" /etc/caddy/Caddyfile || {
+		log "Caddyfile fehlt im Repo"
+		return 1
+	}
+	# validate vor dem Reload: ein Syntaxfehler würde Caddy sonst beim Neuladen
+	# sterben lassen, und man sucht den Fehler im Zertifikat statt in der Datei.
+	caddy validate --config /etc/caddy/Caddyfile || {
+		log "Caddyfile ungültig"
+		return 1
+	}
+	systemctl reload caddy || {
+		log "Caddy-Reload fehlgeschlagen"
+		return 1
+	}
 
-# --- Caddy ----------------------------------------------------------------
+	install -m644 "$REPO/deploy/gamecooler.service" /etc/systemd/system/gamecooler.service || {
+		log "gamecooler.service fehlt im Repo"
+		return 1
+	}
+	systemctl daemon-reload || return 1
+	systemctl restart gamecooler || {
+		log "Neustart fehlgeschlagen"
+		return 1
+	}
+	return 0
+}
 
-install -m644 "$REPO/deploy/Caddyfile" /etc/caddy/Caddyfile
-# validate vor dem Reload: ein Syntaxfehler würde Caddy sonst beim Neuladen
-# sterben lassen, und man sucht den Fehler im Zertifikat statt in der Datei.
-caddy validate --config /etc/caddy/Caddyfile || die "Caddyfile ungültig — nicht geladen"
-systemctl reload caddy
-
-# --- Dienst ----------------------------------------------------------------
-
-install -m644 "$REPO/deploy/gamecooler.service" /etc/systemd/system/gamecooler.service
-systemctl daemon-reload
-systemctl restart gamecooler
-
-# --- Health-Check, bei Fehlschlag zurückrollen -----------------------------
-
-if app_healthy 10; then
+if apply_release && app_healthy 10; then
 	log "OK — läuft auf $NEU"
 	rm -f "$BAD_MARKER"
 	exit 0
@@ -161,8 +196,8 @@ fi
 # Ab hier darf nichts mehr hart abbrechen: "set -e" würde sonst mitten in der
 # Wiederherstellung aussteigen — der Dienst liefe mit dem kaputten Stand weiter
 # und der Merker würde nie geschrieben, also versuchte der Timer denselben
-# Commit endlos. Jeder Schritt meldet seinen Fehler und macht weiter.
-log "Health-Check fehlgeschlagen nach $NEU — Rollback auf $PREV"
+# Commit endlos.
+log "Deploy von $NEU fehlgeschlagen — Rollback auf $PREV"
 
 if git checkout -q --detach "$PREV"; then
 	log "zurück auf $PREV"
@@ -177,9 +212,10 @@ else
 	git checkout -q --detach "$PREV" || log "WARNUNG: Rollback-Checkout fehlgeschlagen"
 fi
 
-uv sync --locked --no-dev || log "WARNUNG: uv sync beim Rollback fehlgeschlagen"
-chown -R gamecooler:gamecooler "$REPO" || log "WARNUNG: chown fehlgeschlagen"
-systemctl restart gamecooler || log "WARNUNG: Neustart fehlgeschlagen"
+# Derselbe Weg wie beim Ausrollen, nur mit dem alten Stand — damit steht auch
+# das Caddyfile wieder auf dem vorherigen Inhalt, falls apply_release erst
+# danach gescheitert ist.
+apply_release || log "WARNUNG: Wiederherstellen des alten Stands unvollständig"
 
 if app_healthy 10; then
 	log "Rollback erfolgreich — läuft wieder auf $PREV"
@@ -189,7 +225,17 @@ fi
 
 # Merker erst NACH dem Rollback schreiben: bricht das Skript vorher ab (Strom,
 # OOM), soll der nächste Lauf den Commit erneut versuchen dürfen.
-echo "$NEU" >"$BAD_MARKER"
+#
+# Schlägt das Schreiben fehl, ist der Schutz gegen die Endlosschleife weg: der
+# Timer würde denselben Commit alle fünf Minuten erneut ausrollen und
+# zurückrollen. Das muss laut sein, sonst sucht man später im falschen Eck.
+mkdir -p "$STATE" 2>/dev/null || true
+if ! echo "$NEU" >"$BAD_MARKER" 2>/dev/null; then
+	log "WARNUNG: konnte $BAD_MARKER nicht schreiben!"
+	log "WARNUNG: der fehlerhafte Commit wird beim nächsten Lauf ERNEUT versucht."
+	log "WARNUNG: Timer stoppen, bis die Ursache behoben ist:"
+	log "WARNUNG:   systemctl stop gamecooler-autodeploy.timer"
+fi
 
 # Der Timer soll den Fehlschlag sichtbar machen, deshalb kein exit 0.
 exit 1

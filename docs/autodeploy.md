@@ -76,23 +76,46 @@ wird beim Deploy nicht angefasst.
 Einmalig im Container, als root. Der Container muss bereits nach
 `docs/deploy.md` eingerichtet sein.
 
+**Zuerst prüfen, im richtigen Container zu sein.** Die Hostnamen liegen eine
+Transposition auseinander, und `pct enter 200` statt `107` ist schnell getippt:
+
 ```sh
-# 1. Name dieser Umgebung. Ohne das gilt der Prod-Default aus dem Caddyfile.
+hostname          # muss der TEST-Container sein, nicht der Prod-Container
+pct config <id> | grep hostname     # vom Proxmox-Host aus
+```
+
+Der Fehler ist unauffällig: Prod bekäme den `dev`-Branch und würde ihn beim
+nächsten Lauf ausrollen, weil `/etc/default/gamecooler-autodeploy` dort fehlt
+und das Skript dann auf `dev` zurückfällt.
+
+```sh
+# 1. Repo auf den Branch bringen, dem dieser Container folgen soll.
+#
+#    Das MUSS vor Schritt 5 passieren: die Unit-Dateien kommen aus dem Repo,
+#    ein Container auf dem alten Stand hat sie noch nicht. Als root in einem
+#    Repo, das gamecooler gehört, braucht git die Ausnahme unten — sonst
+#    bricht es mit "detected dubious ownership" ab.
+cd /opt/gamecooler
+git config --global --add safe.directory /opt/gamecooler
+git fetch --depth=1 origin dev && git checkout -B dev FETCH_HEAD
+ls deploy/gamecooler-autodeploy.service        # muss existieren
+
+# 2. Name dieser Umgebung. Ohne das gilt der Prod-Default aus dem Caddyfile.
 echo 'GAMECOOLER_HOST=gamecooler-test.home.arpa' > /etc/default/caddy
 
-# 2. Branch, dem dieser Container folgt.
+# 3. Branch, dem dieser Container folgt.
 echo 'GAMECOOLER_BRANCH=dev' > /etc/default/gamecooler-autodeploy
 
-# 3. Caddy neu starten, damit die Variable gelesen wird.
+# 4. Caddy neu starten, damit die Variable gelesen wird.
 #    "reload" reicht NICHT — die EnvironmentFile wird nur beim Start gelesen.
 systemctl restart caddy
 
-# 4. Wrapper installieren.
+# 5. Wrapper installieren.
 printf '#!/bin/sh\ninstall -m755 /opt/gamecooler/deploy/autodeploy.sh /run/gamecooler-autodeploy.sh\nexec /run/gamecooler-autodeploy.sh "$@"\n' \
   > /usr/local/bin/gamecooler-autodeploy
 chmod 755 /usr/local/bin/gamecooler-autodeploy
 
-# 5. Timer installieren und starten.
+# 6. Timer installieren und starten.
 cp /opt/gamecooler/deploy/gamecooler-autodeploy.service /etc/systemd/system/
 cp /opt/gamecooler/deploy/gamecooler-autodeploy.timer   /etc/systemd/system/
 systemctl daemon-reload
@@ -110,6 +133,16 @@ curl -s  https://gamecooler-test.home.arpa/ -o /dev/null -w '%{http_code}\n'  # 
 
 `405` auf `curl -I` ist erwartet: FastAPI registriert kein HEAD, `-I` sendet
 aber HEAD. Der `-s`-Aufruf darunter ist der eigentliche Test.
+
+**Aus dem Container heraus schlägt dieser `curl` fehl** (leere Ausgabe, kein
+Fehler): der Name löst über Pi-hole auf die eigene Adresse auf, und die
+Container-Firewall leitet das nicht zurück. Von außen, vom Laptop oder Handy,
+funktioniert es. Der Deploy ist davon nicht betroffen — sein Health-Check geht
+gegen `http://127.0.0.1:8010/`, nicht gegen den HTTPS-Namen.
+
+Der erste Lauf sollte `nichts zu tun` melden, wenn Schritt 1 ausgeführt wurde —
+das Repo steht dann schon auf dem aktuellen Commit. Genau das ist das erwartete
+Ergebnis und belegt, dass der SHA-Vergleich greift:
 
 ## Prod scharf schalten
 
@@ -156,6 +189,9 @@ in unter einer Sekunde.
 | `Health-Check fehlgeschlagen nach <sha> — Rollback` | Der neue Commit startet nicht. Läuft wieder auf dem alten Stand. |
 | `auch der Rollback ist nicht gesund` | Ernster Fall: beide Stände krank. Von Hand eingreifen. |
 | `uv sync fehlgeschlagen` | Meist ein `uv.lock`, das nicht zum Commit passt (`--locked` bricht dann ab). Lokal `uv lock` laufen lassen und nachpushen. |
+| `fatal: $HOME not set` / `status=128` | systemd setzt `HOME` nicht (kein `User=` in der Unit). Das Skript setzt es selbst auf `/root` — taucht die Meldung trotzdem auf, ist die Unit aus einem alten Commit installiert. |
+| `fatal: detected dubious ownership` | `/opt/gamecooler` gehört `gamecooler`, das Skript läuft als root. Das Skript setzt `safe.directory` selbst; bei einem Handaufruf in einem anderen Repo fehlt die Ausnahme. |
+| `konnte .../.autodeploy-bad nicht schreiben` | Der Schutz gegen die Endlosschleife ist weg — der Timer rollt denselben Commit immer wieder aus und zurück. Timer sofort stoppen. |
 
 **Den Merker von Hand löschen**, wenn ein Commit zwar fehlerhaft war, aber in
 Ordnung ist (z.B. der Fehler lag außerhalb des Repos):
