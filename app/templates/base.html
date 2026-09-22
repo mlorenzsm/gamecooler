@@ -2,8 +2,20 @@
 <html lang="de">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- viewport-fit=cover: ohne das bleibt der Bereich neben der Notch ungenutzt
+       und env(safe-area-inset-*) liefert 0. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Gamecooler</title>
+
+  <!-- Zum Startbildschirm hinzufügen. iOS liest kein manifest für das Icon,
+       sondern apple-touch-icon; Android/Chrome nimmt das manifest. -->
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/static/icon-180.png">
+  <link rel="icon" href="/static/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Gamecooler">
+  <meta name="theme-color" content="#378537">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@600;700&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
@@ -58,6 +70,10 @@
       font-size: 0.92rem;
       font-weight: 500;
       transition: background 0.15s;
+      /* 44px ist Apples Mindestgröße für Tap-Ziele (HIG) */
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
     }
     nav a:hover { background: rgba(55,133,55,0.10); }
     nav a.active { background: var(--green); color: #fff; }
@@ -126,14 +142,218 @@
     code { background: var(--paper); padding: 0.1rem 0.35rem; border-radius: 6px; font-size: 0.85em; }
 
     .preview-imgs { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
-    .preview-imgs img { max-width: 430px; width: 100%; border: 1px solid var(--line); border-radius: 10px; background: white; box-shadow: var(--shadow); }
+    .preview-imgs img {
+      /* max-width:100% ist nötig, weil das Etikett 991px breit gerendert wird
+         und sonst aus der Karte läuft — 430px allein begrenzt nicht. */
+      max-width: min(430px, 100%);
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: white;
+      box-shadow: var(--shadow);
+    }
 
     a { color: var(--green-dark); }
+
+    /* Auf dem Telefon ist der Drucken-Knopf bei langen Listen sonst weit
+       außerhalb des Sichtfelds. Nur unter 640px, damit am Desktop alles
+       bleibt wie es war. */
+    @media (max-width: 640px) {
+      button.sticky-print {
+        position: sticky;
+        bottom: calc(0.75rem + env(safe-area-inset-bottom));
+        z-index: 10;
+        width: 100%;
+        padding: 0.9rem;
+        font-weight: 700;
+      }
+    }
+    button.sticky-print {
+      width: 100%;
+      padding: 0.8rem;
+      font-weight: 700;
+    }
+
+    .preset-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .preset-bar label { font-size: 0.9rem; font-weight: 500; color: var(--muted); }
+    .preset-bar select { flex: 1; min-width: 10rem; }
+
+    /* Kamera-Vorschau. html5-qrcode setzt die Videobreite selbst auf 100 %
+       des Containers — der Container darf also nicht breiter sein als der
+       Bildschirm, sonst läuft die Vorschau über. */
+    .scanner { max-width: 500px; margin: 0 auto; }
+    .scanner video { border-radius: 10px; }
+
+    /* Umbruch-Hilfszelle für die Bestandskarten (siehe unten). Am Desktop
+       nimmt sie am Tabellenlayout gar nicht teil, damit die zwölfte Zelle
+       die elf Spalten nicht verschiebt. */
+    table.inventory td.row-break { display: none; }
 
     @media (max-width: 640px) {
       form.part-form { grid-template-columns: 1fr; }
       main.card { padding: 1.1rem; }
       header.site { justify-content: center; }
+
+      /* Icons statt Labels: die fünf Punkte passen bei 390px nicht in eine
+         Zeile. Die Labels bleiben im DOM und werden nur versteckt, damit
+         Screenreader und die aktive Markierung weiter funktionieren. */
+      nav { justify-content: center; gap: 0.2rem; }
+      nav a { padding: 0.5rem 0.7rem; font-size: 1.3rem; }
+      nav a .nav-label {
+        position: absolute;
+        width: 1px; height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+
+      /* body hat 1rem Padding; auf dem iPhone soll der Inhalt bis an den
+         Rand gehen und nur die Notch aussparen. */
+      body {
+        padding-left: max(1rem, env(safe-area-inset-left));
+        padding-right: max(1rem, env(safe-area-inset-right));
+        padding-bottom: calc(3rem + env(safe-area-inset-bottom));
+      }
+
+      /* Tabellen werden auf dem Telefon zu Karten. Die Umschaltung läuft rein
+         über CSS: die Zellen bleiben im DOM und werden per data-label
+         beschriftet, damit kein Markup doppelt gepflegt werden muss. */
+      table.responsive { font-size: 0.95rem; }
+      table.responsive tr:first-child { display: none; }
+      table.responsive tr {
+        display: block;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 0.6rem 0.8rem;
+        margin-bottom: 0.6rem;
+        background: #fff;
+      }
+      table.responsive tr:hover > td { background: transparent; }
+      table.responsive td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        border: none;
+        padding: 0.25rem 0;
+        text-align: left;
+      }
+      table.responsive td::before {
+        content: attr(data-label);
+        font-size: 0.8rem;
+        color: var(--muted);
+        font-weight: 500;
+        flex: 0 0 auto;
+      }
+      table.responsive td.num { text-align: right; }
+      table.responsive td:empty { display: none; }
+      /* Zellen ohne Label (Checkbox, Aktionen) stehen für sich */
+      table.responsive td[data-label=""]::before { content: none; }
+
+      /* Bestand hat elf Spalten — als Karten wären das elf Zeilen pro
+         Teilstück. Stattdessen zwei Zeilen: oben "Wildart – Teilstück",
+         darunter die Details. Die Reihenfolge im DOM ist durch die Tabelle
+         vorgegeben (Checkbox und Datum kommen VOR Wildart), deshalb wird
+         hier per flex `order` umsortiert statt das Markup zu ändern. */
+      table.inventory tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.1rem 0.4rem;
+        padding: 0.7rem 0.85rem;
+      }
+      table.inventory td {
+        padding: 0;
+        border: none;
+        white-space: nowrap;
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      /* --- Titelzeile ---
+         Teilstück wächst auf den Rest der Zeile (flex-grow). Dadurch ist
+         Zeile 1 voll und die Detailzeile beginnt zuverlässig darunter —
+         ohne flex-basis:100% auf einem Detail, das sonst eine eigene
+         dritte Zeile aufmachen würde. */
+      table.inventory td[data-label="Wildart"],
+      table.inventory td[data-label="Teilstück"] {
+        order: 1;
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: var(--forest);
+      }
+      table.inventory td[data-label="Teilstück"] { order: 2; }
+
+      /* Die Umbruch-Hilfszelle wird hier sichtbar und erzwingt eine neue
+         Zeile nach dem Titel. */
+      table.inventory td.row-break {
+        display: block;
+        order: 3;
+        flex-basis: 100%;
+        height: 0;
+        padding: 0;
+      }
+      table.inventory td[data-label="Wildart"]::before { content: none; }
+      table.inventory td[data-label="Teilstück"]::before {
+        content: "– ";
+        font-weight: 400;
+        color: var(--muted);
+      }
+
+      /* --- Detailzeile ---
+         Datum zuerst und ohne Beschriftung — ein Datum braucht keine.
+         Der Trenner "· " sitzt auf den NACHFOLGENDEN Zellen, damit die
+         Zeile nicht mit einem Trennzeichen beginnt. */
+      table.inventory td[data-label="Datum"] { order: 4; }
+      table.inventory td[data-label="Datum"]::before { content: none; }
+      table.inventory td[data-label="Jäger"] { order: 5; }
+      table.inventory td[data-label="kg"] { order: 6; }
+      table.inventory td[data-label="€/kg"] { order: 7; }
+      table.inventory td[data-label="€"] { order: 8; }
+      table.inventory td[data-label="ID"] { order: 9; }
+      table.inventory td[data-label="Status"] { order: 10; }
+      table.inventory td[data-label="Jäger"]::before,
+      table.inventory td[data-label="kg"]::before,
+      table.inventory td[data-label="€/kg"]::before,
+      table.inventory td[data-label="€"]::before,
+      table.inventory td[data-label="ID"]::before,
+      table.inventory td[data-label="Status"]::before {
+        content: "· ";
+      }
+
+      /* --- Checkbox in die Titelzeile, Aktionen auf eigene Zeile --- */
+      table.inventory td:first-child {
+        order: 0;
+        margin-right: 0.1rem;
+      }
+      table.inventory td:last-child {
+        order: 11;
+        flex-basis: 100%;
+        margin-top: 0.4rem;
+      }
+      table.inventory td:last-child form { display: inline; }
+
+      /* Die Bildlaufleiste für Tabellen, die keine Karten werden sollen */
+      .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+      /* Summenzeile: kein Kartenrahmen, rechtsbündig wie am Desktop. */
+      table.responsive tr.total-row {
+        border: none;
+        background: transparent;
+        padding: 0.4rem 0.2rem;
+      }
+      table.responsive tr.total-row td {
+        display: inline-block;
+        width: auto;
+      }
+      table.responsive tr.total-row td::before { content: none; }
     }
   </style>
 </head>
@@ -141,15 +361,29 @@
   <header class="site">
     <h1>🦌 Gamecooler</h1>
     <nav>
-      <a href="/" {% if active == 'index' %}class="active"{% endif %}>🏷️ Einzeldruck</a>
-      <a href="/bulk" {% if active == 'bulk' %}class="active"{% endif %}>🖨️ Sammeldruck</a>
-      <a href="/scan" {% if active == 'scan' %}class="active"{% endif %}>📷 Entnahme</a>
-      <a href="/inventory" {% if active == 'inventory' %}class="active"{% endif %}>🧊 Bestand</a>
-      <a href="/settings" {% if active == 'settings' %}class="active"{% endif %}>⚙️ Einstellungen</a>
+      {# aria-label, weil auf dem Telefon nur das Emoji sichtbar ist #}
+      <a href="/" {% if active == 'index' %}class="active"{% endif %}
+         aria-label="Einzeldruck" title="Einzeldruck">🏷️ <span class="nav-label">Einzeldruck</span></a>
+      <a href="/bulk" {% if active == 'bulk' %}class="active"{% endif %}
+         aria-label="Sammeldruck" title="Sammeldruck">🖨️ <span class="nav-label">Sammeldruck</span></a>
+      <a href="/scan" {% if active == 'scan' %}class="active"{% endif %}
+         aria-label="Entnahme" title="Entnahme">📷 <span class="nav-label">Entnahme</span></a>
+      <a href="/inventory" {% if active == 'inventory' %}class="active"{% endif %}
+         aria-label="Bestand" title="Bestand">🧊 <span class="nav-label">Bestand</span></a>
+      <a href="/settings" {% if active == 'settings' %}class="active"{% endif %}
+         aria-label="Einstellungen" title="Einstellungen">⚙️ <span class="nav-label">Einstellungen</span></a>
     </nav>
   </header>
   <main class="card">
   {% block content %}{% endblock %}
   </main>
+  <script>
+    // Nur zur Installierbarkeit. Ohne Cache — siehe app/static/sw.js.
+    // Nur über HTTPS registrieren: auf http:// würde der Browser den Worker
+    // ohnehin ablehnen, und die Fehlermeldung in der Konsole verwirrt.
+    if ('serviceWorker' in navigator && window.isSecureContext) {
+      navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+    }
+  </script>
 </body>
 </html>

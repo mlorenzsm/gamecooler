@@ -10,6 +10,7 @@
 <form method="post" action="/settings/hunters" id="hunter-{{ loop.index }}"></form>
 {% endfor %}
 <form method="post" action="/settings/hunters" id="hunter-new"></form>
+<div class="table-scroll">
 <table>
   <tr><th>Name</th><th>Adresse</th><th>Telefon</th><th>E-Mail</th><th></th></tr>
   {% for h in config.hunters %}
@@ -37,6 +38,7 @@
     <td><button class="small" type="submit" form="hunter-new">+ Hinzufügen</button></td>
   </tr>
 </table>
+</div>
 
 <h3 style="margin-top:2rem;">🦌 Wildarten</h3>
 {% for s in config.species %}
@@ -44,6 +46,7 @@
       onsubmit="return confirm('Wildart „{{ s }}“ löschen?')"></form>
 {% endfor %}
 <form method="post" action="/settings/species" id="species-new"></form>
+<div class="table-scroll">
 <table style="max-width:30rem;">
   {% for s in config.species %}
   <tr>
@@ -59,12 +62,14 @@
     <td style="text-align:right;"><button class="small" type="submit" form="species-new">+ Hinzufügen</button></td>
   </tr>
 </table>
+</div>
 
 <h3 style="margin-top:2rem;">🥩 Teilstücke</h3>
 {% for name in config.parts %}
 <form method="post" action="/settings/parts" id="part-{{ loop.index }}"></form>
 {% endfor %}
 <form method="post" action="/settings/parts" id="part-new"></form>
+<div class="table-scroll">
 <table style="max-width:45rem;">
   <tr><th>Name</th><th class="num">Preis/kg (€)</th><th class="num">Standardgewicht (kg)</th><th></th></tr>
   {# empty price = part printed without any price on the label #}
@@ -97,12 +102,14 @@
     <td><button class="small" type="submit" form="part-new">+ Hinzufügen</button></td>
   </tr>
 </table>
+</div>
 
 <h3 style="margin-top:2rem;">📋 Vorgaben (Sammeldruck)</h3>
 {% for preset in config.presets %}
 <form method="post" action="/settings/presets" id="preset-{{ loop.index }}"></form>
 {% endfor %}
 <form method="post" action="/settings/presets" id="preset-new"></form>
+<div class="table-scroll">
 <table style="max-width:45rem;">
   {% for preset in config.presets %}
   {% set f = 'preset-' ~ loop.index %}
@@ -131,6 +138,7 @@
     <td><button class="small" type="submit" form="preset-new">+ Hinzufügen</button></td>
   </tr>
 </table>
+</div>
 <p style="font-size:0.8rem; color:#888; margin-top:0.3rem;">
   Format: <code>2x Keule, 1x Rücken</code> — durch Kommas getrennt.
 </p>

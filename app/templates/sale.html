@@ -12,21 +12,21 @@
 {% endif %}
 <p>Datum: {{ sale.created_at[:10] }}</p>
 
-<table>
+<table class="responsive sale-items">
   <tr>
     <th>Wildart</th><th>Teilstück</th><th class="num">kg</th><th class="num">€/kg</th><th class="num">€</th><th>ID</th>
   </tr>
   {% for i in sale.items %}
   <tr>
-    <td>{{ i.species }}</td>
-    <td>{{ i.part }}</td>
-    <td class="num">{{ i.weight_kg | de(3) }}</td>
-    <td class="num">{{ i.price_per_kg | de }}</td>
-    <td class="num">{{ i.total_price | de }}</td>
-    <td><code>{{ i.uuid[:8] }}</code></td>
+    <td data-label="Wildart">{{ i.species }}</td>
+    <td data-label="Teilstück">{{ i.part }}</td>
+    <td class="num" data-label="kg">{{ i.weight_kg | de(3) }}</td>
+    <td class="num" data-label="€/kg">{{ i.price_per_kg | de }}</td>
+    <td class="num" data-label="€">{{ i.total_price | de }}</td>
+    <td data-label="ID"><code>{{ i.uuid[:8] }}</code></td>
   </tr>
   {% endfor %}
-  <tr>
+  <tr class="total-row">
     <td colspan="4" style="text-align:right;"><b>Gesamt</b></td>
     <td class="num"><b>{{ sale.total | de }} €</b></td>
     <td></td>

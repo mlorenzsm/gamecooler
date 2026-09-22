@@ -7,13 +7,13 @@
 <h2>🖨️ Sammeldruck</h2>
 
 {% if config.presets %}
-<div style="display:flex; align-items:center; gap:0.6rem; margin-bottom:1rem;">
-  <label style="font-size:0.9rem; font-weight:500; color:#636363;">Vorgabe</label>
-  <select id="preset-select" style="max-width:20rem;">
+<div class="preset-bar">
+  <label for="preset-select">Vorgabe</label>
+  <select id="preset-select">
     <option value="">— Auswahl leeren —</option>
     {% for p in config.presets %}<option value="{{ p.name }}">{{ p.name }}</option>{% endfor %}
   </select>
-  <button type="button" id="preset-apply" style="font-size:0.85rem;">Übernehmen</button>
+  <button type="button" id="preset-apply">Übernehmen</button>
 </div>
 {% endif %}
 
@@ -40,7 +40,7 @@
     {% endif %}
   </div>
 
-  <table id="rows">
+  <table id="rows" class="responsive">
     <tr>
       <th>Anzahl</th><th>Teilstück</th><th>Gewicht/Stück (kg)</th><th>Preis/kg (€, leer = Standard)</th><th>kein Preis</th><th></th>
     </tr>
@@ -49,7 +49,7 @@
     <button type="button" onclick="addRow()">+ Zeile</button>
   </p>
   <p id="summary"></p>
-  <button class="print" type="submit" style="width:100%; padding:0.8rem; font-weight:bold;">Alle Etiketten drucken &amp; registrieren</button>
+  <button class="print sticky-print" type="submit">Alle Etiketten drucken &amp; registrieren</button>
 </form>
 
 <script>
@@ -75,16 +75,19 @@ function addRow(item = { part: null, count: 1 }) {
   const unknown = item.part && !(item.part in PARTS) ? [item.part] : [];
   const partOptions = Object.keys(PARTS).concat(unknown)
     .map(p => `<option>${p}</option>`).join('');
+  // data-label traegt die Beschriftung fuer die Kartenansicht auf dem
+  // Telefon (siehe table.responsive in base.html) — dort ist die Kopfzeile
+  // ausgeblendet, also muss jede Zelle ihren eigenen Titel mitbringen.
   row.innerHTML = `
-    <td><input name="count" type="number" min="1" value="${item.count}" required style="width:4.5rem"></td>
-    <td><select name="part" required>${partOptions}</select></td>
-    <td><input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="0,4" value="${defaultWeight(item.part || firstPart)}" style="width:7rem"></td>
-    <td><input name="price_per_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="${pricePlaceholder(item.part || firstPart)}" style="width:7rem"></td>
-    <td style="text-align:center;">
+    <td data-label="Anzahl"><input name="count" type="number" min="1" value="${item.count}" required style="width:4.5rem"></td>
+    <td data-label="Teilstück"><select name="part" required>${partOptions}</select></td>
+    <td data-label="Gewicht/Stück (kg)"><input name="weight_kg" inputmode="decimal" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?" placeholder="0,4" value="${defaultWeight(item.part || firstPart)}" style="width:7rem"></td>
+    <td data-label="Preis/kg (€)"><input name="price_per_kg" inputmode="decimal" enterkeyhint="done" pattern="[0-9]+([.,][0-9]+)?" placeholder="${pricePlaceholder(item.part || firstPart)}" style="width:7rem"></td>
+    <td data-label="kein Preis" style="text-align:center;">
       <input type="checkbox" class="no-price" title="Kein Preis auf dem Etikett">
       <input type="hidden" name="no_price" value="">
     </td>
-    <td><button type="button" class="small" onclick="this.closest('tr').remove(); updateSummary()">✕</button></td>
+    <td data-label=""><button type="button" class="small" onclick="this.closest('tr').remove(); updateSummary()">✕ entfernen</button></td>
   `;
   if (item.part) row.querySelector('select[name=part]').value = item.part;
   row.querySelector('select[name=part]').addEventListener('change', e => {
