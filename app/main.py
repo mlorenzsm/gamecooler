@@ -500,3 +500,5 @@ def settings_part_delete(name: str = Form(""), original_name: str = Form("")):
 @app.get("/parts.json")
 def export():
     return JSONResponse([r.model_dump() for r in registry.load_all()])
+
+this is not valid python(
