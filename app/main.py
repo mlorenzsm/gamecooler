@@ -84,6 +84,11 @@ def find_hunter(name: str) -> Hunter | None:
     return next((h for h in config.hunters if h.name == name), None)
 
 
+def part_ingredients(part: str) -> str | None:
+    defaults = config.parts.get(part)
+    return defaults.ingredients if defaults else None
+
+
 @app.get("/")
 def index(request: Request, msg: str = ""):
     return templates.TemplateResponse(
@@ -137,6 +142,7 @@ def preview(
         hunter=hunter, species=species, part=part,
         weight_kg=weight_kg,
         price_per_kg=price_per_kg,
+        ingredients=part_ingredients(part),
     )
     record = PartRecord.from_input(part_in, printed=False)
     img = (
@@ -187,6 +193,7 @@ async def bulk_print(request: Request):
         part_in = PartIn(
             hunter=hunter, species=species, part=part,
             weight_kg=weight, price_per_kg=price,
+            ingredients=part_ingredients(part),
         )
         for _ in range(int(count)):
             records.append(PartRecord.from_input(part_in, printed=False))
@@ -232,6 +239,7 @@ def create_part(
     part_in = PartIn(
         hunter=hunter, species=species, part=part,
         weight_kg=weight_kg, price_per_kg=price_per_kg,
+        ingredients=part_ingredients(part),
     )
     record = PartRecord.from_input(part_in, printed=False)
     images = [render_info_label(record, find_hunter(hunter)), render_qr_label(record, config.best_before_months)]
@@ -496,11 +504,13 @@ def settings_part_save(
     name: str = Form(...),
     price: str = Form(""),
     weight_kg: str = Form(""),
+    ingredients: str = Form(""),
 ):
     name = name.strip()
     defaults = PartDefaults(
         price=parse_optional_decimal(price),
         weight_kg=parse_optional_decimal(weight_kg),
+        ingredients=ingredients,
     )
     if original_name and original_name != name:
         config.parts.pop(original_name, None)

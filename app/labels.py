@@ -56,19 +56,74 @@ def _fit_text(draw: ImageDraw.ImageDraw, text: str, size: int, max_width: int,
     return font
 
 
+# Font sizes and line spacing of the info label. With ingredients the label
+# needs room for a small text block at the bottom, so everything above shrinks;
+# without them the label stays exactly as it was.
+_INFO_NORMAL = dict(icon=72, title=52, grid=36, grid_label_width=185, grid_top=86,
+                    grid_step=62, contact1=30, contact2=28, contact_step=44)
+_INFO_COMPACT = dict(icon=52, title=40, grid=28, grid_label_width=140, grid_top=62,
+                     grid_step=40, contact1=24, contact2=22, contact_step=30)
+
+# Smallest ingredients font. EU food labelling (LMIV Art. 13) asks for an
+# x-height of at least 1.2 mm, or 0.9 mm on small packages; with DejaVu Sans at
+# 300 dpi that is about 26 px and 20 px. Below 20 px it is no longer legal.
+INGREDIENTS_MAX = 24
+INGREDIENTS_MIN = 20
+
+
+def _wrap(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont,
+          max_width: int) -> list[str]:
+    lines: list[str] = []
+    line = ""
+    for word in text.split():
+        candidate = f"{line} {word}".strip()
+        if line and draw.textlength(candidate, font=font) > max_width:
+            lines.append(line)
+            line = word
+        else:
+            line = candidate
+    if line:
+        lines.append(line)
+    return lines
+
+
+def _fit_block(draw: ImageDraw.ImageDraw, text: str, max_width: int, max_height: int
+               ) -> tuple[ImageFont.FreeTypeFont, list[str], int]:
+    """Largest font from INGREDIENTS_MAX down whose wrapped text fits the box.
+
+    Returns the font, the lines and the line height. If even the smallest font
+    doesn't fit, the text is cut at the last line that fits and ends in "…" —
+    better than printing it past the label edge.
+    """
+    for size in range(INGREDIENTS_MAX, INGREDIENTS_MIN - 1, -1):
+        font = _font(size)
+        step = int(size * 1.2)
+        lines = _wrap(draw, text, font, max_width)
+        if len(lines) * step <= max_height:
+            return font, lines, step
+    font = _font(INGREDIENTS_MIN)
+    step = int(INGREDIENTS_MIN * 1.2)
+    lines = _wrap(draw, text, font, max_width)[: max(1, max_height // step)]
+    while lines and draw.textlength(lines[-1] + " …", font=font) > max_width:
+        lines[-1] = lines[-1].rsplit(" ", 1)[0] if " " in lines[-1] else lines[-1][:-1]
+    lines[-1] += " …"
+    return font, lines, step
+
+
 def render_info_label(record: PartRecord, hunter: Hunter | None = None) -> Image.Image:
     img = Image.new("1", (WIDTH, HEIGHT), 1)
     draw = ImageDraw.Draw(img)
     inner_width = WIDTH - 2 * MARGIN
+    s = _INFO_COMPACT if record.ingredients else _INFO_NORMAL
 
     title = f"{record.species} – {record.part}"
-    icon_size = 72
+    icon_size = s["icon"]
     icon = _species_icon(record.species, icon_size)
     title_x = MARGIN
     if icon is not None:
         img.paste(icon, (MARGIN, MARGIN - 8))
         title_x += icon_size + 16
-    title_font = _fit_text(draw, title, 52, WIDTH - MARGIN - title_x, bold=True, min_size=30)
+    title_font = _fit_text(draw, title, s["title"], WIDTH - MARGIN - title_x, bold=True, min_size=26)
     draw.text((title_x, MARGIN - 4), title, font=title_font, fill=0)
 
     # 2x2 grid: Gewicht / Preis/kg then Datum / Preis. Weight and price depend on
@@ -92,34 +147,45 @@ def render_info_label(record: PartRecord, hunter: Hunter | None = None) -> Image
     else:
         grid = [(date_cell,)]
 
-    label_font = _font(36)
+    label_font = _font(s["grid"])
     col_x = (MARGIN, MARGIN + inner_width // 2)
-    label_width = 185
-    y = MARGIN + 86
+    label_width = s["grid_label_width"]
+    y = MARGIN + s["grid_top"]
     for row in grid:
         for (name, value, bold), x in zip(row, col_x):
             draw.text((x, y), f"{name}:", font=label_font, fill=0)
-            draw.text((x + label_width, y), value, font=_font(36, bold=bold), fill=0)
-        y += 62
+            draw.text((x + label_width, y), value, font=_font(s["grid"], bold=bold), fill=0)
+        y += s["grid_step"]
 
     # contact block
-    y += 10
+    y += 6 if record.ingredients else 10
     draw.line((MARGIN, y, WIDTH - MARGIN, y), fill=0, width=2)
-    y += 12
+    y += 8 if record.ingredients else 12
     if hunter is None:
-        name_font = _fit_text(draw, record.hunter, 34, inner_width, bold=True)
+        name_font = _fit_text(draw, record.hunter, s["contact1"] + 4, inner_width, bold=True)
         draw.text((MARGIN, y), record.hunter, font=name_font, fill=0)
-        return img
+        y += s["contact_step"]
+    else:
+        line1 = f"{hunter.name} · {hunter.address}"
+        line2 = f"Tel. {hunter.phone}"
+        if hunter.email:
+            line2 += f" · {hunter.email}"
+        line1_font = _fit_text(draw, line1, s["contact1"], inner_width, bold=True, min_size=20)
+        draw.text((MARGIN, y), line1, font=line1_font, fill=0)
+        y += s["contact_step"]
+        line2_font = _fit_text(draw, line2, s["contact2"], inner_width, min_size=20)
+        draw.text((MARGIN, y), line2, font=line2_font, fill=0)
+        y += s["contact_step"]
 
-    line1 = f"{hunter.name} · {hunter.address}"
-    line2 = f"Tel. {hunter.phone}"
-    if hunter.email:
-        line2 += f" · {hunter.email}"
-    line1_font = _fit_text(draw, line1, 30, inner_width, bold=True, min_size=22)
-    draw.text((MARGIN, y), line1, font=line1_font, fill=0)
-    y += 44
-    line2_font = _fit_text(draw, line2, 28, inner_width, min_size=22)
-    draw.text((MARGIN, y), line2, font=line2_font, fill=0)
+    if record.ingredients:
+        y += 6
+        draw.line((MARGIN, y, WIDTH - MARGIN, y), fill=0, width=1)
+        y += 6
+        text = f"Zutaten: {record.ingredients}"
+        font, lines, step = _fit_block(draw, text, inner_width, HEIGHT - MARGIN - y)
+        for line in lines:
+            draw.text((MARGIN, y), line, font=font, fill=0)
+            y += step
 
     return img
 

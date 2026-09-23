@@ -70,8 +70,8 @@
 {% endfor %}
 <form method="post" action="/settings/parts" id="part-new"></form>
 <div class="table-scroll">
-<table style="max-width:45rem;">
-  <tr><th>Name</th><th class="num">Preis/kg (€)</th><th class="num">Standardgewicht (kg)</th><th></th></tr>
+<table style="max-width:62rem;">
+  <tr><th>Name</th><th class="num">Preis/kg (€)</th><th class="num">Standardgewicht (kg)</th><th>Zutaten (klein auf dem Etikett)</th><th></th></tr>
   {# empty price = part printed without any price on the label #}
   {% for name, p in config.parts.items() %}
   {% set f = 'part-' ~ loop.index %}
@@ -86,6 +86,8 @@
     <td class="num"><input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
                            value="{{ p.weight_kg | de(3) if p.weight_kg is not none else '' }}"
                            placeholder="–" form="{{ f }}" style="width:6rem; text-align:right;"></td>
+    <td><textarea name="ingredients" rows="1" placeholder="–" form="{{ f }}"
+                  style="width:18rem; min-height:2.2rem; resize:vertical;">{{ p.ingredients or '' }}</textarea></td>
     <td style="white-space:nowrap;">
       <button class="small" type="submit" form="{{ f }}">Speichern</button>
       <button class="small" type="submit" form="{{ f }}" formaction="/settings/parts/delete" formnovalidate
@@ -99,6 +101,8 @@
                            placeholder="–" form="part-new" style="width:6rem; text-align:right;"></td>
     <td class="num"><input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
                            placeholder="optional" form="part-new" style="width:6rem; text-align:right;"></td>
+    <td><textarea name="ingredients" rows="1" placeholder="optional" form="part-new"
+                  style="width:18rem; min-height:2.2rem; resize:vertical;"></textarea></td>
     <td><button class="small" type="submit" form="part-new">+ Hinzufügen</button></td>
   </tr>
 </table>

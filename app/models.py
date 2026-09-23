@@ -45,6 +45,7 @@ class PartIn(BaseModel):
     # Per kg for weighed parts. For counted parts it is the fixed price of the
     # whole part — there is no weight to multiply it with.
     price_per_kg: float | None = None
+    ingredients: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -75,6 +76,9 @@ class PartRecord(BaseModel):
     printed: bool
     consumed_at: str | None = None
     sale_id: str | None = None
+    # Copied from the part's settings when the part is created, so a reprint
+    # shows the recipe that was actually used, not whatever it is today.
+    ingredients: str | None = None
 
     @classmethod
     def from_input(cls, part: PartIn, printed: bool) -> "PartRecord":
@@ -95,6 +99,7 @@ class PartRecord(BaseModel):
             pieces=part.pieces,
             price_per_kg=price_per_kg,
             total_price=total,
+            ingredients=part.ingredients,
             created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             printed=printed,
         )

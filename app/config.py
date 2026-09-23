@@ -44,6 +44,16 @@ class PrinterTarget(BaseModel):
 class PartDefaults(BaseModel):
     price: float | None = None
     weight_kg: float | None = None
+    # Printed small on the info label, e.g. for sausages. Empty = none.
+    ingredients: str | None = None
+
+    @field_validator("ingredients", mode="before")
+    @classmethod
+    def _blank_is_none(cls, v):
+        if v is None:
+            return None
+        v = " ".join(str(v).split())
+        return v or None
 
     @field_validator("price", "weight_kg", mode="before")
     @classmethod
@@ -128,6 +138,7 @@ def save_config(config: Config) -> None:
         "parts": {
             name: ({"price": p.price} if p.price is not None else {})
             | ({"weight_kg": p.weight_kg} if p.weight_kg is not None else {})
+            | ({"ingredients": p.ingredients} if p.ingredients else {})
             for name, p in config.parts.items()
         },
         "presets": [p.model_dump() for p in config.presets],
