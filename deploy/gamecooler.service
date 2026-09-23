@@ -10,16 +10,15 @@ User=gamecooler
 Group=gamecooler
 WorkingDirectory=/opt/gamecooler
 
-# Direkt in die .venv, NICHT über "uv run": uv legt seinen Cache unter
-# $HOME/.cache/uv an, und ProtectHome=yes macht $HOME unzugänglich. Der Dienst
-# stirbt dann mit "Failed to initialize cache ... Permission denied" und
-# status=2. Die .venv ist bereits vollständig (uv sync --locked --no-dev beim
-# Deploy), also braucht der Start uv gar nicht.
+# Straight into the .venv, NOT via "uv run": uv creates its cache under
+# $HOME/.cache/uv, and ProtectHome=yes makes $HOME inaccessible. The service
+# then dies with "Failed to initialize cache ... Permission denied" and
+# status=2. The .venv is already complete (uv sync --locked --no-dev during
+# deploy), so starting the service doesn't need uv at all.
 #
-# Der Interpreter ist über den absoluten Pfad angesprochen, weil systemd ein
-# minimales PATH hat. Das ist zugleich das venv-python — der Shebang in
-# .venv/bin/uvicorn zeigt auf denselben Pfad, es wird also nichts doppelt
-# aufgelöst.
+# The interpreter is referenced by absolute path because systemd has a minimal
+# PATH. This is also the venv python — the shebang in .venv/bin/uvicorn points
+# to the same path, so nothing gets resolved twice.
 Environment=GAMECOOLER_STATE_DIR=/var/lib/gamecooler
 ExecStart=/opt/gamecooler/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8010
 

@@ -1,57 +1,57 @@
-# Caddy als TLS-Terminator vor der App.
+# Caddy as TLS terminator in front of the app.
 #
-# Wichtig: HTTPS ist hier keine Kosmetik. Die Scan-Seite nutzt die Handykamera
-# über getUserMedia, und Browser erlauben das nur in einem "secure context"
-# (HTTPS oder localhost). Über reines HTTP startet der Scanner stillschweigend
-# nicht — siehe app/templates/scan.html.
+# Important: HTTPS is not cosmetic here. The scan page uses the phone camera
+# via getUserMedia, and browsers only allow that in a "secure context"
+# (HTTPS or localhost). Over plain HTTP the scanner silently fails to start —
+# see app/templates/scan.html.
 #
-# Der Hostname muss auf dem Handy auflösbar sein. IP-Adressen funktionieren
-# nicht, weil ein TLS-Zertifikat auf einen Namen ausgestellt wird (siehe
-# docs/deploy.md, Abschnitt "Hostname").
+# The hostname must be resolvable on the phone. IP addresses don't work,
+# because a TLS certificate is issued for a name (see docs/deploy.md,
+# section "Hostname").
 #
-# Anpassen: der Name muss identisch in Pi-hole (Local DNS), hier und im
-# Browser stehen. home.arpa ist der von RFC 8375 vorgesehene Namensraum für
-# Heimnetze — nicht .local (mDNS, Android löst das nicht auf) und nicht .lan.
+# To adjust: the name must be identical in Pi-hole (Local DNS), here, and in
+# the browser. home.arpa is the namespace RFC 8375 designates for home
+# networks — not .local (mDNS, Android doesn't resolve it) and not .lan.
 #
-# __HOST__ ist ein Platzhalter und wird beim Deploy durch den Namen dieser
-# Umgebung ersetzt (deploy/autodeploy.sh, apply_caddy). Dieselbe Datei gilt
-# damit in beiden Umgebungen, ohne dass der Name hier feststeht.
+# __HOST__ is a placeholder that is replaced during deploy with the name of
+# this environment (deploy/autodeploy.sh, apply_caddy). That way the same file
+# works in both environments without the name being fixed here.
 #
 #   Test: gamecooler-test.home.arpa
 #   Prod: wildbret.home.arpa
 #
-# Der Name kommt aus /etc/default/gamecooler-autodeploy (GAMECOOLER_HOST).
+# The name comes from /etc/default/gamecooler-autodeploy (GAMECOOLER_HOST).
 #
-# Bewusst KEIN {$VAR:default} von Caddy: das Debian-Paket liest
-# /etc/default/caddy nicht — die Unit hat kein EnvironmentFile, --environ gibt
-# die Umgebung nur aus. {$GAMECOOLER_HOST:default} fällt deshalb immer still auf
-# den Default zurück. Genau so hat der Test-Container eine Zeitlang unter dem
-# Prod-Namen gelauscht: erreichbar, aber unter dem falschen Namen, und der
-# Health-Check (der nur 127.0.0.1:8010 prüft) merkt davon nichts.
+# Deliberately NO Caddy {$VAR:default}: the Debian package doesn't read
+# /etc/default/caddy — the unit has no EnvironmentFile, and --environ only
+# prints the environment. {$GAMECOOLER_HOST:default} therefore always silently
+# falls back to the default. That is exactly how the test container listened
+# under the prod name for a while: reachable, but under the wrong name, and the
+# health check (which only checks 127.0.0.1:8010) doesn't notice.
 #
-# Ein Platzhalter kann so nicht fehlschlagen: fehlt GAMECOOLER_HOST, bricht der
-# Deploy ab, statt einen falschen Namen zu installieren.
+# A placeholder can't fail that way: if GAMECOOLER_HOST is missing, the deploy
+# aborts instead of installing a wrong name.
 
 __HOST__ {
-	# Ohne diese Zeile versucht Caddy ACME (Let's Encrypt / ZeroSSL) und
-	# scheitert: Let's Encrypt lehnt .arpa mit "rejectedIdentifier ...
-	# forbidden by policy" ab, ZeroSSL verlangt EAB-Zugangsdaten. Caddy nimmt
-	# die interne CA nur bei Namen ohne Punkt, bei "localhost" oder bei
-	# explizitem tls internal automatisch — home.arpa fällt in keinen dieser
-	# Fälle. Der Handshake bricht dann mit "tlsv1 alert internal error" ab,
-	# weil kein Zertifikat vorliegt.
+	# Without this line Caddy tries ACME (Let's Encrypt / ZeroSSL) and
+	# fails: Let's Encrypt rejects .arpa with "rejectedIdentifier ...
+	# forbidden by policy", ZeroSSL requires EAB credentials. Caddy only uses
+	# the internal CA automatically for names without a dot, for "localhost",
+	# or with an explicit tls internal — home.arpa falls into none of these
+	# cases. The handshake then aborts with "tlsv1 alert internal error",
+	# because there is no certificate.
 	tls internal
 
 	encode zstd gzip
 
 	reverse_proxy 127.0.0.1:8010 {
-		# Der App ist es egal, unter welchem Namen sie erreicht wird.
+		# The app doesn't care which name it is reached under.
 		header_up Host {host}
 	}
 
-	# Getrennte Logdateien pro Umgebung, abgeleitet aus demselben Namen — so
-	# gibt es nur einen Schalter pro Umgebung statt zwei. Ein Hostname ist ein
-	# gültiger Dateiname, das Ergebnis ist also wildbret.home.arpa.log bzw.
+	# Separate log files per environment, derived from the same name — so
+	# there is only one switch per environment instead of two. A hostname is a
+	# valid file name, so the result is wildbret.home.arpa.log or
 	# gamecooler-test.home.arpa.log.
 	log {
 		output file /var/log/caddy/__HOST__.log

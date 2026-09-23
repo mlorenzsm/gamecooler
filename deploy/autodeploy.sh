@@ -1,36 +1,36 @@
 #!/bin/bash
-# Aktualisiert eine gamecooler-Installation auf den neuesten Stand ihres
-# Branches. Läuft als root im Container, gestartet vom Timer
+# Updates a gamecooler installation to the latest state of its branch. Runs
+# as root in the container, started by the timer
 # gamecooler-autodeploy.timer.
 #
-# Der Branch kommt aus /etc/default/gamecooler-autodeploy — die Umgebung ist
-# reine Konfiguration, dieses Skript ist in allen Umgebungen identisch:
+# The branch comes from /etc/default/gamecooler-autodeploy — the environment is
+# pure configuration, this script is identical in all environments:
 #
-#   dev  -> Test-Container
-#   main -> Prod
+#   dev  -> test container
+#   main -> prod
 #
-# Aufruf von Hand (ohne auf den Timer zu warten):
+# Running it by hand (without waiting for the timer):
 #
 #   systemctl start gamecooler-autodeploy.service
 #   journalctl -u gamecooler-autodeploy -n 40 --no-pager
 #
-# WICHTIG: Dieses Skript liegt im Repo und wird von sich selbst überschrieben
-# (Schritt "Code holen"). Deshalb ruft der Timer nicht diese Datei auf, sondern
-# den Wrapper /usr/local/bin/gamecooler-autodeploy, der sie vorher in eine
-# temporäre Datei kopiert. Ohne das liest bash das Skript weiter, während es
-# sich ändert — bash liest über Datei-Offsets und kann mitten im Befehl
-# aussteigen. Nicht "vereinfachen", indem der Timer direkt hierauf zeigt.
+# IMPORTANT: This script lives in the repo and gets overwritten by itself
+# (step "fetch code"). That's why the timer doesn't call this file but the
+# wrapper /usr/local/bin/gamecooler-autodeploy, which first copies it to a
+# temporary file. Without that, bash keeps reading the script while it
+# changes — bash reads by file offset and can bail out in the middle of a
+# command. Don't "simplify" this by pointing the timer straight at this file.
 
 set -euo pipefail
 
-# systemd setzt HOME nicht, wenn die Unit kein User= hat — dann läuft der
-# Dienst als root ohne HOME. Das bricht sofort ab:
+# systemd doesn't set HOME when the unit has no User= — the service then runs
+# as root without HOME. That fails immediately:
 #
-#   fatal: $HOME not set      (exit 128, schon beim ersten git-Kommando)
+#   fatal: $HOME not set      (exit 128, already on the first git command)
 #
-# Betroffen sind beide Werkzeuge, die hier gebraucht werden: git config
-# --global sucht ~/.gitconfig über HOME, und uv legt seinen Cache unter
-# $HOME/.cache/uv an. Ein einziger Default erschlägt beide.
+# Both tools needed here are affected: git config --global looks for
+# ~/.gitconfig via HOME, and uv creates its cache under $HOME/.cache/uv.
+# A single default takes care of both.
 export HOME="${HOME:-/root}"
 
 REPO=/opt/gamecooler
@@ -42,7 +42,7 @@ BRANCH_FILE=/etc/default/gamecooler-autodeploy
 log() { echo "[autodeploy] $*"; }
 die() { echo "[autodeploy] FEHLER: $*" >&2; exit 1; }
 
-# --- Konfiguration lesen ----------------------------------------------------
+# --- Read configuration -----------------------------------------------------
 
 BRANCH=dev
 HOST=
@@ -53,8 +53,8 @@ if [ -r "$BRANCH_FILE" ]; then
 	HOST="${GAMECOOLER_HOST:-}"
 fi
 
-# Nur die beiden Branches, die es wirklich gibt. Ein Tippfehler soll nicht
-# stillschweigend auf irgendeinen anderen Branch deployen.
+# Only the two branches that actually exist. A typo must not silently deploy
+# some other branch.
 case "$BRANCH" in
 	dev | main) ;;
 	*)
@@ -63,21 +63,21 @@ case "$BRANCH" in
 		;;
 esac
 
-# Ohne Hostname wird nicht deployt. Hier ist bewusst KEIN Default: ein
-# stillschweigender Rückfall auf den Prod-Namen hat den Test-Container schon
-# einmal unter falschem Namen lauschen lassen — erreichbar, aber unter
-# wildbret.home.arpa, während gamecooler-test.home.arpa kein Zertifikat bekam.
-# Ein fehlender Wert muss lauter scheitern als ein falscher.
+# No hostname, no deploy. There is deliberately NO default here: a silent
+# fallback to the prod name has already once made the test container listen
+# under the wrong name — reachable, but as wildbret.home.arpa, while
+# gamecooler-test.home.arpa got no certificate. A missing value must fail more
+# loudly than a wrong one.
 if [ -z "$HOST" ]; then
 	echo "usage: GAMECOOLER_HOST fehlt in $BRANCH_FILE" >&2
 	echo "       z.B. GAMECOOLER_HOST=gamecooler-test.home.arpa" >&2
 	exit 2
 fi
 
-# --- Health-Check als Funktion ----------------------------------------------
+# --- Health check as a function ---------------------------------------------
 
-# $1 = Versuche. Die App braucht nach dem Neustart einen Moment, bis uvicorn
-# lauscht; deshalb mehrfach versuchen statt einmal mit langem Timeout.
+# $1 = attempts. After a restart the app needs a moment until uvicorn is
+# listening; hence several attempts instead of one with a long timeout.
 app_healthy() {
 	local tries="${1:-10}" i
 	for ((i = 1; i <= tries; i++)); do
@@ -89,19 +89,19 @@ app_healthy() {
 	return 1
 }
 
-# Prüft, dass Caddy unter dem Namen DIESER Umgebung antwortet.
+# Checks that Caddy answers under the name of THIS environment.
 #
-# Der Health-Check oben geht gegen 127.0.0.1:8010 und sieht Caddy nie. Genau
-# deshalb blieb lange unbemerkt, dass der Test-Container unter dem Prod-Namen
-# lauschte: die App war gesund, nur der Name stimmte nicht.
+# The health check above goes to 127.0.0.1:8010 and never sees Caddy. That is
+# exactly why it went unnoticed for a long time that the test container was
+# listening under the prod name: the app was healthy, only the name was wrong.
 #
-# --resolve zeigt auf 127.0.0.1 statt auf Pi-hole — der Name wird also direkt
-# gegen Caddy geprüft und nicht gegen DNS oder die Container-Firewall (die
-# denselben Namen von innen nicht zurückleitet, siehe docs/autodeploy.md).
+# --resolve points to 127.0.0.1 instead of Pi-hole — so the name is checked
+# directly against Caddy and not against DNS or the container firewall (which
+# doesn't loop the same name back from inside, see docs/autodeploy.md).
 #
-# -k überspringt die Vertrauensprüfung, aber NICHT die Frage, ob es für diesen
-# Namen überhaupt ein Zertifikat gibt: ohne Site bricht der Handshake mit
-# "tlsv1 alert internal error" ab. Genau der Fehler, den es zu fangen gilt.
+# -k skips the trust check, but NOT the question of whether a certificate
+# exists for this name at all: without a site the handshake aborts with
+# "tlsv1 alert internal error". Exactly the error this is meant to catch.
 site_healthy() {
 	local tries="${1:-5}" i
 	for ((i = 1; i <= tries; i++)); do
@@ -115,30 +115,29 @@ site_healthy() {
 	return 1
 }
 
-# --- Caddyfile rendern ------------------------------------------------------
+# --- Render Caddyfile -------------------------------------------------------
 
-# Setzt den Namen dieser Umgebung in deploy/Caddyfile ein und lädt Caddy neu.
+# Substitutes this environment's name into deploy/Caddyfile and reloads Caddy.
 #
-# Der Name wird hier eingesetzt, nicht von Caddy aus der Umgebung gelesen. Die
-# Unit des Debian-Pakets hat kein EnvironmentFile, ein {$VAR:default} im
-# Caddyfile fällt also immer still auf den Default zurück — so hat der
-# Test-Container eine Zeitlang unter dem Prod-Namen gelauscht: erreichbar, aber
-# unter wildbret.home.arpa, während gamecooler-test.home.arpa kein Zertifikat
-# bekam.
+# The name is substituted here, not read by Caddy from the environment. The
+# Debian package's unit has no EnvironmentFile, so a {$VAR:default} in the
+# Caddyfile always silently falls back to the default — that's how the test
+# container listened under the prod name for a while: reachable, but as
+# wildbret.home.arpa, while gamecooler-test.home.arpa got no certificate.
 #
-# Eigene Funktion, weil sie aus zwei Richtungen gebraucht wird: beim Ausrollen
-# und in der Vorabprüfung. Der zweite Fall ist der wichtigere — ein Container,
-# dessen /etc/caddy/Caddyfile noch den Namen der Vorgänger-Installation trägt,
-# steht auf dem richtigen Commit, hat also nichts zu tun und würde ohne diesen
-# Aufruf nie wieder geradegerückt.
+# A separate function because it is needed from two directions: during
+# rollout and in the pre-check. The second case is the more important one — a
+# container whose /etc/caddy/Caddyfile still carries the name of the previous
+# installation is on the right commit, so it has nothing to do and would never
+# be straightened out without this call.
 apply_caddy() {
 	[ -r "$REPO/deploy/Caddyfile" ] || {
 		log "Caddyfile fehlt im Repo"
 		return 1
 	}
 
-	# Erst in eine temporäre Datei rendern, dann installieren: schlägt sed
-	# fehl, bleibt /etc/caddy/Caddyfile unangetastet statt halb geschrieben.
+	# Render into a temporary file first, then install: if sed fails,
+	# /etc/caddy/Caddyfile stays untouched instead of half-written.
 	local rendered
 	rendered=$(mktemp) || {
 		log "mktemp fehlgeschlagen"
@@ -149,8 +148,8 @@ apply_caddy() {
 		rm -f "$rendered"
 		return 1
 	fi
-	# Kontrolle, dass wirklich gerendert wurde: ein vergessenes __HOST__ oder
-	# ein Tippfehler im Platzhalter würde sonst als Site-Name durchgehen.
+	# Check that rendering really happened: a leftover __HOST__ or a typo in
+	# the placeholder would otherwise pass as a site name.
 	if grep -q '__HOST__' "$rendered"; then
 		log "Caddyfile enthält noch __HOST__ — Platzhalter nicht ersetzt?"
 		rm -f "$rendered"
@@ -163,8 +162,8 @@ apply_caddy() {
 	fi
 	rm -f "$rendered"
 
-	# validate vor dem Reload: ein Syntaxfehler würde Caddy sonst beim Neuladen
-	# sterben lassen, und man sucht den Fehler im Zertifikat statt in der Datei.
+	# validate before reload: a syntax error would otherwise kill Caddy on
+	# reload, and you'd look for the fault in the certificate instead of the file.
 	caddy validate --config /etc/caddy/Caddyfile || {
 		log "Caddyfile ungültig"
 		return 1
@@ -178,44 +177,42 @@ apply_caddy() {
 
 cd "$REPO" || die "$REPO fehlt"
 
-# Dieses Skript läuft als root, /opt/gamecooler gehört aber gamecooler (siehe
-# docs/deploy.md Phase 4). Git verweigert in dieser Konstellation jeden Befehl:
+# This script runs as root, but /opt/gamecooler is owned by gamecooler (see
+# docs/deploy.md phase 4). In this setup git refuses every command:
 #
 #   fatal: detected dubious ownership in repository at '/opt/gamecooler'
 #
-# Die Prüfung gilt seit CVE-2022-24765 und lässt sich nicht abschalten, nur
-# per Ausnahme. Der Guard verhindert, dass sich bei jedem Lauf ein weiterer
-# Eintrag in /root/.gitconfig ansammelt.
+# The check has applied since CVE-2022-24765 and can't be turned off, only
+# bypassed with an exception. The guard prevents another entry from piling up
+# in /root/.gitconfig on every run.
 if ! git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$REPO"; then
 	git config --global --add safe.directory "$REPO"
 fi
 
-# --- Zustand vorher feststellen ---------------------------------------------
+# --- Determine the prior state ----------------------------------------------
 
 PREV=$(git rev-parse HEAD)
 
-# Ist die App schon kaputt, wird nicht deployt. Sonst würde der Health-Check
-# nach dem Update fehlschlagen, das Skript auf PREV zurückrollen — also auf
-# einen Stand, der genauso kaputt ist — und den eigentlichen Fehler verdecken.
-# Der Merker wird gelöscht, sobald ein anderer Commit auftaucht, deshalb ist
-# "kaputt und kein Deploy nötig" hier der einzig sinnvolle Ausgang.
+# If the app is already broken, don't deploy. Otherwise the health check would
+# fail after the update, the script would roll back to PREV — a state that is
+# just as broken — and mask the actual fault. The marker is cleared as soon as
+# a different commit shows up, so "broken and no deploy needed" is the only
+# sensible outcome here.
 if ! app_healthy 3; then
 	log "App antwortet nicht auf $HEALTH_URL — kein Deploy. Erst reparieren."
 	exit 1
 fi
 
-# Dasselbe für die Konfiguration, und zwar hier statt in einem der Zweige
-# unten: "Code ist aktuell" und "richtig konfiguriert" sind zwei Fragen. Ein
-# Container kann auf dem richtigen Commit stehen, einen als fehlerhaft
-# markierten Commit überspringen oder gar nichts zu tun haben — und trotzdem
-# unter dem falschen Namen lauschen. Stünde die Prüfung nur im
-# "nichts zu tun"-Zweig, bliebe ein Container mit gesetztem Merker für immer
-# stumm.
+# The same for the configuration, and here rather than in one of the branches
+# below: "code is current" and "correctly configured" are two separate
+# questions. A container can be on the right commit, skip a commit marked as
+# bad, or have nothing to do at all — and still listen under the wrong name.
+# If the check lived only in the "nothing to do" branch, a container with the
+# marker set would stay silent forever.
 #
-# Kein Rollback und kein Merker bei Fehlschlag: der Commit ist in Ordnung, die
-# Konfiguration ist es nicht. Ein Rollback würde dasselbe Caddyfile mit
-# demselben Namen rendern und liefe im Kreis; ein Merker würde einen guten
-# Commit sperren.
+# No rollback and no marker on failure: the commit is fine, the configuration
+# isn't. A rollback would render the same Caddyfile with the same name and go
+# round in circles; a marker would block a good commit.
 if ! site_healthy 3; then
 	log "Caddy antwortet nicht auf https://$HOST/ — Caddyfile neu rendern"
 	if apply_caddy && site_healthy 5; then
@@ -228,15 +225,15 @@ if ! site_healthy 3; then
 	fi
 fi
 
-# --- Neuen Stand holen ------------------------------------------------------
+# --- Fetch the new state ----------------------------------------------------
 
-# ls-remote liefert nur den SHA, ohne Objekte zu übertragen. Bei einem Timer,
-# der alle paar Minuten läuft, ist das der billigste Weg festzustellen, dass
-# nichts zu tun ist.
+# ls-remote returns only the SHA, without transferring objects. For a timer
+# that runs every few minutes, that's the cheapest way to find out there's
+# nothing to do.
 #
-# Der ||-Zweig ist wichtig: mit "set -e" würde eine gescheiterte Zuweisung das
-# Skript sofort beenden. Ein kurzer Netzausfall sähe dann wie ein kaputter
-# Deploy aus, obwohl nur GitHub gerade nicht erreichbar war.
+# The || branch matters: with "set -e" a failed assignment would end the
+# script immediately. A brief network outage would then look like a broken
+# deploy, when GitHub was merely unreachable for a moment.
 NEU=$(git ls-remote origin "refs/heads/$BRANCH" 2>/dev/null | cut -f1) || {
 	log "origin nicht erreichbar — nächster Lauf versucht es erneut"
 	exit 0
@@ -248,9 +245,9 @@ if [ "$NEU" = "$PREV" ]; then
 	exit 0
 fi
 
-# Ein Commit, der schon einmal zurückgerollt wurde, wird nicht erneut
-# versucht. Ohne diesen Merker liefe der Timer in eine Endlosschleife:
-# deployen, scheitern, zurückrollen, fünf Minuten später dasselbe.
+# A commit that has already been rolled back once is not retried. Without
+# this marker the timer would run into an endless loop: deploy, fail, roll
+# back, and the same again five minutes later.
 if [ -f "$BAD_MARKER" ] && [ "$(cat "$BAD_MARKER")" = "$NEU" ]; then
 	log "Commit $NEU ist als fehlerhaft markiert — übersprungen."
 	log "Nach einem Fix auf $BRANCH verschwindet der Merker von selbst."
@@ -262,19 +259,19 @@ log "Deploy $BRANCH: $PREV -> $NEU"
 git fetch --depth=1 origin "$BRANCH" || die "git fetch fehlgeschlagen"
 git checkout -q -B "$BRANCH" FETCH_HEAD || die "git checkout fehlgeschlagen"
 
-# Übernimmt den ausgecheckten Stand: Abhängigkeiten, Caddyfile, Unit, Neustart.
+# Applies the checked-out state: dependencies, Caddyfile, unit, restart.
 #
-# Bewusst eine Funktion mit Rückgabewert statt einer Folge von Befehlen mit
-# "|| die". Bricht die Folge in der Mitte ab, steht das Repo schon auf dem neuen
-# Commit, während der Dienst noch den alten Code fährt — und der nächste Lauf
-# sieht NEU == PREV und meldet "nichts zu tun". Der halb ausgerollte Zustand
-# bliebe für immer stehen. Als Funktion landet jeder Teilfehler im selben
-# Rollback wie ein fehlgeschlagener Health-Check.
+# Deliberately a function with a return value rather than a sequence of
+# commands with "|| die". If the sequence aborts halfway, the repo is already on
+# the new commit while the service is still running the old code — and the next
+# run sees NEU == PREV and reports "nichts zu tun". The half-rolled-out state
+# would stay forever. As a function, every partial failure ends up in the same
+# rollback as a failed health check.
 #
-# Deshalb hier auch kein "set -e"-Abbruch: jeder Schritt meldet selbst.
+# That's also why there's no "set -e" abort here: each step reports itself.
 apply_release() {
-	# --locked bricht ab, wenn uv.lock nicht zum Stand passt, statt still
-	# aufzulösen. Ein vergessenes "uv lock" fällt damit hier auf.
+	# --locked aborts if uv.lock doesn't match the code, instead of silently
+	# re-resolving. A forgotten "uv lock" gets caught here.
 	uv sync --locked --no-dev || {
 		log "uv sync fehlgeschlagen"
 		return 1
@@ -301,11 +298,11 @@ apply_release() {
 }
 
 if apply_release && app_healthy 10; then
-	# Der Name wird separat geprüft, und ein Fehlschlag führt NICHT in den
-	# Rollback: der Rollback rendert dasselbe Caddyfile mit demselben Namen,
-	# kann eine falsche Konfiguration also nicht reparieren — er liefe im
-	# Kreis. Der Commit ist in Ordnung, die Konfiguration ist es nicht, und der
-	# Merker bleibt deshalb ungeschrieben: er würde einen guten Commit sperren.
+	# The name is checked separately, and a failure does NOT lead into the
+	# rollback: the rollback renders the same Caddyfile with the same name, so
+	# it can't fix a wrong configuration — it would go round in circles. The
+	# commit is fine, the configuration isn't, and so the marker stays
+	# unwritten: it would block a good commit.
 	if ! site_healthy 5; then
 		log "WARNUNG: die App läuft, aber Caddy antwortet nicht auf https://$HOST/"
 		log "WARNUNG: erwartet wird ein Zertifikat für '$HOST' — kommt"
@@ -320,18 +317,18 @@ if apply_release && app_healthy 10; then
 	exit 0
 fi
 
-# Ab hier darf nichts mehr hart abbrechen: "set -e" würde sonst mitten in der
-# Wiederherstellung aussteigen — der Dienst liefe mit dem kaputten Stand weiter
-# und der Merker würde nie geschrieben, also versuchte der Timer denselben
-# Commit endlos.
+# From here on nothing may abort hard: "set -e" would otherwise bail out in the
+# middle of the recovery — the service would keep running the broken state and
+# the marker would never be written, so the timer would retry the same commit
+# endlessly.
 log "Deploy von $NEU fehlgeschlagen — Rollback auf $PREV"
 
 if git checkout -q --detach "$PREV"; then
 	log "zurück auf $PREV"
 else
-	# Sollte mit --depth=1 nicht vorkommen (PREV liegt noch im Objektspeicher),
-	# aber wenn doch, ist ein zweiter Versuch mit vollem Fetch billiger als ein
-	# Container, der auf einem kaputten Commit stehen bleibt.
+	# Shouldn't happen with --depth=1 (PREV is still in the object store), but
+	# if it does, a second attempt with a full fetch is cheaper than a
+	# container stuck on a broken commit.
 	log "WARNUNG: $PREV nicht im Objektspeicher — hole vollständig nach"
 	git fetch --unshallow origin 2>/dev/null ||
 		git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" ||
@@ -339,9 +336,9 @@ else
 	git checkout -q --detach "$PREV" || log "WARNUNG: Rollback-Checkout fehlgeschlagen"
 fi
 
-# Derselbe Weg wie beim Ausrollen, nur mit dem alten Stand — damit steht auch
-# das Caddyfile wieder auf dem vorherigen Inhalt, falls apply_release erst
-# danach gescheitert ist.
+# The same path as for rollout, just with the old state — so the Caddyfile is
+# also back to its previous content in case apply_release only failed after
+# that step.
 apply_release || log "WARNUNG: Wiederherstellen des alten Stands unvollständig"
 
 if app_healthy 10; then
@@ -350,12 +347,12 @@ else
 	log "WARNUNG: auch der Rollback ist nicht gesund. Eingreifen nötig."
 fi
 
-# Merker erst NACH dem Rollback schreiben: bricht das Skript vorher ab (Strom,
-# OOM), soll der nächste Lauf den Commit erneut versuchen dürfen.
+# Write the marker only AFTER the rollback: if the script dies before that
+# (power, OOM), the next run should be allowed to retry the commit.
 #
-# Schlägt das Schreiben fehl, ist der Schutz gegen die Endlosschleife weg: der
-# Timer würde denselben Commit alle fünf Minuten erneut ausrollen und
-# zurückrollen. Das muss laut sein, sonst sucht man später im falschen Eck.
+# If writing fails, the protection against the endless loop is gone: the
+# timer would roll out and roll back the same commit every five minutes. That
+# has to be loud, otherwise you end up looking in the wrong place later.
 mkdir -p "$STATE" 2>/dev/null || true
 if ! echo "$NEU" >"$BAD_MARKER" 2>/dev/null; then
 	log "WARNUNG: konnte $BAD_MARKER nicht schreiben!"
@@ -364,5 +361,5 @@ if ! echo "$NEU" >"$BAD_MARKER" 2>/dev/null; then
 	log "WARNUNG:   systemctl stop gamecooler-autodeploy.timer"
 fi
 
-# Der Timer soll den Fehlschlag sichtbar machen, deshalb kein exit 0.
+# The timer should make the failure visible, hence no exit 0.
 exit 1

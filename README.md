@@ -1,87 +1,87 @@
 # gamecooler
 
-Kleine Webapp zum Etikettieren von Wildbret-Teilstücken fürs Einfrieren.
-Druckt pro Teilstück zwei 38×90mm-Etiketten (DK-11208) auf einem Brother QL-800:
+A small web app for labelling cuts of game meat for the freezer.
+For each cut it prints two 38×90mm labels (DK-11208) on a Brother QL-800:
 
-1. **Info-Etikett**: Jäger, Wildart, Teilstück, Gewicht, Preis/kg, Preis, Datum
-2. **QR-Etikett**: QR-Code mit UUID zur Identifikation
+1. **Info label**: hunter, species, cut, weight, price/kg, price, date
+2. **QR label**: QR code with a UUID for identification
 
-Jedes gedruckte Teilstück wird in `data/registry.json` für die Buchhaltung registriert.
+Every printed cut is registered in `data/registry.json` for accounting.
 
 ## Setup (macOS)
 
 ```sh
-brew install libusb          # für den pyusb-Backend
+brew install libusb          # for the pyusb backend
 uv sync
 cp config.yaml.example config.yaml
 ```
 
-`config.yaml` ist **nicht** versioniert — dort stehen die Jäger mit Adresse und
-Telefonnummer. Die Vorlage enthält Platzhalter; für den ersten Start reicht sie
-so, wie sie ist (`dry_run: true` druckt nichts).
+`config.yaml` is **not** under version control — it holds the hunters with
+their address and phone number. The template contains placeholders; it works
+as-is for the first start (`dry_run: true` prints nothing).
 
-Drucker per USB anschließen und dann:
+Connect the printer via USB, then run:
 
 ```sh
 uv run brother_ql -b pyusb discover
 ```
 
-Die gefundene Kennung (z.B. `usb://0x04f9:0x209b`) in `config.yaml` unter
-`printers[].identifier` eintragen. Jäger, Wildarten und Teilstücke ebenfalls
-dort pflegen.
+Enter the identifier it finds (e.g. `usb://0x04f9:0x209b`) in `config.yaml`
+under `printers[].identifier`. Hunters, species and cuts are maintained there
+as well.
 
-## Drucker
+## Printers
 
-Drucker stehen als Liste in `config.yaml`. `default_printer` bestimmt, welcher
-ohne Auswahl verwendet wird; ab zwei Druckern erscheint in der Oberfläche ein
-Auswahlfeld.
+Printers are listed in `config.yaml`. `default_printer` sets which one is used
+when none is selected; with two or more printers, the UI shows a selection
+field.
 
 ```yaml
 printers:
-- name: Mac                      # direkt am Mac angeschlossen
+- name: Mac                      # connected directly to the Mac
   backend: pyusb
   identifier: usb://0x04f9:0x209b
-- name: Netz                     # Drucker mit Netzwerkanschluss
+- name: Netz                     # printer with a network port
   backend: network
   identifier: tcp://192.168.1.50:9100
-- name: Mac-Agent                # Mac, aber App läuft woanders
+- name: Mac-Agent                # Mac, but the app runs elsewhere
   backend: agent
   identifier: http://mac.local:8020
 default_printer: Mac
 ```
 
-`backend` bestimmt den Weg zum Gerät:
+`backend` determines the path to the device:
 
-| backend | Bedeutung |
+| backend | Meaning |
 |---|---|
-| `pyusb` | per USB am selben Rechner (macOS/Linux) |
-| `linux_kernel` | per `/dev/usb/lp*` am selben Rechner (Linux) |
-| `network` | Drucker oder Printserver über TCP Port 9100 |
-| `agent` | Hardware-Bridge auf einem anderen Rechner (siehe unten) |
+| `pyusb` | via USB on the same machine (macOS/Linux) |
+| `linux_kernel` | via `/dev/usb/lp*` on the same machine (Linux) |
+| `network` | printer or print server over TCP port 9100 |
+| `agent` | hardware bridge on another machine (see below) |
 
-### Druck-Agent (USB an einem anderen Rechner)
+### Print agent (USB on another machine)
 
-USB lässt sich nicht zwischen Rechnern teilen. Läuft die App z.B. auf Proxmox,
-der Drucker hängt aber weiter am Mac, dann auf dem Mac den Agent starten:
+USB can't be shared between machines. If the app runs e.g. on Proxmox but the
+printer is still attached to the Mac, start the agent on the Mac:
 
 ```sh
 uv run uvicorn agent.main:app --host 0.0.0.0 --port 8020
 ```
 
-Der Agent kennt nur „Bytes auf das Gerät schreiben" — Etikett-Layout und
-Umrechnung bleiben in der Haupt-App, damit beide Wege identische Ausgaben
-erzeugen. Gerät per Umgebungsvariablen konfigurieren:
+The agent only knows how to "write bytes to the device" — label layout and
+conversion stay in the main app, so both paths produce identical output.
+Configure the device via environment variables:
 
 ```sh
 AGENT_PRINTER_IDENTIFIER=usb://0x04f9:0x209b
 AGENT_PRINTER_BACKEND=pyusb
 ```
 
-Prüfen mit `curl http://mac.local:8020/health`.
+Check with `curl http://mac.local:8020/health`.
 
-**Dauerhaft als LaunchAgent**, damit der Agent Abmelden, Absturz und Neustart
-übersteht. launchd kennt kein `~`, deshalb werden die Pfade beim Installieren
-eingesetzt:
+**Permanently, as a LaunchAgent**, so the agent survives logout, crashes and
+reboots. launchd doesn't understand `~`, so the paths are filled in at install
+time:
 
 ```sh
 sed -e "s|__REPO__|$PWD|g" -e "s|__LOGDIR__|$HOME/Library/Logs|g" \
@@ -89,88 +89,88 @@ sed -e "s|__REPO__|$PWD|g" -e "s|__LOGDIR__|$HOME/Library/Logs|g" \
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.gamecooler.agent.plist
 ```
 
-Log: `~/Library/Logs/gamecooler-agent.log`. Nach einer Änderung an der Datei
-oder am Code neu starten:
+Log: `~/Library/Logs/gamecooler-agent.log`. Restart after changing the file
+or the code:
 
 ```sh
 launchctl kickstart -k gui/$(id -u)/local.gamecooler.agent
 ```
 
-Entfernen: `launchctl bootout gui/$(id -u)/local.gamecooler.agent`.
+Remove: `launchctl bootout gui/$(id -u)/local.gamecooler.agent`.
 
-Ein LaunchAgent läuft nur bei angemeldetem Benutzer — nach einem Neustart erst
-ab der Anmeldung.
+A LaunchAgent only runs while the user is logged in — after a reboot, only
+once the user logs in.
 
-### Zustandsverzeichnis (Container/Deployment)
+### State directory (container/deployment)
 
-Standardmäßig liegen `config.yaml` und `data/` im Projektverzeichnis. Mit
-`GAMECOOLER_STATE_DIR` lässt sich das umbiegen — nötig im Container, damit die
-Einstellungen überleben:
+By default, `config.yaml` and `data/` live in the project directory.
+`GAMECOOLER_STATE_DIR` redirects this — required in a container so the
+settings survive:
 
 ```sh
 GAMECOOLER_STATE_DIR=/var/lib/gamecooler uv run uvicorn app.main:app --port 8010
 ```
 
-Wichtig: `config.yaml` und `data/` müssen im **selben** Verzeichnis liegen.
-`save_config` schreibt eine temporäre Datei und benennt sie um; über einen
-einzeln gemounteten Dateipfad schlägt das mit `EBUSY` fehl. Also das
-Verzeichnis mounten, nicht die Datei.
+Important: `config.yaml` and `data/` must be in the **same** directory.
+`save_config` writes a temporary file and renames it; on an individually
+mounted file path this fails with `EBUSY`. So mount the directory, not the
+file.
 
-### QL-800 Hinweise
+### QL-800 notes
 
-- **Editor-Lite-Modus ausschalten**: Editor-Lite-Taste gedrückt halten bis die
-  LED erlischt, sonst schlägt der USB-Rasterdruck fehl.
-- Falls „Resource busy": Drucker aus den macOS-Systemeinstellungen
-  (Drucker & Scanner) entfernen und USB neu einstecken — CUPS blockiert
-  sonst das Gerät.
+- **Turn off Editor Lite mode**: hold the Editor Lite button until the LED
+  goes out, otherwise USB raster printing fails.
+- If you get "Resource busy": remove the printer from macOS System Settings
+  (Printers & Scanners) and replug the USB cable — otherwise CUPS blocks the
+  device.
 
-## Starten
+## Running
 
 ```sh
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-Dann im Browser: http://localhost:8000
+Then open http://localhost:8000 in the browser.
 
-In `config.yaml` steht anfangs `dry_run: true` — Teilstücke werden registriert,
-aber nicht gedruckt. Für echten Druck auf `dry_run: false` stellen.
+`config.yaml` starts with `dry_run: true` — cuts are registered but not
+printed. Set `dry_run: false` for real printing.
 
-## Sprachen
+## Languages
 
-Deutsch und Englisch.
+German and English.
 
-- **Oberfläche:** folgt der Browsersprache; oben rechts lässt sie sich mit
-  DE/EN umschalten (per Cookie gemerkt, also pro Gerät).
-- **Etiketten und Rechnung:** eine eigene Einstellung (Einstellungen →
-  Etikettensprache, `label_language` in `config.yaml`), unabhängig davon, wer
-  druckt — die Packung geht an dieselben Käufer.
-- Eigene Daten (Wildarten, Teilstücke, Zutaten, Namen) werden nicht übersetzt.
+- **UI:** follows the browser language; it can be switched with DE/EN in the
+  top right (remembered via cookie, i.e. per device).
+- **Labels and invoice:** a separate setting (Settings → Label language
+  (Einstellungen → Etikettensprache), `label_language` in `config.yaml`),
+  independent of who prints — the package goes to the same buyers.
+- Your own data (species, cuts, ingredients, names) is not translated.
 
-Neue Texte kommen als `t("Deutscher Text")` in Code und Templates, die
-englische Fassung in `app/i18n_catalog.py`. Prüfen, dass nichts fehlt:
+New strings go into code and templates as `t("Deutscher Text")` — the German
+text is the key — and the English version goes into `app/i18n_catalog.py`.
+Check that nothing is missing:
 
 ```sh
 .venv/bin/python tests/test_i18n.py
 ```
 
-## Buchhaltung
+## Accounting
 
-- `data/registry.json` — alle registrierten Teilstücke
-- `GET /parts.json` — Export über die Webapp
+- `data/registry.json` — all registered cuts
+- `GET /parts.json` — export via the web app
 
-## Betrieb
+## Operations
 
-- [Deployment auf Proxmox](docs/deploy.md) — App in eine LXC, Caddy als
-  TLS-Terminator, Drucker bleibt per Agent am Mac
-- [Autodeploy](docs/autodeploy.md) — ein Push auf `dev` aktualisiert den
-  Test-Container innerhalb von fünf Minuten, mit Rollback bei
-  fehlgeschlagenem Health-Check. `main` bedient dieselbe Mechanik für Prod;
-  dort ist sie noch nicht aktiviert (Branch und Name in
-  `/etc/default/gamecooler-autodeploy` setzen, Timer starten).
+- [Deployment on Proxmox](docs/deploy.md) — app in an LXC, Caddy as TLS
+  terminator, printer stays on the Mac via the agent
+- [Autodeploy](docs/autodeploy.md) — a push to `dev` updates the test
+  container within five minutes, with rollback on a failed health check.
+  `main` uses the same mechanism for prod; it isn't enabled there yet (set
+  branch and name in `/etc/default/gamecooler-autodeploy`, start the timer).
 
-## Geplant
+## Planned
 
-- [Waagen-Anbindung](docs/scale.md) — Gewicht direkt von einer RS-232-Waage
-  übernehmen (Recherche, Waage noch nicht gekauft)
-- `/version`-Endpunkt mit dem laufenden Git-SHA — der Health-Check prüft
-  derzeit nur, *dass* die App antwortet, nicht welcher Commit läuft.
+- [Scale integration](docs/scale.md) — take the weight directly from an RS-232
+  scale (research only, scale not bought yet)
+- `/version` endpoint with the running Git SHA — the health check currently
+  only verifies *that* the app responds, not which commit is running.
