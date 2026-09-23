@@ -610,6 +610,10 @@ def settings_part_save(
     # changed by dragging. A new part lands in the list it was added to.
     existing = sp.parts.get(name)
     defaults.kind = existing.kind if existing else (kind if kind in PART_KINDS else "cut")
+    if defaults.kind != "prep":
+        # Only Zubereitungen have recipes; a Teilstück row doesn't show the choice.
+        defaults.recipe = None
+        defaults.ingredients = ingredients or None
     sp.parts[name] = defaults
     return _settings_redirect(f"„{name}“ ({sp.name}) gespeichert", sp.name)
 
@@ -635,6 +639,10 @@ async def settings_part_order(request: Request):
     for entry, name in zip(layout, names):
         part = sp.parts[name]
         part.kind = entry.get("kind") if entry.get("kind") in PART_KINDS else "cut"
+        if part.kind != "prep":
+            # Moved to Teilstücke: those have no recipe, so the link goes. The
+            # part's own ingredient text stays and is used from now on.
+            part.recipe = None
         reordered[name] = part
     sp.parts = reordered
     save_config(config)

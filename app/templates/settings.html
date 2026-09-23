@@ -79,7 +79,7 @@
   <div class="table-scroll">
   <table class="parts-table">
     <thead>
-      <tr><th></th><th>Name</th><th class="num">€/kg</th><th class="num">Std.-Gewicht (kg)</th><th>Zutaten / Rezept</th><th></th></tr>
+      <tr><th></th><th>Name</th><th class="num">€/kg</th><th class="num">Std.-Gewicht (kg)</th><th>{{ 'Zutaten / Rezept' if kind == 'prep' else 'Zutaten' }}</th><th></th></tr>
     </thead>
     {# empty price = part printed without any price on the label #}
     <tbody class="part-list" data-species="{{ sp.name }}" data-kind="{{ kind }}">
@@ -98,7 +98,8 @@
                              value="{{ p.weight_kg | de(3) if p.weight_kg is not none else '' }}"
                              placeholder="–" form="{{ f }}" style="width:5.5rem; text-align:right;"></td>
       <td class="ingredients-cell">
-        {% if sp.recipes %}
+        {# Rezepte gibt es nur für Zubereitungen — ein Teilstück hat keins. #}
+        {% if kind == 'prep' and sp.recipes %}
         <select name="recipe" form="{{ f }}" class="recipe-link" title="Rezept verknüpfen" data-species="{{ sp.name }}">
           <option value="">— eigener Text —</option>
           {% for r in sp.recipes %}<option {% if r.name == p.recipe %}selected{% endif %}>{{ r.name }}</option>{% endfor %}
