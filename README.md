@@ -135,6 +135,24 @@ Dann im Browser: http://localhost:8000
 In `config.yaml` steht anfangs `dry_run: true` — Teilstücke werden registriert,
 aber nicht gedruckt. Für echten Druck auf `dry_run: false` stellen.
 
+## Sprachen
+
+Deutsch und Englisch.
+
+- **Oberfläche:** folgt der Browsersprache; oben rechts lässt sie sich mit
+  DE/EN umschalten (per Cookie gemerkt, also pro Gerät).
+- **Etiketten und Rechnung:** eine eigene Einstellung (Einstellungen →
+  Etikettensprache, `label_language` in `config.yaml`), unabhängig davon, wer
+  druckt — die Packung geht an dieselben Käufer.
+- Eigene Daten (Wildarten, Teilstücke, Zutaten, Namen) werden nicht übersetzt.
+
+Neue Texte kommen als `t("Deutscher Text")` in Code und Templates, die
+englische Fassung in `app/i18n_catalog.py`. Prüfen, dass nichts fehlt:
+
+```sh
+.venv/bin/python tests/test_i18n.py
+```
+
 ## Buchhaltung
 
 - `data/registry.json` — alle registrierten Teilstücke

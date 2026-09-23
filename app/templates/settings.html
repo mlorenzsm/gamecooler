@@ -3,16 +3,16 @@
 
 {% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
 
-<h2>⚙️ Einstellungen</h2>
+<h2>⚙️ {{ t("Einstellungen") }}</h2>
 
-<h3>🧑‍🌾 Jäger</h3>
+<h3>🧑‍🌾 {{ t("Jäger") }}</h3>
 {% for h in config.hunters %}
 <form method="post" action="/settings/hunters" id="hunter-{{ loop.index }}"></form>
 {% endfor %}
 <form method="post" action="/settings/hunters" id="hunter-new"></form>
 <div class="table-scroll">
 <table>
-  <tr><th style="width:18%">Name</th><th style="width:34%">Adresse</th><th style="width:18%">Telefon</th><th>E-Mail</th><th></th></tr>
+  <tr><th style="width:18%">{{ t("Name") }}</th><th style="width:34%">{{ t("Adresse") }}</th><th style="width:18%">{{ t("Telefon") }}</th><th>{{ t("E-Mail") }}</th><th></th></tr>
   {% for h in config.hunters %}
   {% set f = 'hunter-' ~ loop.index %}
   <tr>
@@ -24,27 +24,39 @@
     <td><input name="phone" value="{{ h.phone }}" form="{{ f }}" style="width:100%; min-width:7rem"></td>
     <td><input name="email" value="{{ h.email }}" form="{{ f }}" style="width:100%; min-width:8rem"></td>
     <td class="row-actions">
-      <button class="small" type="submit" form="{{ f }}" title="Speichern" aria-label="Speichern">💾</button>
+      <button class="small" type="submit" form="{{ f }}" title="{{ t('Speichern') }}" aria-label="{{ t('Speichern') }}">💾</button>
       <button class="small" type="submit" form="{{ f }}" formaction="/settings/hunters/delete" formnovalidate
-              title="Löschen" aria-label="Löschen"
-              onclick="return confirm('Jäger „{{ h.name }}“ löschen?')">🗑️</button>
+              title="{{ t('Löschen') }}" aria-label="{{ t('Löschen') }}"
+              onclick='return confirm({{ t("Jäger „{name}“ löschen?", name=h.name) | tojson }})'>🗑️</button>
     </td>
   </tr>
   {% endfor %}
   <tr>
-    <td><input name="name" required placeholder="Neuer Jäger" form="hunter-new" style="width:100%; min-width:7rem"></td>
-    <td><input name="address" required placeholder="Straße Nr., PLZ Ort" form="hunter-new" style="width:100%; min-width:9rem"></td>
-    <td><input name="phone" placeholder="Telefon" form="hunter-new" style="width:100%; min-width:7rem"></td>
-    <td><input name="email" placeholder="E-Mail" form="hunter-new" style="width:100%; min-width:8rem"></td>
-    <td class="row-actions"><button class="small" type="submit" form="hunter-new">+ Hinzufügen</button></td>
+    <td><input name="name" required placeholder="{{ t('Neuer Jäger') }}" form="hunter-new" style="width:100%; min-width:7rem"></td>
+    <td><input name="address" required placeholder="{{ t('Straße Nr., PLZ Ort') }}" form="hunter-new" style="width:100%; min-width:9rem"></td>
+    <td><input name="phone" placeholder="{{ t('Telefon') }}" form="hunter-new" style="width:100%; min-width:7rem"></td>
+    <td><input name="email" placeholder="{{ t('E-Mail') }}" form="hunter-new" style="width:100%; min-width:8rem"></td>
+    <td class="row-actions"><button class="small" type="submit" form="hunter-new">+ {{ t("Hinzufügen") }}</button></td>
   </tr>
 </table>
 </div>
 
-<h3 style="margin-top:2rem;">🦌 Wildarten, Teilstücke &amp; Vorgaben</h3>
+<h3 style="margin-top:2rem;">🏷️ {{ t("Etikettensprache") }}</h3>
 <p style="font-size:0.85rem; color:#888; margin-top:0;">
-  Jede Wildart hat ihre eigenen Teilstücke, Preise und Vorgaben. Beim Drucken
-  stehen nur die Teilstücke der gewählten Wildart zur Auswahl.
+  {{ t("Etiketten und Rechnungen werden in dieser Sprache gedruckt — unabhängig von der Sprache der Oberfläche.") }}
+</p>
+<form method="post" action="/settings/label-language" class="label-language">
+  <select name="label_language" aria-label="{{ t('Etikettensprache') }}">
+    {% for code, language in LANGUAGES.items() %}
+    <option value="{{ code }}" {% if code == config.label_language %}selected{% endif %}>{{ language }}</option>
+    {% endfor %}
+  </select>
+  <button class="small" type="submit">💾 {{ t("Speichern") }}</button>
+</form>
+
+<h3 style="margin-top:2rem;">🦌 {{ t("Wildarten, Teilstücke & Vorgaben") }}</h3>
+<p style="font-size:0.85rem; color:#888; margin-top:0;">
+  {{ t("Jede Wildart hat ihre eigenen Teilstücke, Preise und Vorgaben. Beim Drucken stehen nur die Teilstücke der gewählten Wildart zur Auswahl.") }}
 </p>
 
 {% for sp in config.species %}
@@ -53,7 +65,7 @@
   <summary>
     <b>{{ sp.name }}</b>
     {% set g = sp.parts_by_kind() %}
-    <span class="species-meta">{{ g.cut | length }} Teilstücke · {{ g.prep | length }} Zubereitungen · {{ sp.presets | length }} Vorgaben</span>
+    <span class="species-meta" data-presets="{{ sp.presets | length }}">{{ t("{cuts} Teilstücke · {preps} Zubereitungen · {presets} Vorgaben", cuts=g.cut | length, preps=g.prep | length, presets=sp.presets | length) }}</span>
   </summary>
 
   {# --- Teilstücke und Zubereitungen dieser Wildart ---
@@ -75,18 +87,18 @@
     <input type="hidden" name="species" value="{{ sp.name }}">
     <input type="hidden" name="kind" value="{{ kind }}">
   </form>
-  <h4>{{ '🥩' if kind == 'cut' else '🌭' }} {{ heading }}</h4>
+  <h4>{{ '🥩' if kind == 'cut' else '🌭' }} {{ t(heading) }}</h4>
   <div class="table-scroll">
   <table class="parts-table">
     <thead>
-      <tr><th></th><th>Name</th><th class="num">€/kg</th><th class="num">Std.-Gewicht (kg)</th><th>{{ 'Zutaten / Rezept' if kind == 'prep' else 'Zutaten' }}</th><th></th></tr>
+      <tr><th></th><th>{{ t('Name') }}</th><th class="num">€/kg</th><th class="num">{{ t('Std.-Gewicht (kg)') }}</th><th>{{ t('Zutaten / Rezept') if kind == 'prep' else t('Zutaten') }}</th><th></th></tr>
     </thead>
     {# empty price = part printed without any price on the label #}
     <tbody class="part-list" data-species="{{ sp.name }}" data-kind="{{ kind }}">
     {% for name, p in group.items() %}
     {% set f = 'part-' ~ si ~ '-' ~ part_index[name] %}
     <tr class="part-row" data-name="{{ name }}">
-      <td class="drag-handle" title="Ziehen, um zu verschieben">⠿</td>
+      <td class="drag-handle" title="{{ t('Ziehen, um zu verschieben') }}">⠿</td>
       <td>
         <input type="hidden" name="original_name" value="{{ name }}" form="{{ f }}">
         <input name="name" required value="{{ name }}" form="{{ f }}" style="width:100%; min-width:8rem">
@@ -100,8 +112,8 @@
       <td class="ingredients-cell">
         {# Rezepte gibt es nur für Zubereitungen — ein Teilstück hat keins. #}
         {% if kind == 'prep' and sp.recipes %}
-        <select name="recipe" form="{{ f }}" class="recipe-link" title="Rezept verknüpfen" data-species="{{ sp.name }}">
-          <option value="">— eigener Text —</option>
+        <select name="recipe" form="{{ f }}" class="recipe-link" title="{{ t('Rezept verknüpfen') }}" data-species="{{ sp.name }}">
+          <option value="">— {{ t("eigener Text") }} —</option>
           {% for r in sp.recipes %}<option {% if r.name == p.recipe %}selected{% endif %}>{{ r.name }}</option>{% endfor %}
         </select>
         {% endif %}
@@ -112,28 +124,28 @@
                   {% if sp.find_recipe(p.recipe) %}readonly{% endif %}>{{ sp.ingredients_for(p) or '' }}</textarea>
       </td>
       <td class="row-actions">
-        <button class="small" type="submit" form="{{ f }}" title="Speichern" aria-label="Speichern">💾</button>
+        <button class="small" type="submit" form="{{ f }}" title="{{ t('Speichern') }}" aria-label="{{ t('Speichern') }}">💾</button>
         <button class="small" type="submit" form="{{ f }}" formaction="/settings/parts/delete" formnovalidate
-                title="Löschen" aria-label="Löschen"
-                onclick="return confirm('„{{ name }}“ bei {{ sp.name }} löschen?')">🗑️</button>
+                title="{{ t('Löschen') }}" aria-label="{{ t('Löschen') }}"
+                onclick='return confirm({{ t("„{name}“ bei {species} löschen?", name=name, species=sp.name) | tojson }})'>🗑️</button>
       </td>
     </tr>
     {% endfor %}
     <tr class="drop-hint"{% if group %} hidden{% endif %}>
-      <td colspan="6">Noch keine {{ heading }} — hierher ziehen oder unten hinzufügen.</td>
+      <td colspan="6">{{ t('Noch keine Teilstücke — hierher ziehen oder unten hinzufügen.') if kind == 'cut' else t('Noch keine Zubereitungen — hierher ziehen oder unten hinzufügen.') }}</td>
     </tr>
     </tbody>
     <tfoot>
     <tr>
       <td></td>
-      <td><input name="name" required placeholder="{{ 'Neues Teilstück' if kind == 'cut' else 'Neue Zubereitung' }}" form="part-{{ si }}-new-{{ kind }}" style="width:100%; min-width:8rem"></td>
+      <td><input name="name" required placeholder="{{ t('Neues Teilstück') if kind == 'cut' else t('Neue Zubereitung') }}" form="part-{{ si }}-new-{{ kind }}" style="width:100%; min-width:8rem"></td>
       <td class="num"><input name="price" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
                              placeholder="–" form="part-{{ si }}-new-{{ kind }}" style="width:5.5rem; text-align:right;"></td>
       <td class="num"><input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
-                             placeholder="optional" form="part-{{ si }}-new-{{ kind }}" style="width:5.5rem; text-align:right;"></td>
-      <td><textarea name="ingredients" rows="1" placeholder="optional" form="part-{{ si }}-new-{{ kind }}"
+                             placeholder="{{ t('optional') }}" form="part-{{ si }}-new-{{ kind }}" style="width:5.5rem; text-align:right;"></td>
+      <td><textarea name="ingredients" rows="1" placeholder="{{ t('optional') }}" form="part-{{ si }}-new-{{ kind }}"
                     style="width:100%; min-width:9rem; min-height:2.2rem; resize:vertical;"></textarea></td>
-      <td class="row-actions"><button class="small" type="submit" form="part-{{ si }}-new-{{ kind }}">+ Hinzufügen</button></td>
+      <td class="row-actions"><button class="small" type="submit" form="part-{{ si }}-new-{{ kind }}">+ {{ t("Hinzufügen") }}</button></td>
     </tr>
     </tfoot>
   </table>
@@ -149,7 +161,7 @@
   <form method="post" action="/settings/presets" id="preset-{{ si }}-new">
     <input type="hidden" name="species" value="{{ sp.name }}">
   </form>
-  <h4>📋 Vorgaben (Sammeldruck)</h4>
+  <h4>📋 {{ t("Vorgaben (Sammeldruck)") }}</h4>
   <div class="table-scroll">
   <table class="presets-table">
     {% for preset in sp.presets %}
@@ -161,53 +173,55 @@
       </td>
       <td>
         <textarea name="items_text" required rows="2" style="width:100%; min-height:2.6rem; resize:vertical;"
-                  placeholder="z. B. 2x Keule, 1x Rücken, 6x Hackfleisch" form="{{ f }}">{{ preset | preset_text }}</textarea>
+                  placeholder="{{ t('z. B. 2x Keule, 1x Rücken, 6x Hackfleisch') }}" form="{{ f }}">{{ preset | preset_text }}</textarea>
       </td>
       <td class="row-actions">
-        <button class="small" type="submit" form="{{ f }}" title="Speichern" aria-label="Speichern">💾</button>
+        <button class="small" type="submit" form="{{ f }}" title="{{ t('Speichern') }}" aria-label="{{ t('Speichern') }}">💾</button>
         <button class="small" type="submit" form="{{ f }}" formaction="/settings/presets/delete" formnovalidate
-                title="Löschen" aria-label="Löschen"
-                onclick="return confirm('Vorgabe „{{ preset.name }}“ bei {{ sp.name }} löschen?')">🗑️</button>
+                title="{{ t('Löschen') }}" aria-label="{{ t('Löschen') }}"
+                onclick='return confirm({{ t("Vorgabe „{name}“ bei {species} löschen?", name=preset.name, species=sp.name) | tojson }})'>🗑️</button>
       </td>
     </tr>
     {% endfor %}
     <tr>
-      <td><input name="name" required placeholder="Name, z. B. {{ sp.name }} komplett" form="preset-{{ si }}-new" style="width:100%; min-width:8rem"></td>
+      <td><input name="name" required placeholder="{{ t('Name, z. B. {species} komplett', species=sp.name) }}" form="preset-{{ si }}-new" style="width:100%; min-width:8rem"></td>
       <td>
         <textarea name="items_text" required rows="2" style="width:100%; min-height:2.6rem; resize:vertical;"
-                  placeholder="z. B. 2x Keule, 1x Rücken, 6x Hackfleisch" form="preset-{{ si }}-new"></textarea>
+                  placeholder="{{ t('z. B. 2x Keule, 1x Rücken, 6x Hackfleisch') }}" form="preset-{{ si }}-new"></textarea>
       </td>
-      <td class="row-actions"><button class="small" type="submit" form="preset-{{ si }}-new">+ Hinzufügen</button></td>
+      <td class="row-actions"><button class="small" type="submit" form="preset-{{ si }}-new">+ {{ t("Hinzufügen") }}</button></td>
     </tr>
   </table>
   </div>
   <p style="font-size:0.8rem; color:#888; margin-top:0.3rem;">
-    Format: <code>2x Keule, 1x Rücken</code> — durch Kommas getrennt, nur Teilstücke von {{ sp.name }}.
+    {%- set example %}<code>{{ t("2x Keule, 1x Rücken") }}</code>{% endset %}
+    {# example is Markup, the species name gets escaped here — so the result may be output as safe #}
+    {{ t("Format: {example} — durch Kommas getrennt, nur Teilstücke von {species}.", example=example, species=sp.name | e) | safe }}
   </p>
 
   <form method="post" action="/settings/species/delete" style="margin-top:1rem;"
-        onsubmit="return confirm('Wildart „{{ sp.name }}“ mit allen Teilstücken und Vorgaben löschen?\n\nBestehende Etiketten und Bestand bleiben erhalten.')">
+        onsubmit='return confirm({{ t("Wildart „{name}“ mit allen Teilstücken und Vorgaben löschen?\n\nBestehende Etiketten und Bestand bleiben erhalten.", name=sp.name) | tojson }})'>
     <input type="hidden" name="name" value="{{ sp.name }}">
-    <button class="small" type="submit">🗑️ Wildart „{{ sp.name }}“ löschen</button>
+    <button class="small" type="submit">🗑️ {{ t("Wildart „{name}“ löschen", name=sp.name) }}</button>
   </form>
 </details>
 {% endfor %}
 
 <form method="post" action="/settings/species" class="species-new">
-  <input name="name" required placeholder="Neue Wildart">
+  <input name="name" required placeholder="{{ t('Neue Wildart') }}">
   <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.9rem; color:#666;">
-    Teilstücke übernehmen von
+    {{ t("Teilstücke übernehmen von") }}
     <select name="copy_from">
-      <option value="">— keine —</option>
+      <option value="">— {{ t("keine") }} —</option>
       {% for sp in config.species %}<option>{{ sp.name }}</option>{% endfor %}
     </select>
   </label>
-  <button class="small" type="submit">+ Wildart hinzufügen</button>
+  <button class="small" type="submit">+ {{ t("Wildart hinzufügen") }}</button>
 </form>
 
 <p style="margin-top:1.5rem; font-size:0.85rem; color:#888;">
-  Änderungen werden direkt in die <code>config.yaml</code> geschrieben.
-  Bestehende Etiketten und Bestandseinträge bleiben unverändert.
+  {{ t("Änderungen werden direkt in die {file} geschrieben.", file="<code>config.yaml</code>" | safe) | safe }}
+  {{ t("Bestehende Etiketten und Bestandseinträge bleiben unverändert.") }}
 </p>
 
 <script>
@@ -239,6 +253,10 @@ document.addEventListener('change', e => {
 // Rows only move within their own species; on drop the whole new layout of
 // that species is saved in one request.
 (function () {
+  const T = {{ {
+    "Speichern fehlgeschlagen": t("Speichern fehlgeschlagen"),
+    "{cuts} Teilstücke · {preps} Zubereitungen · {presets} Vorgaben": t("{cuts} Teilstücke · {preps} Zubereitungen · {presets} Vorgaben"),
+  } | tojson }};
   let drag = null;   // { row, species, fromList, fromNext, placeholder, offsetY }
 
   function listUnder(x, y, species) {
@@ -335,7 +353,7 @@ document.addEventListener('change', e => {
         body: JSON.stringify({ species: d.species, parts: layout(d.species) }),
       });
       const data = await resp.json();
-      if (!data.ok) throw new Error(data.error || 'Speichern fehlgeschlagen');
+      if (!data.ok) throw new Error(data.error || T["Speichern fehlgeschlagen"]);
       updateCounts(d.species);
     } catch (err) {
       // put the row back so the page matches what is saved
@@ -351,8 +369,8 @@ document.addEventListener('change', e => {
     const block = document.querySelector(`.part-list[data-species="${CSS.escape(species)}"]`).closest('.species-block');
     const n = kind => block.querySelectorAll(`.part-list[data-kind="${kind}"] .part-row`).length;
     const meta = block.querySelector('.species-meta');
-    meta.textContent = meta.textContent.replace(/^\d+ Teilstücke · \d+ Zubereitungen/,
-      `${n('cut')} Teilstücke · ${n('prep')} Zubereitungen`);
+    meta.textContent = T["{cuts} Teilstücke · {preps} Zubereitungen · {presets} Vorgaben"]
+      .replace("{cuts}", n('cut')).replace("{preps}", n('prep')).replace("{presets}", meta.dataset.presets);
   }
 
   document.addEventListener('pointerup', () => { if (drag) save(finish(false)); });
@@ -372,6 +390,7 @@ document.addEventListener('change', e => {
   td.ingredients-cell textarea[readonly] { background: #f7f7f2; color: #555; }
   table.presets-table td:first-child { width: 28%; }
   td.row-actions button + button { margin-left: 0.3rem; }
+  .label-language { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
   .species-new { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.6rem; }
   .drag-handle { cursor: grab; color: #aaa; font-size: 1.2rem; padding: 0 0.4rem; user-select: none; touch-action: none; }
   .drag-handle:hover { color: #555; }

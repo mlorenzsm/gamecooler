@@ -2,32 +2,32 @@
 {% block content %}
 
 {% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
-{% if config.dry_run %}<div class="dry-run">Testmodus aktiv (dry_run) – es wird nicht gedruckt.</div>{% endif %}
+{% if config.dry_run %}<div class="dry-run">{{ t("Testmodus aktiv (dry_run) – es wird nicht gedruckt.") }}</div>{% endif %}
 
 <form class="part-form" method="post" action="/parts" id="part-form" onsubmit="return confirmPrint()">
-  <label>Jäger
+  <label>{{ t("Jäger") }}
     <select name="hunter" required>
       {% for h in config.hunters %}<option>{{ h.name }}</option>{% endfor %}
     </select>
   </label>
-  <label>Wildart
+  <label>{{ t("Wildart") }}
     <select name="species" required id="species-select">
       {% for s in config.species %}<option>{{ s.name }}</option>{% endfor %}
     </select>
   </label>
-  <label>Teilstück
+  <label>{{ t("Teilstück") }}
     <select name="part" required id="part-select">
 
     </select>
   </label>
-  <label>Gewicht (kg) oder Stückzahl <span style="font-weight:400; color:#888;">(z. B. 1,25 oder 5x · leer = keine Angabe auf dem Etikett)</span>
-    <input name="weight_kg" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]" placeholder="1,25 oder 5x" id="weight-input">
+  <label>{{ t("Gewicht (kg) oder Stückzahl") }} <span style="font-weight:400; color:#888;">({{ t("z. B. 1,25 oder 5x · leer = keine Angabe auf dem Etikett") }})</span>
+    <input name="weight_kg" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]" placeholder="{{ t("1,25 oder 5x") }}" id="weight-input">
   </label>
-  <label><span id="price-label">Preis/kg (€)</span> <span style="font-weight:400; color:#888;">(leer = kein Preis auf dem Etikett)</span>
-    <input name="price_per_kg" inputmode="decimal" enterkeyhint="done" pattern="[0-9]+([.,][0-9]+)?" placeholder="12,50" id="price-input">
+  <label><span id="price-label">{{ t("Preis/kg (€)") }}</span> <span style="font-weight:400; color:#888;">({{ t("leer = kein Preis auf dem Etikett") }})</span>
+    <input name="price_per_kg" inputmode="decimal" enterkeyhint="done" pattern="[0-9]+([.,][0-9]+)?" placeholder="{{ t("12,50") }}" id="price-input">
   </label>
   {% if config.printers | length > 1 %}
-  <label>Drucker
+  <label>{{ t("Drucker") }}
     <select name="printer">
       {% for p in config.printers %}
       <option value="{{ p.name }}" {% if p.name == config.default_printer %}selected{% endif %}>{{ p.name }}</option>
@@ -35,15 +35,26 @@
     </select>
   </label>
   {% endif %}
-  <button class="print" type="submit">2 Etiketten drucken &amp; registrieren</button>
+  <button class="print" type="submit">{{ t("2 Etiketten drucken & registrieren") }}</button>
 </form>
 
 <div class="preview-imgs" id="preview">
-  <img id="preview-info" alt="Info-Etikett">
-  <img id="preview-qr" alt="QR-Etikett">
+  <img id="preview-info" alt="{{ t("Info-Etikett") }}">
+  <img id="preview-qr" alt="{{ t("QR-Etikett") }}">
 </div>
 
 <script>
+const T = {{ {
+  "Festpreis (€)": t("Festpreis (€)"),
+  "Preis/kg (€)": t("Preis/kg (€)"),
+  "ohne Gewicht und Preis": t("ohne Gewicht und Preis"),
+  "ohne Preis": t("ohne Preis"),
+  "{n} Stk.": t("{n} Stk."),
+  "zu {price} € Festpreis": t("zu {price} € Festpreis"),
+  "zu {price} €/kg": t("zu {price} €/kg"),
+  "2 Etiketten drucken?": t("2 Etiketten drucken?"),
+} | tojson }};
+const DEC = {{ decimal_separator() | tojson }};
 const SPECIES = {{ config.species | species_json | tojson }};
 const speciesSelect = document.getElementById('species-select');
 const partSelect = document.getElementById('part-select');
@@ -59,8 +70,8 @@ const priceInput = document.getElementById('price-input');
 const weightInput = document.getElementById('weight-input');
 function fillDefaults() {
   const p = partDefaults();
-  priceInput.value = p.price != null ? p.price.toFixed(2).replace('.', ',') : '';
-  weightInput.value = p.weight_kg != null ? p.weight_kg.toFixed(3).replace('.', ',') : '';
+  priceInput.value = p.price != null ? p.price.toFixed(2).replace('.', DEC) : '';
+  weightInput.value = p.weight_kg != null ? p.weight_kg.toFixed(3).replace('.', DEC) : '';
 }
 partSelect.addEventListener('change', () => { fillDefaults(); updatePriceLabel(); });
 speciesSelect.addEventListener('change', () => { fillParts(); fillDefaults(); updatePriceLabel(); });
@@ -72,7 +83,7 @@ fillDefaults();
 const PIECES = /^\s*(\d+)\s*x\s*$/i;
 function updatePriceLabel() {
   document.getElementById('price-label').textContent =
-    PIECES.test(weightInput.value) ? 'Festpreis (€)' : 'Preis/kg (€)';
+    PIECES.test(weightInput.value) ? T['Festpreis (€)'] : T['Preis/kg (€)'];
 }
 weightInput.addEventListener('input', updatePriceLabel);
 updatePriceLabel();
@@ -82,11 +93,11 @@ function confirmPrint() {
   const d = new FormData(form);
   const weight = d.get('weight_kg');
   const price = d.get('price_per_kg');
-  let details = 'ohne Gewicht und Preis';
+  let details = T['ohne Gewicht und Preis'];
   const pieces = (weight || '').match(PIECES);
-  if (pieces) details = `${pieces[1]} Stk. ` + (price ? `zu ${price} € Festpreis` : 'ohne Preis');
-  else if (weight) details = `${weight} kg ` + (price ? `zu ${price} €/kg` : 'ohne Preis');
-  return confirm(`2 Etiketten drucken?\n\n${d.get('species')} – ${d.get('part')}, ${details}`);
+  if (pieces) details = `${T['{n} Stk.'].replace('{n}', pieces[1])} ` + (price ? T['zu {price} € Festpreis'].replace('{price}', price) : T['ohne Preis']);
+  else if (weight) details = `${weight} kg ` + (price ? T['zu {price} €/kg'].replace('{price}', price) : T['ohne Preis']);
+  return confirm(`${T['2 Etiketten drucken?']}\n\n${d.get('species')} – ${d.get('part')}, ${details}`);
 }
 
 function showPreview() {

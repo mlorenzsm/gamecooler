@@ -2,31 +2,31 @@
 {% block content %}
 
 {% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
-{% if config.dry_run %}<div class="dry-run">Testmodus aktiv (dry_run) – es wird nicht gedruckt.</div>{% endif %}
+{% if config.dry_run %}<div class="dry-run">{{ t("Testmodus aktiv (dry_run) – es wird nicht gedruckt.") }}</div>{% endif %}
 
-<h2>🖨️ Sammeldruck</h2>
+<h2>🖨️ {{ t("Sammeldruck") }}</h2>
 
 {# Die Vorgaben gehören zur Wildart; die Liste wird per Script gefüllt. #}
 <div class="preset-bar" id="preset-bar">
-  <label for="preset-select">Vorgabe</label>
+  <label for="preset-select">{{ t("Vorgabe") }}</label>
   <select id="preset-select"></select>
-  <button type="button" id="preset-apply">Übernehmen</button>
+  <button type="button" id="preset-apply">{{ t("Übernehmen") }}</button>
 </div>
 
 <form method="post" action="/bulk" id="bulk-form" onsubmit="return confirmBulkPrint()">
   <div class="part-form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin-bottom: 1rem;">
-    <label style="display:flex; flex-direction:column; gap:0.3rem;">Jäger
+    <label style="display:flex; flex-direction:column; gap:0.3rem;">{{ t("Jäger") }}
       <select name="hunter" required>
         {% for h in config.hunters %}<option>{{ h.name }}</option>{% endfor %}
       </select>
     </label>
-    <label style="display:flex; flex-direction:column; gap:0.3rem;">Wildart
+    <label style="display:flex; flex-direction:column; gap:0.3rem;">{{ t("Wildart") }}
       <select name="species" required id="species-select">
         {% for s in config.species %}<option>{{ s.name }}</option>{% endfor %}
       </select>
     </label>
     {% if config.printers | length > 1 %}
-    <label style="display:flex; flex-direction:column; gap:0.3rem;">Drucker
+    <label style="display:flex; flex-direction:column; gap:0.3rem;">{{ t("Drucker") }}
       <select name="printer">
         {% for p in config.printers %}
         <option value="{{ p.name }}" {% if p.name == config.default_printer %}selected{% endif %}>{{ p.name }}</option>
@@ -38,17 +38,39 @@
 
   <table id="rows" class="responsive">
     <tr>
-      <th>Anzahl</th><th>Teilstück</th><th>Gewicht/Stück (kg) oder Stückzahl (5x)</th><th>Preis/kg bzw. Festpreis (€, leer = Standard)</th><th>kein Preis</th><th></th>
+      <th>{{ t("Anzahl") }}</th><th>{{ t("Teilstück") }}</th><th>{{ t("Gewicht/Stück (kg) oder Stückzahl (5x)") }}</th><th>{{ t("Preis/kg bzw. Festpreis (€, leer = Standard)") }}</th><th>{{ t("kein Preis") }}</th><th></th>
     </tr>
   </table>
   <p>
-    <button type="button" onclick="addRow()">+ Zeile</button>
+    <button type="button" onclick="addRow()">+ {{ t("Zeile") }}</button>
   </p>
   <p id="summary"></p>
-  <button class="print sticky-print" type="submit">Alle Etiketten drucken &amp; registrieren</button>
+  <button class="print sticky-print" type="submit">{{ t("Alle Etiketten drucken & registrieren") }}</button>
 </form>
 
 <script>
+const T = {{ {
+  "kein Preis": t("kein Preis"),
+  "Anzahl": t("Anzahl"),
+  "Teilstück": t("Teilstück"),
+  "Gewicht/Stück (kg) oder 5x": t("Gewicht/Stück (kg) oder 5x"),
+  "0,4 / 5x": t("0,4 / 5x"),
+  "Preis/kg bzw. Festpreis (€)": t("Preis/kg bzw. Festpreis (€)"),
+  "Kein Preis auf dem Etikett": t("Kein Preis auf dem Etikett"),
+  "Zeile entfernen": t("Zeile entfernen"),
+  "entfernen": t("entfernen"),
+  "Drucken?": t("Drucken?"),
+  "Wirklich drucken?": t("Wirklich drucken?"),
+  "{n} ohne Gewicht": t("{n} ohne Gewicht"),
+  "{n} ohne Preis": t("{n} ohne Preis"),
+  "{n} Teilstücke": t("{n} Teilstücke"),
+  "{labels} Etiketten, Gesamtwert {total} €": t("{labels} Etiketten, Gesamtwert {total} €"),
+  "— Auswahl leeren —": t("— Auswahl leeren —"),
+  "Wildart wechseln? Die Zeilen werden für die neue Wildart neu angelegt.": t("Wildart wechseln? Die Zeilen werden für die neue Wildart neu angelegt."),
+  "Alle Zeilen löschen?": t("Alle Zeilen löschen?"),
+  "Vorgabe „{name}“ übernehmen?": t("Vorgabe „{name}“ übernehmen?"),
+} | tojson }};
+const DEC = {{ decimal_separator() | tojson }};
 const SPECIES = {{ config.species | species_json | tojson }};
 const speciesSelect = document.getElementById('species-select');
 // Parts and presets belong to the selected species.
@@ -57,12 +79,12 @@ function currentPresets() { return SPECIES[speciesSelect.value]?.presets || {}; 
 
 function defaultWeight(part) {
   const w = currentParts()[part]?.weight_kg;
-  return w != null ? w.toFixed(3).replace('.', ',') : '';
+  return w != null ? w.toFixed(3).replace('.', DEC) : '';
 }
 
 function pricePlaceholder(part) {
   const p = currentParts()[part]?.price;
-  return p != null ? fmt(p) : 'kein Preis';
+  return p != null ? fmt(p) : T['kein Preis'];
 }
 
 function addRow(item = { part: null, count: 1 }) {
@@ -78,15 +100,15 @@ function addRow(item = { part: null, count: 1 }) {
   // Telefon (siehe table.responsive in base.html) — dort ist die Kopfzeile
   // ausgeblendet, also muss jede Zelle ihren eigenen Titel mitbringen.
   row.innerHTML = `
-    <td data-label="Anzahl"><input name="count" type="number" min="1" value="${item.count}" required style="width:4.5rem"></td>
-    <td data-label="Teilstück"><select name="part" required></select></td>
-    <td data-label="Gewicht/Stück (kg) oder 5x"><input name="weight_kg" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]" placeholder="0,4 / 5x" value="${defaultWeight(item.part || firstPart)}" style="width:7rem"></td>
-    <td data-label="Preis/kg bzw. Festpreis (€)"><input name="price_per_kg" inputmode="decimal" enterkeyhint="done" pattern="[0-9]+([.,][0-9]+)?" placeholder="${pricePlaceholder(item.part || firstPart)}" style="width:7rem"></td>
-    <td data-label="kein Preis" style="text-align:center;">
-      <input type="checkbox" class="no-price" title="Kein Preis auf dem Etikett">
+    <td data-label="${T['Anzahl']}"><input name="count" type="number" min="1" value="${item.count}" required style="width:4.5rem"></td>
+    <td data-label="${T['Teilstück']}"><select name="part" required></select></td>
+    <td data-label="${T['Gewicht/Stück (kg) oder 5x']}"><input name="weight_kg" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]" placeholder="${T['0,4 / 5x']}" value="${defaultWeight(item.part || firstPart)}" style="width:7rem"></td>
+    <td data-label="${T['Preis/kg bzw. Festpreis (€)']}"><input name="price_per_kg" inputmode="decimal" enterkeyhint="done" pattern="[0-9]+([.,][0-9]+)?" placeholder="${escapeHtml(pricePlaceholder(item.part || firstPart))}" style="width:7rem"></td>
+    <td data-label="${T['kein Preis']}" style="text-align:center;">
+      <input type="checkbox" class="no-price" title="${T['Kein Preis auf dem Etikett']}">
       <input type="hidden" name="no_price" value="">
     </td>
-    <td data-label=""><button type="button" class="small" title="Zeile entfernen" aria-label="Zeile entfernen" onclick="this.closest('tr').remove(); updateSummary()">🗑️ entfernen</button></td>
+    <td data-label=""><button type="button" class="small" title="${T['Zeile entfernen']}" aria-label="${T['Zeile entfernen']}" onclick="this.closest('tr').remove(); updateSummary()">🗑️ ${T['entfernen']}</button></td>
   `;
   const partSelect = row.querySelector('select[name=part]');
   fillPartSelect(partSelect, PARTS, unknown);
@@ -107,7 +129,7 @@ function addRow(item = { part: null, count: 1 }) {
   updateSummary();
 }
 
-function fmt(n) { return n.toFixed(2).replace('.', ','); }
+function fmt(n) { return n.toFixed(2).replace('.', DEC); }
 function num(s) { return parseFloat((s || '').replace(',', '.')); }
 
 const PIECES = /^\s*(\d+)\s*x\s*$/i;
@@ -129,8 +151,8 @@ function rowPrice(row) {
 function confirmBulkPrint() {
   renumberNoPrice();
   const summary = document.getElementById('summary').textContent;
-  if (!summary) return confirm('Drucken?');
-  return confirm(`Wirklich drucken?\n\n${summary}`);
+  if (!summary) return confirm(T['Drucken?']);
+  return confirm(`${T['Wirklich drucken?']}\n\n${summary}`);
 }
 
 function updateSummary() {
@@ -152,11 +174,11 @@ function updateSummary() {
   }
   const parts = labels / 2;
   const notes = [];
-  if (unweighed) notes.push(`${unweighed} ohne Gewicht`);
-  if (unpriced) notes.push(`${unpriced} ohne Preis`);
-  const partsText = `${parts} Teilstücke` + (notes.length ? ` (${notes.join(', ')})` : '');
+  if (unweighed) notes.push(T['{n} ohne Gewicht'].replace('{n}', unweighed));
+  if (unpriced) notes.push(T['{n} ohne Preis'].replace('{n}', unpriced));
+  const partsText = T['{n} Teilstücke'].replace('{n}', parts) + (notes.length ? ` (${notes.join(', ')})` : '');
   document.getElementById('summary').textContent =
-    labels ? `${partsText} → ${labels} Etiketten, Gesamtwert ${fmt(total)} €` : '';
+    labels ? `${partsText} → ` + T['{labels} Etiketten, Gesamtwert {total} €'].replace('{labels}', labels).replace('{total}', fmt(total)) : '';
 }
 
 // the backend matches no_price entries to rows by position in the lists;
@@ -179,7 +201,7 @@ const presetApply = document.getElementById('preset-apply');
 function fillPresets() {
   const names = Object.keys(currentPresets());
   document.getElementById('preset-bar').style.display = names.length ? '' : 'none';
-  presetSelect.innerHTML = '<option value="">— Auswahl leeren —</option>' +
+  presetSelect.innerHTML = `<option value="">${escapeHtml(T['— Auswahl leeren —'])}</option>` +
     names.map(n => `<option>${escapeHtml(n)}</option>`).join('');
 }
 
@@ -191,7 +213,7 @@ speciesSelect.addEventListener('change', () => {
   const touched = [...rows].some(r => r.querySelector('input[name=weight_kg]').value
                                    || r.querySelector('input[name=price_per_kg]').value
                                    || r.querySelector('input[name=count]').value !== '1');
-  if (rows.length && touched && !confirm('Wildart wechseln? Die Zeilen werden für die neue Wildart neu angelegt.')) {
+  if (rows.length && touched && !confirm(T['Wildart wechseln? Die Zeilen werden für die neue Wildart neu angelegt.'])) {
     speciesSelect.value = lastSpecies;
     return;
   }
@@ -208,13 +230,13 @@ if (presetApply) {
   presetApply.addEventListener('click', () => {
     const name = presetSelect.value;
     if (!name) {
-      if (confirm('Alle Zeilen löschen?')) {
+      if (confirm(T['Alle Zeilen löschen?'])) {
         document.querySelectorAll('#rows tr:not(:first-child)').forEach(tr => tr.remove());
         updateSummary();
       }
       return;
     }
-    if (!confirm(`Vorgabe „${name}“ übernehmen?`)) return;
+    if (!confirm(T['Vorgabe „{name}“ übernehmen?'].replace('{name}', () => name))) return;
     document.querySelectorAll('#rows tr:not(:first-child)').forEach(tr => tr.remove());
     currentPresets()[name].forEach(item => addRow({ part: item.part, count: item.count }));
   });

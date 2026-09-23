@@ -3,16 +3,13 @@
 
 {% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
 
-<h2>📖 Rezepte</h2>
+<h2>📖 {{ t("Rezepte") }}</h2>
 <p style="font-size:0.85rem; color:#888; margin-top:0;">
-  Jede Wildart hat ihre eigenen Rezepte. In den Einstellungen lässt sich ein
-  Rezept mit einer Zubereitung derselben Wildart verknüpfen; die Zutaten auf dem
-  Etikett kommen dann aus dem Rezept — nach Gewicht sortiert, die schwerste
-  Zutat zuerst, ohne Mengenangaben.
+  {{ t("Jede Wildart hat ihre eigenen Rezepte. In den Einstellungen lässt sich ein Rezept mit einer Zubereitung derselben Wildart verknüpfen; die Zutaten auf dem Etikett kommen dann aus dem Rezept — nach Gewicht sortiert, die schwerste Zutat zuerst, ohne Mengenangaben.") }}
 </p>
 
 {# Wildart-Wahl: ein Link pro Wildart, die Zahl zeigt, wo es schon Rezepte gibt. #}
-<nav class="species-tabs" aria-label="Wildart">
+<nav class="species-tabs" aria-label="{{ t('Wildart') }}">
   {% for s in config.species %}
   <a href="/recipes?species={{ s.name | urlencode }}" {% if s.name == sp.name %}class="active" aria-current="page"{% endif %}>
     {{ s.name }}{% if s.recipes %} <span class="count">{{ s.recipes | length }}</span>{% endif %}
@@ -27,17 +24,17 @@
 <details class="recipe-block" {% if open_recipe == r.name %}open{% endif %}>
   <summary>
     <b>{{ r.name }}</b>
-    <span class="recipe-meta">{{ r.items | length }} Zutaten ·
-      {% if users %}verknüpft mit {{ users | join(', ') }}{% else %}nicht verknüpft{% endif %}</span>
+    <span class="recipe-meta">{{ t("{n} Zutaten", n=r.items | length) }} ·
+      {% if users %}{{ t("verknüpft mit {names}", names=users | join(', ')) }}{% else %}{{ t("nicht verknüpft") }}{% endif %}</span>
   </summary>
   {% set form_id = 'recipe-' ~ loop.index %}
   {% include "_recipe_form.html" %}
 </details>
 {% endfor %}
 
-{% if not sp.recipes %}<p style="color:#888;">Noch keine Rezepte für {{ sp.name }}.</p>{% endif %}
+{% if not sp.recipes %}<p style="color:#888;">{{ t("Noch keine Rezepte für {species}.", species=sp.name) }}</p>{% endif %}
 <details class="recipe-block" {% if not sp.recipes or open_recipe == '__new__' %}open{% endif %}>
-  <summary><b>+ Neues Rezept für {{ sp.name }}</b></summary>
+  <summary><b>+ {{ t("Neues Rezept für {species}", species=sp.name) }}</b></summary>
   {% set r = none %}
   {% set users = [] %}
   {% set form_id = 'recipe-new' %}
@@ -96,21 +93,30 @@
 
 <template id="recipe-item-template">
   <tr>
-    <td><input name="item_name" placeholder="Zutat, z. B. Wildschweinfleisch" style="width:100%; min-width:10rem"></td>
-    <td><input name="item_amount" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="Menge"
+    <td><input name="item_name" placeholder="{{ t('Zutat, z. B. Wildschweinfleisch') }}" style="width:100%; min-width:10rem"></td>
+    <td><input name="item_amount" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="{{ t('Menge') }}"
                style="width:6rem; text-align:right;"></td>
     <td>
       <select name="item_unit">
-        {% for u in units %}<option>{{ u }}</option>{% endfor %}
+        {% for u in units %}<option value="{{ u }}">{{ t(u) if u == 'Stk.' else u }}</option>{% endfor %}
       </select>
     </td>
-    <td class="row-actions"><button type="button" class="small remove-item" title="Zutat entfernen" aria-label="Zutat entfernen">🗑️</button></td>
+    <td class="row-actions"><button type="button" class="small remove-item" title="{{ t('Zutat entfernen') }}" aria-label="{{ t('Zutat entfernen') }}">🗑️</button></td>
   </tr>
 </template>
 
 <script>
 // Rows are added in the browser; saving sends all of them at once. The label
 // preview mirrors Recipe.label_text() so the order is visible while typing.
+const T = {{ {
+  "Rezept: {amount}": t("Rezept: {amount}"),
+  "Einheit passt nicht zur Zutat": t("Einheit passt nicht zur Zutat"),
+  "ändert das Rezept nicht": t("ändert das Rezept nicht"),
+  "Stk.": t("Stk."),
+} | tojson }};
+const DEC = {{ decimal_separator() | tojson }};
+// Units are stored in German ("Stk."); only the label shown is translated.
+function unitLabel(unit) { return T[unit] || unit; }
 const UNIT_GRAMS = {{ {'kg': 1000, 'g': 1, 'l': 1000, 'ml': 1, 'Stk.': none, 'm': none} | tojson }};
 
 function addItem(formId, item = { name: '', amount: '', unit: 'g' }) {
@@ -163,7 +169,7 @@ function fmtAmount(amount, unit) {
   const digits = unit === 'kg' || unit === 'l' ? 3 : amount >= 100 ? 0 : amount >= 10 ? 1 : 2;
   let text = amount.toFixed(digits);
   if (text.includes('.')) text = text.replace(/0+$/, '').replace(/\.$/, '');
-  return `${text.replace('.', ',')} ${unit}`;
+  return `${text.replace('.', DEC)} ${unitLabel(unit)}`;
 }
 
 function recipeRows(form) {
@@ -209,7 +215,7 @@ function updateScale(form) {
   if (usingHave) {
     let f = factor == null ? '–' : factor.toFixed(3);
     if (f.includes('.')) f = f.replace(/0+$/, '').replace(/\.$/, '');
-    factorInput.value = f.replace('.', ',');
+    factorInput.value = f.replace('.', DEC);
   }
 
   const tbody = box.querySelector('.scale-result tbody');
@@ -229,7 +235,7 @@ function updateScale(form) {
       if (i === 0 && has) {                                // recipe amount again, shown only on phones
         const small = document.createElement('small');
         small.className = 'scale-base-inline';
-        small.textContent = 'Rezept: ' + cells[1];
+        small.textContent = T['Rezept: {amount}'].replace('{amount}', cells[1]);
         td.append(small);
       }
       tr.append(td);
@@ -241,7 +247,7 @@ function updateScale(form) {
   box.querySelector('.scale-total-base').textContent = totalBase ? fmtAmount(totalBase, 'g') : '–';
   box.querySelector('.scale-total').textContent = totalBase && factor != null ? fmtAmount(total, 'g') : '–';
   box.querySelector('.scale-hint').textContent = factor == null
-    ? 'Einheit passt nicht zur Zutat' : 'ändert das Rezept nicht';
+    ? T['Einheit passt nicht zur Zutat'] : T['ändert das Rezept nicht'];
 }
 
 document.addEventListener('click', e => {

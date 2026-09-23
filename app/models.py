@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel, field_validator, model_validator
 
+from .i18n import format_number, t
+
 
 def parse_german_decimal(v: str | float) -> float:
     if isinstance(v, str):
@@ -31,7 +33,7 @@ def parse_amount(v: str | float | None) -> tuple[float | None, int | None]:
         if m:
             pieces = int(m.group(1))
             if pieces < 1:
-                raise ValueError("Stückzahl muss mindestens 1 sein")
+                raise ValueError(t("Stückzahl muss mindestens 1 sein"))
             return None, pieces
     return parse_optional_decimal(v), None
 
@@ -105,18 +107,21 @@ class PartRecord(BaseModel):
         )
 
 
-def format_de(value: float | None, decimals: int = 2) -> str:
-    if value is None:
-        return "–"
-    return f"{value:.{decimals}f}".replace(".", ",")
+def format_de(value: float | None, decimals: int = 2, lang: str | None = None) -> str:
+    """A number in the current language's notation (1,5 / 1.5).
+
+    Named for its original German-only use; the templates' "de" filter and many
+    call sites use it, so the name stays.
+    """
+    return format_number(value, decimals, lang)
 
 
-def format_amount(item) -> str:
+def format_amount(item, lang: str | None = None) -> str:
     """Weight or piece count of a part or sale item, as shown to people."""
     if item.pieces is not None:
-        return f"{item.pieces} Stk."
+        return t("{n} Stk.", lang, n=item.pieces)
     if item.weight_kg is not None:
-        return f"{format_de(item.weight_kg, 3)} kg"
+        return f"{format_de(item.weight_kg, 3, lang)} kg"
     return "–"
 
 

@@ -190,6 +190,15 @@ class Config(BaseModel):
     default_printer: str = ""
     best_before_months: int = 12
     dry_run: bool = True
+    # Language of the printed labels and the invoice PDF. Separate from the
+    # web UI's language, which follows each browser: whoever clicks print, the
+    # pack goes to the same buyers.
+    label_language: str = "de"
+
+    @field_validator("label_language", mode="before")
+    @classmethod
+    def _known_language(cls, v):
+        return v if v in ("de", "en") else "de"
 
     @model_validator(mode="before")
     @classmethod
@@ -344,6 +353,7 @@ def save_config(config: Config) -> None:
         "default_printer": config.default_printer,
         "best_before_months": config.best_before_months,
         "dry_run": config.dry_run,
+        "label_language": config.label_language,
     }
     tmp_path = CONFIG_PATH.with_suffix(".yaml.tmp")
     with open(tmp_path, "w", encoding="utf-8") as f:

@@ -1,6 +1,7 @@
 import io
 import logging
 import re
+from datetime import date
 from urllib.parse import quote
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from pydantic import ValidationError
 
 from . import registry, sales
 from .config import PART_KINDS, UNITS, Hunter, PartDefaults, Preset, PresetItem, Recipe, RecipeItem, Species, load_config, save_config
+from .i18n import LANGUAGES, decimal_separator, format_date, get_lang, pick_language, reset_lang, set_lang, t
 from .labels import render_info_label, render_qr_label
 from .models import (
     PIECES_RE,
@@ -52,6 +54,11 @@ def print_safely(images: list, printer, dry_run: bool) -> str | None:
     return None
 
 
+def date_filter(iso: str | None) -> str:
+    """ISO timestamp -> date in the UI language: 23.09.2026 / 23 Sep 2026."""
+    return format_date(date.fromisoformat(iso[:10])) if iso else "–"
+
+
 def species_json(species: list[Species]) -> dict:
     """Parts and presets per species, for the entry pages' JavaScript."""
     return {
@@ -89,12 +96,48 @@ def preset_text(preset: Preset) -> str:
 templates.env.filters["species_json"] = species_json
 templates.env.filters["all_part_names"] = all_part_names
 templates.env.globals["PART_KINDS"] = PART_KINDS
+# Translation in templates: {{ t("Bestand") }}. The UI language is set per
+# request by the middleware below.
+templates.env.globals["t"] = t
+templates.env.globals["get_lang"] = get_lang
+templates.env.globals["LANGUAGES"] = LANGUAGES
+templates.env.globals["decimal_separator"] = decimal_separator
+templates.env.filters["date"] = date_filter
+# {"cut": "Teilstücke", ...} with the headings in the UI language
+templates.env.filters["map_kinds"] = lambda kinds: {k: t(v) for k, v in kinds.items()}
 # tojson sorts object keys by default, which would throw away the part order
 # set by drag and drop (and presets' order) on the way to the page.
 templates.env.policies["json.dumps_kwargs"] = {"sort_keys": False}
 templates.env.filters["preset_text"] = preset_text
 
 config = load_config()
+
+LANG_COOKIE = "lang"
+
+
+@app.middleware("http")
+async def ui_language(request: Request, call_next):
+    """Pick the UI language: the cookie from the DE/EN switch, else the
+    browser's Accept-Language, else German."""
+    lang = request.cookies.get(LANG_COOKIE)
+    if lang not in LANGUAGES:
+        lang = pick_language(request.headers.get("accept-language"))
+    token = set_lang(lang)
+    try:
+        return await call_next(request)
+    finally:
+        reset_lang(token)
+
+
+@app.get("/lang/{lang}")
+def switch_language(lang: str, request: Request, back: str = "/"):
+    """Remember the chosen language and go back to the page it was chosen on."""
+    # only same-site paths, so the link can't be turned into an open redirect
+    target = back if back.startswith("/") and not back.startswith("//") else "/"
+    response = RedirectResponse(url=target, status_code=303)
+    if lang in LANGUAGES:
+        response.set_cookie(LANG_COOKIE, lang, max_age=365 * 24 * 3600, samesite="lax")
+    return response
 
 
 @app.exception_handler(ValidationError)
@@ -106,7 +149,7 @@ def invalid_input(request: Request, exc: ValidationError):
     if exc.title != "PartIn":
         raise exc
     return RedirectResponse(
-        url="/?msg=Ungültige Eingabe — Gewicht als 1,25 oder Stückzahl als 5x",
+        url="/?msg=" + quote(t("Ungültige Eingabe — Gewicht als 1,25 oder Stückzahl als 5x")),
         status_code=303,
     )
 
@@ -137,9 +180,9 @@ def _inventory_hint(records: list[PartRecord]) -> str:
     unpriced = sum(1 for r in records if (r.weight_kg is not None or r.pieces is not None) and r.total_price is None)
     notes = []
     if unweighed:
-        notes.append(f"{unweighed} ohne Gewicht")
+        notes.append(t("{n} ohne Gewicht", n=unweighed))
     if unpriced:
-        notes.append(f"{unpriced} ohne Preis")
+        notes.append(t("{n} ohne Preis", n=unpriced))
     return f" ({', '.join(notes)})" if notes else ""
 
 
@@ -179,9 +222,9 @@ def preview(
     )
     record = PartRecord.from_input(part_in, printed=False)
     img = (
-        render_info_label(record, find_hunter(hunter))
+        render_info_label(record, find_hunter(hunter), config.label_language)
         if type == "info"
-        else render_qr_label(record, config.best_before_months)
+        else render_qr_label(record, config.best_before_months, config.label_language)
     )
     buf = io.BytesIO()
     img.convert("L").save(buf, format="PNG")
@@ -232,13 +275,13 @@ async def bulk_print(request: Request):
             records.append(PartRecord.from_input(part_in, printed=False))
 
     if not records:
-        return RedirectResponse(url="/bulk?msg=Keine gültigen Zeilen", status_code=303)
+        return RedirectResponse(url="/bulk?msg=" + quote(t("Keine gültigen Zeilen")), status_code=303)
 
     hunter_config = find_hunter(hunter)
     images = []
     for record in records:
-        images.append(render_info_label(record, hunter_config))
-        images.append(render_qr_label(record, config.best_before_months))
+        images.append(render_info_label(record, hunter_config, config.label_language))
+        images.append(render_qr_label(record, config.best_before_months, config.label_language))
 
     # Save first: printing can fail (printer off, agent host asleep) and must
     # not take the recorded parts down with it.
@@ -249,15 +292,13 @@ async def bulk_print(request: Request):
 
     n = len(records)
     if error:
-        msg = (
-            f"{n} Teilstücke gespeichert, aber Druck fehlgeschlagen ({error}) "
-            f"— über Bestand nachdrucken"
-        )
+        msg = t("{n} Teilstücke gespeichert, aber Druck fehlgeschlagen ({error}) — über Bestand nachdrucken",
+                n=n, error=error)
     elif config.dry_run:
-        msg = f"{n} Teilstücke gespeichert (Testmodus, nicht gedruckt)"
+        msg = t("{n} Teilstücke gespeichert (Testmodus, nicht gedruckt)", n=n)
     else:
-        msg = f"{n} Teilstücke ({2 * n} Etiketten) gedruckt & gespeichert"
-    return RedirectResponse(url=f"/?msg={msg}", status_code=303)
+        msg = t("{n} Teilstücke ({labels} Etiketten) gedruckt & gespeichert", n=n, labels=2 * n)
+    return RedirectResponse(url="/?msg=" + quote(msg), status_code=303)
 
 
 @app.post("/parts")
@@ -275,37 +316,40 @@ def create_part(
         ingredients=part_ingredients(species, part),
     )
     record = PartRecord.from_input(part_in, printed=False)
-    images = [render_info_label(record, find_hunter(hunter)), render_qr_label(record, config.best_before_months)]
+    images = [
+        render_info_label(record, find_hunter(hunter), config.label_language),
+        render_qr_label(record, config.best_before_months, config.label_language),
+    ]
     registry.append(record)
     error = print_safely(images, config.printer(printer), config.dry_run)
     if not error and not config.dry_run:
         registry.mark_printed([record.uuid])
     if error:
-        msg = f"Gespeichert, aber Druck fehlgeschlagen ({error}) — über Bestand nachdrucken"
+        msg = t("Gespeichert, aber Druck fehlgeschlagen ({error}) — über Bestand nachdrucken", error=error)
     elif config.dry_run:
-        msg = "Gespeichert (Testmodus, nicht gedruckt)"
+        msg = t("Gespeichert (Testmodus, nicht gedruckt)")
     else:
-        msg = "Gedruckt & gespeichert"
-    return RedirectResponse(url=f"/?msg={msg}", status_code=303)
+        msg = t("Gedruckt & gespeichert")
+    return RedirectResponse(url="/?msg=" + quote(msg), status_code=303)
 
 
 @app.post("/parts/{part_uuid}/reprint")
 def reprint(part_uuid: str, printer: str = Form("")):
     record = registry.get(part_uuid)
     if record is None:
-        raise HTTPException(status_code=404, detail="Teilstück nicht gefunden")
+        raise HTTPException(status_code=404, detail=t("Teilstück nicht gefunden"))
     images = [
-        render_info_label(record, find_hunter(record.hunter)),
-        render_qr_label(record, config.best_before_months),
+        render_info_label(record, find_hunter(record.hunter), config.label_language),
+        render_qr_label(record, config.best_before_months, config.label_language),
     ]
     error = print_safely(images, config.printer(printer), config.dry_run)
     if error:
-        msg = f"Nachdruck fehlgeschlagen ({error})"
+        msg = t("Nachdruck fehlgeschlagen ({error})", error=error)
     elif config.dry_run:
-        msg = "Testmodus: nicht gedruckt"
+        msg = t("Testmodus: nicht gedruckt")
     else:
-        msg = "Erneut gedruckt"
-    return RedirectResponse(url=f"/?msg={msg}", status_code=303)
+        msg = t("Erneut gedruckt")
+    return RedirectResponse(url="/?msg=" + quote(msg), status_code=303)
 
 
 @app.get("/scan")
@@ -320,7 +364,7 @@ def part_lookup(part_uuid: str):
     record = registry.get(part_uuid.strip().lower())
     if record is None:
         return JSONResponse(
-            {"ok": False, "error": "Unbekannter Code — nicht im Bestand"},
+            {"ok": False, "error": t("Unbekannter Code — nicht im Bestand")},
             status_code=404,
         )
     return JSONResponse({"ok": True, "part": record.model_dump()})
@@ -331,7 +375,7 @@ def consume(part_uuid: str):
     result = registry.mark_consumed(part_uuid.strip().lower())
     if result is None:
         return JSONResponse(
-            {"ok": False, "error": "Unbekannter Code — nicht im Bestand"},
+            {"ok": False, "error": t("Unbekannter Code — nicht im Bestand")},
             status_code=404,
         )
     record, already_consumed = result
@@ -345,10 +389,10 @@ async def consume_many(request: Request):
     form = await request.form()
     uuids = [u.strip().lower() for u in form.getlist("uuid")]
     if not uuids:
-        return RedirectResponse(url="/inventory?msg=Nichts ausgewählt", status_code=303)
+        return RedirectResponse(url="/inventory?msg=" + quote(t("Nichts ausgewählt")), status_code=303)
     changed = registry.mark_consumed_many(uuids)
     return RedirectResponse(
-        url=f"/inventory?msg={changed} Teilstücke entnommen", status_code=303
+        url="/inventory?msg=" + quote(t("{n} Teilstücke entnommen", n=changed)), status_code=303
     )
 
 
@@ -358,7 +402,7 @@ async def sell_form(request: Request):
     uuids = [u.strip().lower() for u in form.getlist("uuid")]
     records = [r for r in registry.get_many(uuids) if r.consumed_at is None]
     if not records:
-        return RedirectResponse(url="/inventory?msg=Nichts ausgewählt", status_code=303)
+        return RedirectResponse(url="/inventory?msg=" + quote(t("Nichts ausgewählt")), status_code=303)
     return templates.TemplateResponse(
         request,
         "sell.html",
@@ -395,7 +439,7 @@ async def sell_confirm(request: Request):
             )
         )
     if not items:
-        return RedirectResponse(url="/inventory?msg=Keine Teilstücke im Verkauf", status_code=303)
+        return RedirectResponse(url="/inventory?msg=" + quote(t("Keine Teilstücke im Verkauf")), status_code=303)
 
     delivery = str(form.get("delivery_address", "")).strip()
     buyer_address = str(form.get("buyer_address", "")).strip()
@@ -416,7 +460,7 @@ async def sell_confirm(request: Request):
 def sale_page(request: Request, sale_id: str):
     sale = sales.get(sale_id)
     if sale is None:
-        raise HTTPException(status_code=404, detail="Verkauf nicht gefunden")
+        raise HTTPException(status_code=404, detail=t("Verkauf nicht gefunden"))
     return templates.TemplateResponse(
         request,
         "sale.html",
@@ -428,8 +472,8 @@ def sale_page(request: Request, sale_id: str):
 def sale_pdf(sale_id: str):
     sale = sales.get(sale_id)
     if sale is None:
-        raise HTTPException(status_code=404, detail="Verkauf nicht gefunden")
-    pdf_bytes = render_sale_pdf(sale, find_hunter(sale.hunter))
+        raise HTTPException(status_code=404, detail=t("Verkauf nicht gefunden"))
+    pdf_bytes = render_sale_pdf(sale, find_hunter(sale.hunter), config.label_language)
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
@@ -453,7 +497,7 @@ def parse_preset_items(text: str) -> list[PresetItem] | None:
 def _species_or_404(name: str) -> Species:
     species = config.find_species(name)
     if species is None:
-        raise HTTPException(status_code=404, detail="Wildart nicht gefunden")
+        raise HTTPException(status_code=404, detail=t("Wildart nicht gefunden"))
     return species
 
 
@@ -467,23 +511,23 @@ def settings_preset_save(
     sp = _species_or_404(species)
     items = parse_preset_items(items_text)
     if items is None:
-        return _settings_error(sp.name, "Ungültiges Format — erwartet z. B. „2x Keule, 1x Rücken“")
+        return _settings_error(sp.name, t("Ungültiges Format — erwartet z. B. „2x Keule, 1x Rücken“"))
     # A preset may only use parts this species has; otherwise bulk print would
     # fill rows with a part that can't be selected for it.
     unknown = [i.part for i in items if i.part not in sp.parts]
     if unknown:
-        return _settings_error(sp.name, f"Unbekannte Teilstücke für {sp.name}: {', '.join(unknown)}")
+        return _settings_error(sp.name, t("Unbekannte Teilstücke für {species}: {parts}", species=sp.name, parts=", ".join(unknown)))
     preset = Preset(name=name.strip(), items=items)
     sp.presets = [p for p in sp.presets if p.name != original_name]
     sp.presets.append(preset)
-    return _settings_redirect(f"Vorgabe „{preset.name}“ für {sp.name} gespeichert", sp.name)
+    return _settings_redirect(t("Vorgabe „{name}“ für {species} gespeichert", name=preset.name, species=sp.name), sp.name)
 
 
 @app.post("/settings/presets/delete")
 def settings_preset_delete(species: str = Form(...), name: str = Form(...)):
     sp = _species_or_404(species)
     sp.presets = [p for p in sp.presets if p.name != name]
-    return _settings_redirect(f"Vorgabe „{name}“ für {sp.name} gelöscht", sp.name)
+    return _settings_redirect(t("Vorgabe „{name}“ für {species} gelöscht", name=name, species=sp.name), sp.name)
 
 
 @app.get("/settings")
@@ -534,7 +578,7 @@ def settings_hunter_save(
         config.hunters[config.hunters.index(existing)] = hunter
     else:
         config.hunters.append(hunter)
-    return _settings_redirect(f"Jäger „{hunter.name}“ gespeichert")
+    return _settings_redirect(t("Jäger „{name}“ gespeichert", name=hunter.name))
 
 
 @app.post("/settings/hunters/delete")
@@ -542,18 +586,25 @@ def settings_hunter_delete(name: str = Form(""), original_name: str = Form("")):
     name = original_name or name
     hunter = find_hunter(name)
     if hunter is None:
-        raise HTTPException(status_code=404, detail="Jäger nicht gefunden")
+        raise HTTPException(status_code=404, detail=t("Jäger nicht gefunden"))
     if len(config.hunters) == 1:
-        return RedirectResponse(url="/settings?msg=Der letzte Jäger kann nicht gelöscht werden", status_code=303)
+        return RedirectResponse(url="/settings?msg=" + quote(t("Der letzte Jäger kann nicht gelöscht werden")), status_code=303)
     config.hunters.remove(hunter)
-    return _settings_redirect(f"Jäger „{name}“ gelöscht")
+    return _settings_redirect(t("Jäger „{name}“ gelöscht", name=name))
+
+
+@app.post("/settings/label-language")
+def settings_label_language(label_language: str = Form(...)):
+    if label_language in LANGUAGES:
+        config.label_language = label_language
+    return _settings_redirect(t("Etikettensprache: {language}", language=LANGUAGES[config.label_language]))
 
 
 @app.post("/settings/species")
 def settings_species_add(name: str = Form(...), copy_from: str = Form("")):
     name = name.strip()
     if not name or config.find_species(name):
-        return RedirectResponse(url="/settings?msg=Wildart existiert bereits", status_code=303)
+        return RedirectResponse(url="/settings?msg=" + quote(t("Wildart existiert bereits")), status_code=303)
     # Optionally start from another species' parts, so a new deer species
     # doesn't need every cut typed in again.
     source = config.find_species(copy_from)
@@ -561,16 +612,16 @@ def settings_species_add(name: str = Form(...), copy_from: str = Form("")):
         name=name,
         parts={n: p.model_copy() for n, p in source.parts.items()} if source else {},
     ))
-    return _settings_redirect(f"Wildart „{name}“ hinzugefügt", name)
+    return _settings_redirect(t("Wildart „{name}“ hinzugefügt", name=name), name)
 
 
 @app.post("/settings/species/delete")
 def settings_species_delete(name: str = Form(...)):
     sp = _species_or_404(name)
     if len(config.species) == 1:
-        return RedirectResponse(url="/settings?msg=Die letzte Wildart kann nicht gelöscht werden", status_code=303)
+        return RedirectResponse(url="/settings?msg=" + quote(t("Die letzte Wildart kann nicht gelöscht werden")), status_code=303)
     config.species.remove(sp)
-    return _settings_redirect(f"Wildart „{name}“ gelöscht")
+    return _settings_redirect(t("Wildart „{name}“ gelöscht", name=name))
 
 
 @app.post("/settings/parts")
@@ -587,7 +638,7 @@ def settings_part_save(
     sp = _species_or_404(species)
     name = name.strip()
     if name != original_name and name in sp.parts:
-        return _settings_error(sp.name, f"„{name}“ gibt es bei {sp.name} schon")
+        return _settings_error(sp.name, t("„{name}“ gibt es bei {species} schon", name=name, species=sp.name))
     linked = sp.find_recipe(recipe)
     previous = sp.parts.get(original_name or name)
     defaults = PartDefaults(
@@ -615,7 +666,7 @@ def settings_part_save(
         defaults.recipe = None
         defaults.ingredients = ingredients or None
     sp.parts[name] = defaults
-    return _settings_redirect(f"„{name}“ ({sp.name}) gespeichert", sp.name)
+    return _settings_redirect(t("„{name}“ ({species}) gespeichert", name=name, species=sp.name), sp.name)
 
 
 @app.post("/settings/parts/order")
@@ -633,7 +684,7 @@ async def settings_part_order(request: Request):
     names = [str(e.get("name", "")) for e in layout]
     if sorted(names) != sorted(sp.parts) or len(set(names)) != len(names):
         return JSONResponse(
-            {"ok": False, "error": "Seite ist veraltet — bitte neu laden"}, status_code=409
+            {"ok": False, "error": t("Seite ist veraltet — bitte neu laden")}, status_code=409
         )
     reordered = {}
     for entry, name in zip(layout, names):
@@ -654,12 +705,12 @@ def settings_part_delete(species: str = Form(...), name: str = Form(""), origina
     sp = _species_or_404(species)
     name = original_name or name
     if name not in sp.parts:
-        raise HTTPException(status_code=404, detail="Teilstück nicht gefunden")
+        raise HTTPException(status_code=404, detail=t("Teilstück nicht gefunden"))
     in_presets = [p.name for p in sp.presets if any(i.part == name for i in p.items)]
     if in_presets:
-        return _settings_error(sp.name, f"„{name}“ wird noch in Vorgaben verwendet: {', '.join(in_presets)}")
+        return _settings_error(sp.name, t("„{name}“ wird noch in Vorgaben verwendet: {presets}", name=name, presets=", ".join(in_presets)))
     del sp.parts[name]
-    return _settings_redirect(f"Teilstück „{name}“ ({sp.name}) gelöscht", sp.name)
+    return _settings_redirect(t("„{name}“ ({species}) gelöscht", name=name, species=sp.name), sp.name)
 
 
 # --- Rezepte ----------------------------------------------------------------
@@ -707,9 +758,9 @@ async def recipe_save(request: Request):
     original_name = str(form.get("original_name", ""))
     name = str(form.get("name", "")).strip()
     if not name:
-        return RedirectResponse(url=_recipes_url("Name fehlt", sp.name), status_code=303)
+        return RedirectResponse(url=_recipes_url(t("Name fehlt"), sp.name), status_code=303)
     if name != original_name and sp.find_recipe(name):
-        return RedirectResponse(url=_recipes_url(f"Rezept „{name}“ gibt es bei {sp.name} schon", sp.name), status_code=303)
+        return RedirectResponse(url=_recipes_url(t("Rezept „{name}“ gibt es bei {species} schon", name=name, species=sp.name), sp.name), status_code=303)
     items = [
         RecipeItem(name=n.strip(), amount=a, unit=u)
         for n, a, u in zip(form.getlist("item_name"), form.getlist("item_amount"), form.getlist("item_unit"))
@@ -726,7 +777,7 @@ async def recipe_save(request: Request):
                     part.recipe = name
     else:
         sp.recipes.append(recipe)
-    return _recipes_redirect(f"Rezept „{name}“ ({sp.name}) gespeichert", sp.name, name)
+    return _recipes_redirect(t("Rezept „{name}“ ({species}) gespeichert", name=name, species=sp.name), sp.name, name)
 
 
 @app.post("/recipes/copy")
@@ -735,15 +786,15 @@ def recipe_copy(species: str = Form(...), original_name: str = Form(...), target
     sp = _species_or_404(species)
     recipe = sp.find_recipe(original_name)
     if recipe is None:
-        raise HTTPException(status_code=404, detail="Rezept nicht gefunden")
+        raise HTTPException(status_code=404, detail=t("Rezept nicht gefunden"))
     dest = _species_or_404(target)
     if dest.find_recipe(recipe.name):
         return RedirectResponse(
-            url=_recipes_url(f"Rezept „{recipe.name}“ gibt es bei {dest.name} schon", sp.name, recipe.name),
+            url=_recipes_url(t("Rezept „{name}“ gibt es bei {species} schon", name=recipe.name, species=dest.name), sp.name, recipe.name),
             status_code=303,
         )
     dest.recipes.append(recipe.model_copy(deep=True))
-    return _recipes_redirect(f"Rezept „{recipe.name}“ nach {dest.name} kopiert", dest.name, recipe.name)
+    return _recipes_redirect(t("Rezept „{name}“ nach {species} kopiert", name=recipe.name, species=dest.name), dest.name, recipe.name)
 
 
 @app.post("/recipes/delete")
@@ -753,13 +804,13 @@ def recipe_delete(species: str = Form(...), original_name: str = Form(...)):
     name = original_name
     recipe = sp.find_recipe(name)
     if recipe is None:
-        raise HTTPException(status_code=404, detail="Rezept nicht gefunden")
+        raise HTTPException(status_code=404, detail=t("Rezept nicht gefunden"))
     users = sp.recipe_users(name)
     if users:
-        msg = f"„{name}“ ist noch verknüpft mit: " + ", ".join(users)
+        msg = t("„{name}“ ist noch verknüpft mit: {parts}", name=name, parts=", ".join(users))
         return RedirectResponse(url=_recipes_url(msg, sp.name, name), status_code=303)
     sp.recipes.remove(recipe)
-    return _recipes_redirect(f"Rezept „{name}“ ({sp.name}) gelöscht", sp.name)
+    return _recipes_redirect(t("Rezept „{name}“ ({species}) gelöscht", name=name, species=sp.name), sp.name)
 
 
 @app.get("/parts.json")

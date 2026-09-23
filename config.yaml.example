@@ -112,3 +112,7 @@ best_before_months: 12
 
 # true = nur registrieren, nicht drucken. Zum Ausprobieren zunächst true lassen.
 dry_run: true
+
+# Sprache der gedruckten Etiketten und der Rechnung: de oder en. Unabhängig von
+# der Sprache der Weboberfläche, die jeder Browser selbst wählt.
+label_language: de

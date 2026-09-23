@@ -1,33 +1,33 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="msg">✅ Verkauf Nr. {{ sale.number }} abgeschlossen</div>
+<div class="msg">✅ {{ t("Verkauf Nr. {number} abgeschlossen", number=sale.number) }}</div>
 
-<h2>💶 Verkauf Nr. {{ sale.number }}</h2>
+<h2>💶 {{ t("Verkauf Nr. {number}", number=sale.number) }}</h2>
 <p style="white-space: pre-line;"><b>{{ sale.buyer_name }}</b>
 {{ sale.buyer_address }}</p>
 {% if sale.delivery_address != sale.buyer_address %}
-<p style="white-space: pre-line;"><b>Lieferadresse:</b>
+<p style="white-space: pre-line;"><b>{{ t("Lieferadresse:") }}</b>
 {{ sale.delivery_address }}</p>
 {% endif %}
-<p>Datum: {{ sale.created_at[:10] }}</p>
+<p>{{ t("Datum: {date}", date=sale.created_at | date) }}</p>
 
 <table class="responsive sale-items">
   <tr>
-    <th>Wildart</th><th>Teilstück</th><th class="num">Menge</th><th class="num">€/kg</th><th class="num">€</th><th>ID</th>
+    <th>{{ t("Wildart") }}</th><th>{{ t("Teilstück") }}</th><th class="num">{{ t("Menge") }}</th><th class="num">€/kg</th><th class="num">€</th><th>ID</th>
   </tr>
   {% for i in sale.items %}
   <tr>
-    <td data-label="Wildart">{{ i.species }}</td>
-    <td data-label="Teilstück">{{ i.part }}</td>
-    <td class="num" data-label="Menge">{{ i | amount }}</td>
+    <td data-label="{{ t("Wildart") }}">{{ i.species }}</td>
+    <td data-label="{{ t("Teilstück") }}">{{ i.part }}</td>
+    <td class="num" data-label="{{ t("Menge") }}">{{ i | amount }}</td>
     <td class="num" data-label="€/kg">{{ i.price_per_kg | de }}</td>
     <td class="num" data-label="€">{{ i.total_price | de }}</td>
     <td data-label="ID"><code>{{ i.uuid[:8] }}</code></td>
   </tr>
   {% endfor %}
   <tr class="total-row">
-    <td colspan="4" style="text-align:right;"><b>Gesamt</b></td>
+    <td colspan="4" style="text-align:right;"><b>{{ t("Gesamt") }}</b></td>
     <td class="num"><b>{{ sale.total | de }} €</b></td>
     <td></td>
   </tr>
@@ -35,9 +35,9 @@
 
 <p style="margin-top:1rem;">
   <a href="/sales/{{ sale.sale_id }}/pdf" target="_blank">
-    <button class="print" type="button" style="padding:0.6rem 1.2rem;">📄 PDF öffnen</button>
+    <button class="print" type="button" style="padding:0.6rem 1.2rem;">📄 {{ t("PDF öffnen") }}</button>
   </a>
-  <a href="/inventory"><button type="button" style="padding:0.6rem 1.2rem;">Zurück zum Bestand</button></a>
+  <a href="/inventory"><button type="button" style="padding:0.6rem 1.2rem;">{{ t("Zurück zum Bestand") }}</button></a>
 </p>
 
 {% endblock %}

@@ -5,6 +5,7 @@ from PIL import Image, ImageDraw, ImageFont
 from qrcode.constants import ERROR_CORRECT_M
 
 from .config import FONTS_DIR, Hunter
+from .i18n import format_date, t
 from .models import PartRecord, format_amount, format_de
 
 # Printable area of the 39x90 die-cut label at 300 dpi, rendered landscape
@@ -32,11 +33,11 @@ def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(str(FONT_BOLD if bold else FONT_REGULAR), size)
 
 
-def _format_date(iso_timestamp: str) -> str:
-    return date.fromisoformat(iso_timestamp[:10]).strftime("%d.%m.%Y")
+def _format_date(iso_timestamp: str, lang: str) -> str:
+    return format_date(date.fromisoformat(iso_timestamp[:10]), lang)
 
 
-def _best_before(iso_timestamp: str, months: int) -> str:
+def _best_before(iso_timestamp: str, months: int, lang: str) -> str:
     d = date.fromisoformat(iso_timestamp[:10])
     month = d.month - 1 + months
     year = d.year + month // 12
@@ -45,7 +46,7 @@ def _best_before(iso_timestamp: str, months: int) -> str:
         d = d.replace(year=year, month=month)
     except ValueError:  # e.g. 31.03. + 11 months -> 31.02. doesn't exist
         d = d.replace(year=year, month=month, day=1)
-    return d.strftime("%d.%m.%Y")
+    return format_date(d, lang)
 
 
 def _fit_text(draw: ImageDraw.ImageDraw, text: str, size: int, max_width: int,
@@ -110,7 +111,9 @@ def _fit_block(draw: ImageDraw.ImageDraw, text: str, max_width: int, max_height:
     return font, lines, step
 
 
-def render_info_label(record: PartRecord, hunter: Hunter | None = None) -> Image.Image:
+def render_info_label(record: PartRecord, hunter: Hunter | None = None, lang: str = "de") -> Image.Image:
+    """The info label. `lang` is the label language (a setting), not the UI's:
+    whoever clicks print, the pack goes to the same buyers."""
     img = Image.new("1", (WIDTH, HEIGHT), 1)
     draw = ImageDraw.Draw(img)
     inner_width = WIDTH - 2 * MARGIN
@@ -128,22 +131,23 @@ def render_info_label(record: PartRecord, hunter: Hunter | None = None) -> Image
 
     # 2x2 grid: Gewicht / Preis/kg then Datum / Preis. Weight and price depend on
     # each other (total = weight x price), so both drop out if either is unset.
-    date_cell = ("Datum", _format_date(record.created_at), False)
+    date_cell = (t("Datum", lang), _format_date(record.created_at, lang), False)
+    price = t("Preis", lang)
     if record.pieces is not None:
         # Counted parts: the piece count is on the QR label, and the price is
         # fixed rather than weight x price/kg — so only the price is shown.
         if record.total_price is not None:
-            grid = [(date_cell, ("Preis", f"{format_de(record.total_price)} €", True))]
+            grid = [(date_cell, (price, f"{format_de(record.total_price, 2, lang)} €", True))]
         else:
             grid = [(date_cell,)]
     elif record.weight_kg is not None and record.price_per_kg is not None:
         grid = [
-            (("Gewicht", f"{format_de(record.weight_kg, 3)} kg", False),
-             ("Preis/kg", f"{format_de(record.price_per_kg)} €", False)),
-            (date_cell, ("Preis", f"{format_de(record.total_price or 0.0)} €", True)),
+            ((t("Gewicht", lang), f"{format_de(record.weight_kg, 3, lang)} kg", False),
+             (t("Preis/kg", lang), f"{format_de(record.price_per_kg, 2, lang)} €", False)),
+            (date_cell, (price, f"{format_de(record.total_price or 0.0, 2, lang)} €", True)),
         ]
     elif record.weight_kg is not None:
-        grid = [(("Gewicht", f"{format_de(record.weight_kg, 3)} kg", False), date_cell)]
+        grid = [((t("Gewicht", lang), f"{format_de(record.weight_kg, 3, lang)} kg", False), date_cell)]
     else:
         grid = [(date_cell,)]
 
@@ -167,7 +171,7 @@ def render_info_label(record: PartRecord, hunter: Hunter | None = None) -> Image
         y += s["contact_step"]
     else:
         line1 = f"{hunter.name} · {hunter.address}"
-        line2 = f"Tel. {hunter.phone}"
+        line2 = t("Tel. {phone}", lang, phone=hunter.phone)
         if hunter.email:
             line2 += f" · {hunter.email}"
         line1_font = _fit_text(draw, line1, s["contact1"], inner_width, bold=True, min_size=20)
@@ -181,7 +185,7 @@ def render_info_label(record: PartRecord, hunter: Hunter | None = None) -> Image
         y += 6
         draw.line((MARGIN, y, WIDTH - MARGIN, y), fill=0, width=1)
         y += 6
-        text = f"Zutaten: {record.ingredients}"
+        text = t("Zutaten: {list}", lang, list=record.ingredients)
         font, lines, step = _fit_block(draw, text, inner_width, HEIGHT - MARGIN - y)
         for line in lines:
             draw.text((MARGIN, y), line, font=font, fill=0)
@@ -190,7 +194,7 @@ def render_info_label(record: PartRecord, hunter: Hunter | None = None) -> Image
     return img
 
 
-def render_qr_label(record: PartRecord, best_before_months: int = 12) -> Image.Image:
+def render_qr_label(record: PartRecord, best_before_months: int = 12, lang: str = "de") -> Image.Image:
     img = Image.new("1", (WIDTH, HEIGHT), 1)
     draw = ImageDraw.Draw(img)
 
@@ -218,8 +222,8 @@ def render_qr_label(record: PartRecord, best_before_months: int = 12) -> Image.I
     else:
         lines = [record.species, record.part]
     if record.pieces is not None or record.weight_kg is not None:
-        lines.append(format_amount(record))
-    lines.append(f"Mind. haltbar bis: {_best_before(record.created_at, best_before_months)}")
+        lines.append(format_amount(record, lang))
+    lines.append(t("Mind. haltbar bis: {date}", lang, date=_best_before(record.created_at, best_before_months, lang)))
 
     y = MARGIN + 120
     for line in lines:
