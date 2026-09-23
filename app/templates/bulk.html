@@ -6,16 +6,12 @@
 
 <h2>🖨️ Sammeldruck</h2>
 
-{% if config.presets %}
-<div class="preset-bar">
+{# Die Vorgaben gehören zur Wildart; die Liste wird per Script gefüllt. #}
+<div class="preset-bar" id="preset-bar">
   <label for="preset-select">Vorgabe</label>
-  <select id="preset-select">
-    <option value="">— Auswahl leeren —</option>
-    {% for p in config.presets %}<option value="{{ p.name }}">{{ p.name }}</option>{% endfor %}
-  </select>
+  <select id="preset-select"></select>
   <button type="button" id="preset-apply">Übernehmen</button>
 </div>
-{% endif %}
 
 <form method="post" action="/bulk" id="bulk-form" onsubmit="return confirmBulkPrint()">
   <div class="part-form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin-bottom: 1rem;">
@@ -25,8 +21,8 @@
       </select>
     </label>
     <label style="display:flex; flex-direction:column; gap:0.3rem;">Wildart
-      <select name="species" required>
-        {% for s in config.species %}<option>{{ s }}</option>{% endfor %}
+      <select name="species" required id="species-select">
+        {% for s in config.species %}<option>{{ s.name }}</option>{% endfor %}
       </select>
     </label>
     {% if config.printers | length > 1 %}
@@ -53,43 +49,48 @@
 </form>
 
 <script>
-const PARTS = {{ config.parts | parts_json | tojson }};
-const PRESETS = {{ config.presets | presets_json | tojson }};
+const SPECIES = {{ config.species | species_json | tojson }};
+const speciesSelect = document.getElementById('species-select');
+// Parts and presets belong to the selected species.
+function currentParts() { return SPECIES[speciesSelect.value]?.parts || {}; }
+function currentPresets() { return SPECIES[speciesSelect.value]?.presets || {}; }
 
 function defaultWeight(part) {
-  const w = PARTS[part]?.weight_kg;
+  const w = currentParts()[part]?.weight_kg;
   return w != null ? w.toFixed(3).replace('.', ',') : '';
 }
 
 function pricePlaceholder(part) {
-  const p = PARTS[part]?.price;
+  const p = currentParts()[part]?.price;
   return p != null ? fmt(p) : 'kein Preis';
 }
 
 function addRow(item = { part: null, count: 1 }) {
   const table = document.getElementById('rows');
   const row = table.insertRow(-1);
+  const PARTS = currentParts();
   const firstPart = Object.keys(PARTS)[0];
   // a preset may name a part that is no longer in the config; keep the row
   // faithful to the preset instead of silently falling back to the first part
   const unknown = item.part && !(item.part in PARTS) ? [item.part] : [];
-  const partOptions = Object.keys(PARTS).concat(unknown)
-    .map(p => `<option>${p}</option>`).join('');
+
   // data-label traegt die Beschriftung fuer die Kartenansicht auf dem
   // Telefon (siehe table.responsive in base.html) — dort ist die Kopfzeile
   // ausgeblendet, also muss jede Zelle ihren eigenen Titel mitbringen.
   row.innerHTML = `
     <td data-label="Anzahl"><input name="count" type="number" min="1" value="${item.count}" required style="width:4.5rem"></td>
-    <td data-label="Teilstück"><select name="part" required>${partOptions}</select></td>
+    <td data-label="Teilstück"><select name="part" required></select></td>
     <td data-label="Gewicht/Stück (kg) oder 5x"><input name="weight_kg" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]" placeholder="0,4 / 5x" value="${defaultWeight(item.part || firstPart)}" style="width:7rem"></td>
     <td data-label="Preis/kg bzw. Festpreis (€)"><input name="price_per_kg" inputmode="decimal" enterkeyhint="done" pattern="[0-9]+([.,][0-9]+)?" placeholder="${pricePlaceholder(item.part || firstPart)}" style="width:7rem"></td>
     <td data-label="kein Preis" style="text-align:center;">
       <input type="checkbox" class="no-price" title="Kein Preis auf dem Etikett">
       <input type="hidden" name="no_price" value="">
     </td>
-    <td data-label=""><button type="button" class="small" onclick="this.closest('tr').remove(); updateSummary()">✕ entfernen</button></td>
+    <td data-label=""><button type="button" class="small" title="Zeile entfernen" aria-label="Zeile entfernen" onclick="this.closest('tr').remove(); updateSummary()">🗑️ entfernen</button></td>
   `;
-  if (item.part) row.querySelector('select[name=part]').value = item.part;
+  const partSelect = row.querySelector('select[name=part]');
+  fillPartSelect(partSelect, PARTS, unknown);
+  if (item.part) partSelect.value = item.part;
   row.querySelector('select[name=part]').addEventListener('change', e => {
     const tr = e.target.closest('tr');
     tr.querySelector('input[name=price_per_kg]').placeholder = pricePlaceholder(e.target.value);
@@ -122,7 +123,7 @@ function rowPrice(row) {
   if (!isNaN(entered)) return entered;
   // the configured default is per kg; a counted row has a fixed price instead
   if (rowPieces(row) != null) return null;
-  return PARTS[part]?.price ?? null;  // may be null
+  return currentParts()[part]?.price ?? null;  // may be null
 }
 
 function confirmBulkPrint() {
@@ -169,10 +170,40 @@ function renumberNoPrice() {
   });
 }
 
-addRow();
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+}
 
 const presetSelect = document.getElementById('preset-select');
 const presetApply = document.getElementById('preset-apply');
+function fillPresets() {
+  const names = Object.keys(currentPresets());
+  document.getElementById('preset-bar').style.display = names.length ? '' : 'none';
+  presetSelect.innerHTML = '<option value="">— Auswahl leeren —</option>' +
+    names.map(n => `<option>${escapeHtml(n)}</option>`).join('');
+}
+
+// Switching the species means different parts: rows filled for the old one
+// would point at parts the new one may not have, so start over.
+let lastSpecies = speciesSelect.value;
+speciesSelect.addEventListener('change', () => {
+  const rows = document.querySelectorAll('#rows tr:not(:first-child)');
+  const touched = [...rows].some(r => r.querySelector('input[name=weight_kg]').value
+                                   || r.querySelector('input[name=price_per_kg]').value
+                                   || r.querySelector('input[name=count]').value !== '1');
+  if (rows.length && touched && !confirm('Wildart wechseln? Die Zeilen werden für die neue Wildart neu angelegt.')) {
+    speciesSelect.value = lastSpecies;
+    return;
+  }
+  lastSpecies = speciesSelect.value;
+  rows.forEach(tr => tr.remove());
+  fillPresets();
+  addRow();
+});
+
+fillPresets();
+addRow();
+
 if (presetApply) {
   presetApply.addEventListener('click', () => {
     const name = presetSelect.value;
@@ -185,7 +216,7 @@ if (presetApply) {
     }
     if (!confirm(`Vorgabe „${name}“ übernehmen?`)) return;
     document.querySelectorAll('#rows tr:not(:first-child)').forEach(tr => tr.remove());
-    PRESETS[name].forEach(item => addRow({ part: item.part, count: item.count }));
+    currentPresets()[name].forEach(item => addRow({ part: item.part, count: item.count }));
   });
 }
 </script>

@@ -135,6 +135,10 @@
     .dry-run { background: #fdf3d7; color: #6b5200; border-left: 4px solid var(--amber); padding: 0.7rem 1rem; border-radius: 10px; margin-bottom: 1.2rem; }
 
     table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+    /* Tabellen mit Eingabefeldern sind oft breiter als die Karte. Ohne das
+       ragen sie über deren Rand hinaus; so scrollen sie innerhalb der Karte.
+       Gilt auf jeder Breite, nicht nur am Telefon. */
+    .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
     th { font-family: 'Josefin Sans', sans-serif; font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
     th, td { text-align: left; padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--line); }
     tr:hover > td { background: rgba(55,133,55,0.04); }
@@ -340,8 +344,6 @@
       }
       table.inventory td:last-child form { display: inline; }
 
-      /* Die Bildlaufleiste für Tabellen, die keine Karten werden sollen */
-      .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
       /* Summenzeile: kein Kartenrahmen, rechtsbündig wie am Desktop. */
       table.responsive tr.total-row {
@@ -356,6 +358,26 @@
       table.responsive tr.total-row td::before { content: none; }
     }
   </style>
+  <script>
+  // Fill a part <select> with Teilstücke and Zubereitungen as two groups.
+  // parts: {name: {kind, ...}} in display order. Keeps the current choice if
+  // it still exists. Uses textContent, so part names can't inject markup.
+  const PART_KINDS = {{ PART_KINDS | tojson }};
+  function fillPartSelect(select, parts, extra = []) {
+    const current = select.value;
+    select.replaceChildren();
+    for (const [kind, heading] of Object.entries(PART_KINDS)) {
+      const names = Object.keys(parts).filter(n => (parts[n].kind || 'cut') === kind);
+      if (!names.length) continue;
+      const group = document.createElement('optgroup');
+      group.label = heading;
+      for (const n of names) group.append(new Option(n, n));
+      select.append(group);
+    }
+    for (const n of extra) select.append(new Option(n, n));
+    if ([...select.options].some(o => o.value === current)) select.value = current;
+  }
+</script>
 </head>
 <body>
   <header class="site">
@@ -377,7 +399,7 @@
   <main class="card">
   {% block content %}{% endblock %}
   </main>
-  <script>
+    <script>
     // Nur zur Installierbarkeit. Ohne Cache — siehe app/static/sw.js.
     // Nur über HTTPS registrieren: auf http:// würde der Browser den Worker
     // ohnehin ablehnen, und die Fehlermeldung in der Konsole verwirrt.
