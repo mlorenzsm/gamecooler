@@ -44,7 +44,7 @@
   <tr>
     <th><input type="checkbox" id="check-all" title="Alle auswählen"></th>
     <th>Datum</th><th>Wildart</th><th>Teilstück</th><th>Jäger</th>
-    <th class="num">kg</th><th class="num">€/kg</th><th class="num">€</th><th>ID</th><th>Status</th><th></th>
+    <th class="num">Menge</th><th class="num">€/kg</th><th class="num">€</th><th>ID</th><th>Status</th><th></th>
   </tr>
   {% for r in records %}
   <tr class="part-row" {% if r.consumed_at %}style="opacity: 0.5;"{% endif %}
@@ -53,7 +53,7 @@
       data-unpriced="{{ 1 if r.total_price is none else 0 }}"
       data-weight="{{ r.weight_kg if r.weight_kg is not none else 0 }}"
     data-price="{{ r.total_price if r.total_price is not none else 0 }}"
-    data-unweighed="{{ 1 if r.weight_kg is none else 0 }}"
+    data-unweighed="{{ 1 if r.weight_kg is none and r.pieces is none else 0 }}"
       data-search="{{ (r.species ~ ' ' ~ r.part ~ ' ' ~ r.hunter ~ ' ' ~ r.uuid ~ ' ' ~ r.created_at[:10]) | lower }}">
     <td data-label="">
       {% if not r.consumed_at %}
@@ -67,14 +67,14 @@
        ausgeblendet, damit die Spalten unverändert bleiben. #}
     <td class="row-break" aria-hidden="true"></td>
     <td data-label="Jäger">{{ r.hunter }}</td>
-    <td class="num" data-label="kg">{{ r.weight_kg | de(3) }}</td>
+    <td class="num" data-label="Menge">{{ r | amount }}</td>
     <td class="num" data-label="€/kg">{{ r.price_per_kg | de }}</td>
     <td class="num" data-label="€">{{ r.total_price | de }}</td>
     <td data-label="ID"><code>{{ r.uuid[:8] }}</code></td>
     <td data-label="Status">{% if r.consumed_at %}entnommen {{ r.consumed_at[:10] }}{% else %}im Bestand{% endif %}</td>
     <td data-label="">
       <form method="post" action="/parts/{{ r.uuid }}/reprint"
-            onsubmit="return confirm('2 Etiketten nachdrucken?\n\n{{ r.species }} – {{ r.part }}, {{ r.weight_kg | de(3) }} kg')">
+            onsubmit="return confirm('2 Etiketten nachdrucken?\n\n{{ r.species }} – {{ r.part }}, {{ r | amount }}')">
         <button class="small" type="submit">Nachdrucken</button>
       </form>
     </td>

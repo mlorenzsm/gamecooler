@@ -7,15 +7,18 @@ from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import ValidationError
 
 from . import registry, sales
 from .config import Hunter, PartDefaults, Preset, PresetItem, load_config, save_config
 from .labels import render_info_label, render_qr_label
 from .models import (
+    PIECES_RE,
     PartIn,
     PartRecord,
     Sale,
     SaleItem,
+    format_amount,
     format_de,
     parse_optional_decimal,
 )
@@ -29,6 +32,7 @@ app = FastAPI(title="Gamecooler")
 app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static")
 templates = Jinja2Templates(directory=Path(__file__).resolve().parent / "templates")
 templates.env.filters["de"] = format_de
+templates.env.filters["amount"] = format_amount
 
 
 def print_safely(images: list, printer, dry_run: bool) -> str | None:
@@ -66,6 +70,16 @@ templates.env.filters["preset_text"] = preset_text
 config = load_config()
 
 
+@app.exception_handler(ValidationError)
+def invalid_input(request: Request, exc: ValidationError):
+    # Only reachable when the browser's pattern check is bypassed (old page,
+    # typo on a device that ignores it). A message beats a bare 500.
+    return RedirectResponse(
+        url="/?msg=Ungültige Eingabe — Gewicht als 1,25 oder Stückzahl als 5x",
+        status_code=303,
+    )
+
+
 def find_hunter(name: str) -> Hunter | None:
     return next((h for h in config.hunters if h.name == name), None)
 
@@ -80,8 +94,9 @@ def index(request: Request, msg: str = ""):
 
 
 def _inventory_hint(records: list[PartRecord]) -> str:
-    unweighed = sum(1 for r in records if r.weight_kg is None)
-    unpriced = sum(1 for r in records if r.weight_kg is not None and r.total_price is None)
+    # Counted parts have no weight by design, so they never count as unweighed.
+    unweighed = sum(1 for r in records if r.weight_kg is None and r.pieces is None)
+    unpriced = sum(1 for r in records if (r.weight_kg is not None or r.pieces is not None) and r.total_price is None)
     notes = []
     if unweighed:
         notes.append(f"{unweighed} ohne Gewicht")
@@ -120,8 +135,8 @@ def preview(
 ):
     part_in = PartIn(
         hunter=hunter, species=species, part=part,
-        weight_kg=parse_optional_decimal(weight_kg),
-        price_per_kg=parse_optional_decimal(price_per_kg),
+        weight_kg=weight_kg,
+        price_per_kg=price_per_kg,
     )
     record = PartRecord.from_input(part_in, printed=False)
     img = (
@@ -163,6 +178,10 @@ async def bulk_print(request: Request):
             continue
         if i in no_price_rows:
             price = None
+        elif PIECES_RE.match(weight):
+            # Counted row: the price is a fixed price for the whole part. The
+            # configured default is per kg, so it must not stand in for it.
+            price = price.strip() or None
         else:
             price = price.strip() or getattr(config.parts.get(part), "price", None)
         part_in = PartIn(
@@ -329,6 +348,7 @@ async def sell_confirm(request: Request):
                 species=record.species,
                 part=record.part,
                 weight_kg=record.weight_kg,
+                pieces=record.pieces,
                 price_per_kg=record.price_per_kg,
                 total_price=total,
             )

@@ -20,10 +20,10 @@
       {% for p in config.parts %}<option>{{ p }}</option>{% endfor %}
     </select>
   </label>
-  <label>Gewicht (kg) <span style="font-weight:400; color:#888;">(leer = kein Gewicht auf dem Etikett)</span>
-    <input name="weight_kg" inputmode="decimal" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?" placeholder="1,25" id="weight-input">
+  <label>Gewicht (kg) oder Stückzahl <span style="font-weight:400; color:#888;">(z. B. 1,25 oder 5x · leer = keine Angabe auf dem Etikett)</span>
+    <input name="weight_kg" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]" placeholder="1,25 oder 5x" id="weight-input">
   </label>
-  <label>Preis/kg (€) <span style="font-weight:400; color:#888;">(leer = kein Preis auf dem Etikett)</span>
+  <label><span id="price-label">Preis/kg (€)</span> <span style="font-weight:400; color:#888;">(leer = kein Preis auf dem Etikett)</span>
     <input name="price_per_kg" inputmode="decimal" enterkeyhint="done" pattern="[0-9]+([.,][0-9]+)?" placeholder="12,50" id="price-input">
   </label>
   {% if config.printers | length > 1 %}
@@ -53,8 +53,18 @@ function fillDefaults() {
   priceInput.value = p.price != null ? p.price.toFixed(2).replace('.', ',') : '';
   weightInput.value = p.weight_kg != null ? p.weight_kg.toFixed(3).replace('.', ',') : '';
 }
-partSelect.addEventListener('change', fillDefaults);
+partSelect.addEventListener('change', () => { fillDefaults(); updatePriceLabel(); });
 fillDefaults();
+
+// "5x" im Gewichtsfeld heisst Stückzahl: dann ist der Preis ein Festpreis
+// fuer das ganze Teilstück, nicht pro kg.
+const PIECES = /^\s*(\d+)\s*x\s*$/i;
+function updatePriceLabel() {
+  document.getElementById('price-label').textContent =
+    PIECES.test(weightInput.value) ? 'Festpreis (€)' : 'Preis/kg (€)';
+}
+weightInput.addEventListener('input', updatePriceLabel);
+updatePriceLabel();
 
 function confirmPrint() {
   const form = document.getElementById('part-form');
@@ -62,7 +72,9 @@ function confirmPrint() {
   const weight = d.get('weight_kg');
   const price = d.get('price_per_kg');
   let details = 'ohne Gewicht und Preis';
-  if (weight) details = `${weight} kg ` + (price ? `zu ${price} €/kg` : 'ohne Preis');
+  const pieces = (weight || '').match(PIECES);
+  if (pieces) details = `${pieces[1]} Stk. ` + (price ? `zu ${price} € Festpreis` : 'ohne Preis');
+  else if (weight) details = `${weight} kg ` + (price ? `zu ${price} €/kg` : 'ohne Preis');
   return confirm(`2 Etiketten drucken?\n\n${d.get('species')} – ${d.get('part')}, ${details}`);
 }
 

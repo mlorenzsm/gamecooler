@@ -39,6 +39,10 @@ let lastScan = { text: null, at: 0 };
 const basket = new Map();
 
 function fmt(n, d = 2) { return n.toFixed(d).replace('.', ','); }
+function amount(p) {
+  if (p.pieces != null) return `${p.pieces} Stk.`;
+  return p.weight_kg == null ? 'ohne Gewicht' : `${fmt(p.weight_kg, 3)} kg`;
+}
 function mode() { return document.querySelector('input[name=mode]:checked').value; }
 
 function show(html, kind) {
@@ -50,7 +54,7 @@ function updateBasket() {
   document.getElementById('basket-count').textContent = basket.size;
   let total = 0, unweighed = 0, unpriced = 0;
   for (const p of basket.values()) {
-    if (p.weight_kg == null) unweighed++;
+    if (p.weight_kg == null && p.pieces == null) unweighed++;
     else if (p.total_price == null) unpriced++;
     else total += p.total_price;
   }
@@ -66,8 +70,7 @@ function addToBasket(p) {
   basket.set(p.uuid, p);
   const li = document.createElement('li');
   const priceText = p.total_price == null ? 'ohne Preis' : `${fmt(p.total_price)} €`;
-  const weightText = p.weight_kg == null ? 'ohne Gewicht' : `${fmt(p.weight_kg, 3)} kg`;
-  li.innerHTML = `${p.species} – ${p.part}, ${weightText}, ${priceText} ` +
+  li.innerHTML = `${p.species} – ${p.part}, ${amount(p)}, ${priceText} ` +
     `<input type="hidden" name="uuid" value="${p.uuid}" form="basket-form"> ` +
     `<button type="button" class="small">✕</button>`;
   li.querySelector('button').addEventListener('click', () => {
@@ -97,7 +100,7 @@ async function onScan(text) {
       const data = await resp.json();
       if (!data.ok) { show(`❌ ${data.error}`, 'dry-run'); return; }
       const p = data.part;
-      const desc = `${p.species} – ${p.part}, ${fmt(p.weight_kg, 3)} kg (${p.uuid.slice(0, 8).toUpperCase()})`;
+      const desc = `${p.species} – ${p.part}, ${amount(p)} (${p.uuid.slice(0, 8).toUpperCase()})`;
       if (p.consumed_at) {
         show(`⚠️ Bereits entnommen am ${p.consumed_at.slice(0, 10)}:<br><b>${desc}</b>`, 'dry-run');
       } else if (addToBasket(p)) {
@@ -116,7 +119,7 @@ async function onScan(text) {
       return;
     }
     const p = data.part;
-    const desc = `${p.species} – ${p.part}, ${fmt(p.weight_kg, 3)} kg (${p.uuid.slice(0, 8).toUpperCase()})`;
+    const desc = `${p.species} – ${p.part}, ${amount(p)} (${p.uuid.slice(0, 8).toUpperCase()})`;
     if (data.already_consumed) {
       show(`⚠️ Bereits entnommen am ${p.consumed_at.slice(0, 10)}:<br><b>${desc}</b>`, 'dry-run');
     } else {

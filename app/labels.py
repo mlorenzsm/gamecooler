@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw, ImageFont
 from qrcode.constants import ERROR_CORRECT_M
 
 from .config import FONTS_DIR, Hunter
-from .models import PartRecord, format_de
+from .models import PartRecord, format_amount, format_de
 
 # Printable area of the 39x90 die-cut label at 300 dpi, rendered landscape
 WIDTH = 991
@@ -74,7 +74,14 @@ def render_info_label(record: PartRecord, hunter: Hunter | None = None) -> Image
     # 2x2 grid: Gewicht / Preis/kg then Datum / Preis. Weight and price depend on
     # each other (total = weight x price), so both drop out if either is unset.
     date_cell = ("Datum", _format_date(record.created_at), False)
-    if record.weight_kg is not None and record.price_per_kg is not None:
+    if record.pieces is not None:
+        # Counted parts: the piece count is on the QR label, and the price is
+        # fixed rather than weight x price/kg — so only the price is shown.
+        if record.total_price is not None:
+            grid = [(date_cell, ("Preis", f"{format_de(record.total_price)} €", True))]
+        else:
+            grid = [(date_cell,)]
+    elif record.weight_kg is not None and record.price_per_kg is not None:
         grid = [
             (("Gewicht", f"{format_de(record.weight_kg, 3)} kg", False),
              ("Preis/kg", f"{format_de(record.price_per_kg)} €", False)),
@@ -144,8 +151,8 @@ def render_qr_label(record: PartRecord, best_before_months: int = 12) -> Image.I
         lines = [title]
     else:
         lines = [record.species, record.part]
-    if record.weight_kg is not None:
-        lines.append(f"{format_de(record.weight_kg, 3)} kg")
+    if record.pieces is not None or record.weight_kg is not None:
+        lines.append(format_amount(record))
     lines.append(f"Mind. haltbar bis: {_best_before(record.created_at, best_before_months)}")
 
     y = MARGIN + 120
