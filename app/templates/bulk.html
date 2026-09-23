@@ -86,7 +86,7 @@ function addRow(item = { part: null, count: 1 }) {
       <input type="checkbox" class="no-price" title="Kein Preis auf dem Etikett">
       <input type="hidden" name="no_price" value="">
     </td>
-    <td data-label=""><button type="button" class="small" onclick="this.closest('tr').remove(); updateSummary()">✕ entfernen</button></td>
+    <td data-label=""><button type="button" class="small" title="Zeile entfernen" aria-label="Zeile entfernen" onclick="this.closest('tr').remove(); updateSummary()">🗑️ entfernen</button></td>
   `;
   const partSelect = row.querySelector('select[name=part]');
   fillPartSelect(partSelect, PARTS, unknown);
