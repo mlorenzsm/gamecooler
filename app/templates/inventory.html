@@ -14,11 +14,11 @@
 <div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-bottom:1rem;">
   <select id="f-species">
     <option value="">Alle Wildarten</option>
-    {% for s in config.species %}<option>{{ s }}</option>{% endfor %}
+    {% for s in config.species %}<option>{{ s.name }}</option>{% endfor %}
   </select>
   <select id="f-part">
     <option value="">Alle Teilstücke</option>
-    {% for p in config.parts %}<option>{{ p }}</option>{% endfor %}
+    {% for p in config.species | all_part_names %}<option>{{ p }}</option>{% endfor %}
   </select>
   <select id="f-status">
     <option value="stock">Im Bestand</option>

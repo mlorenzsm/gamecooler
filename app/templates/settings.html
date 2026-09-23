@@ -40,116 +40,145 @@
 </table>
 </div>
 
-<h3 style="margin-top:2rem;">🦌 Wildarten</h3>
-{% for s in config.species %}
-<form method="post" action="/settings/species/delete" id="species-{{ loop.index }}"
-      onsubmit="return confirm('Wildart „{{ s }}“ löschen?')"></form>
-{% endfor %}
-<form method="post" action="/settings/species" id="species-new"></form>
-<div class="table-scroll">
-<table style="max-width:30rem;">
-  {% for s in config.species %}
-  <tr>
-    <td>{{ s }}</td>
-    <td style="text-align:right;">
-      <input type="hidden" name="name" value="{{ s }}" form="species-{{ loop.index }}">
-      <button class="small" type="submit" form="species-{{ loop.index }}">✕</button>
-    </td>
-  </tr>
-  {% endfor %}
-  <tr>
-    <td><input name="name" required placeholder="Neue Wildart" form="species-new"></td>
-    <td style="text-align:right;"><button class="small" type="submit" form="species-new">+ Hinzufügen</button></td>
-  </tr>
-</table>
-</div>
-
-<h3 style="margin-top:2rem;">🥩 Teilstücke</h3>
-{% for name in config.parts %}
-<form method="post" action="/settings/parts" id="part-{{ loop.index }}"></form>
-{% endfor %}
-<form method="post" action="/settings/parts" id="part-new"></form>
-<div class="table-scroll">
-<table style="max-width:62rem;">
-  <tr><th>Name</th><th class="num">Preis/kg (€)</th><th class="num">Standardgewicht (kg)</th><th>Zutaten (klein auf dem Etikett)</th><th></th></tr>
-  {# empty price = part printed without any price on the label #}
-  {% for name, p in config.parts.items() %}
-  {% set f = 'part-' ~ loop.index %}
-  <tr>
-    <td>
-      <input type="hidden" name="original_name" value="{{ name }}" form="{{ f }}">
-      <input name="name" required value="{{ name }}" form="{{ f }}" style="width:11rem">
-    </td>
-    <td class="num"><input name="price" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
-                           value="{{ p.price | de if p.price is not none else '' }}"
-                           placeholder="–" form="{{ f }}" style="width:6rem; text-align:right;"></td>
-    <td class="num"><input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
-                           value="{{ p.weight_kg | de(3) if p.weight_kg is not none else '' }}"
-                           placeholder="–" form="{{ f }}" style="width:6rem; text-align:right;"></td>
-    <td><textarea name="ingredients" rows="1" placeholder="–" form="{{ f }}"
-                  style="width:18rem; min-height:2.2rem; resize:vertical;">{{ p.ingredients or '' }}</textarea></td>
-    <td style="white-space:nowrap;">
-      <button class="small" type="submit" form="{{ f }}">Speichern</button>
-      <button class="small" type="submit" form="{{ f }}" formaction="/settings/parts/delete" formnovalidate
-              onclick="return confirm('Teilstück „{{ name }}“ löschen?')">✕</button>
-    </td>
-  </tr>
-  {% endfor %}
-  <tr>
-    <td><input name="name" required placeholder="Neues Teilstück" form="part-new" style="width:11rem"></td>
-    <td class="num"><input name="price" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
-                           placeholder="–" form="part-new" style="width:6rem; text-align:right;"></td>
-    <td class="num"><input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
-                           placeholder="optional" form="part-new" style="width:6rem; text-align:right;"></td>
-    <td><textarea name="ingredients" rows="1" placeholder="optional" form="part-new"
-                  style="width:18rem; min-height:2.2rem; resize:vertical;"></textarea></td>
-    <td><button class="small" type="submit" form="part-new">+ Hinzufügen</button></td>
-  </tr>
-</table>
-</div>
-
-<h3 style="margin-top:2rem;">📋 Vorgaben (Sammeldruck)</h3>
-{% for preset in config.presets %}
-<form method="post" action="/settings/presets" id="preset-{{ loop.index }}"></form>
-{% endfor %}
-<form method="post" action="/settings/presets" id="preset-new"></form>
-<div class="table-scroll">
-<table style="max-width:45rem;">
-  {% for preset in config.presets %}
-  {% set f = 'preset-' ~ loop.index %}
-  <tr>
-    <td>
-      <input type="hidden" name="original_name" value="{{ preset.name }}" form="{{ f }}">
-      <input name="name" required value="{{ preset.name }}" form="{{ f }}" style="width:10rem">
-    </td>
-    <td>
-      <textarea name="items_text" required rows="2" style="width:100%;"
-                placeholder="z. B. 2x Keule, 1x Rücken, 6x Hackfleisch" form="{{ f }}">{{ preset | preset_text }}</textarea>
-    </td>
-    <td style="white-space:nowrap;">
-      <button class="small" type="submit" form="{{ f }}">Speichern</button>
-      <button class="small" type="submit" form="{{ f }}" formaction="/settings/presets/delete" formnovalidate
-              onclick="return confirm('Vorgabe „{{ preset.name }}“ löschen?')">✕</button>
-    </td>
-  </tr>
-  {% endfor %}
-  <tr>
-    <td><input name="name" required placeholder="Name, z. B. Reh komplett" form="preset-new" style="width:10rem"></td>
-    <td>
-      <textarea name="items_text" required rows="2" style="width:100%;"
-                placeholder="z. B. 2x Keule, 1x Rücken, 6x Hackfleisch" form="preset-new"></textarea>
-    </td>
-    <td><button class="small" type="submit" form="preset-new">+ Hinzufügen</button></td>
-  </tr>
-</table>
-</div>
-<p style="font-size:0.8rem; color:#888; margin-top:0.3rem;">
-  Format: <code>2x Keule, 1x Rücken</code> — durch Kommas getrennt.
+<h3 style="margin-top:2rem;">🦌 Wildarten, Teilstücke &amp; Vorgaben</h3>
+<p style="font-size:0.85rem; color:#888; margin-top:0;">
+  Jede Wildart hat ihre eigenen Teilstücke, Preise und Vorgaben. Beim Drucken
+  stehen nur die Teilstücke der gewählten Wildart zur Auswahl.
 </p>
+
+{% for sp in config.species %}
+{% set si = loop.index %}
+<details class="species-block" id="species-{{ si }}" {% if open_species == sp.name or (not open_species and loop.first) %}open{% endif %}>
+  <summary>
+    <b>{{ sp.name }}</b>
+    <span class="species-meta">{{ sp.parts | length }} Teilstücke · {{ sp.presets | length }} Vorgaben</span>
+  </summary>
+
+  {# --- Teilstücke dieser Wildart --- #}
+  {% for name in sp.parts %}
+  <form method="post" action="/settings/parts" id="part-{{ si }}-{{ loop.index }}">
+    <input type="hidden" name="species" value="{{ sp.name }}">
+  </form>
+  {% endfor %}
+  <form method="post" action="/settings/parts" id="part-{{ si }}-new">
+    <input type="hidden" name="species" value="{{ sp.name }}">
+  </form>
+  <h4>🥩 Teilstücke</h4>
+  <div class="table-scroll">
+  <table style="max-width:62rem;">
+    <tr><th>Name</th><th class="num">Preis/kg (€)</th><th class="num">Standardgewicht (kg)</th><th>Zutaten (klein auf dem Etikett)</th><th></th></tr>
+    {# empty price = part printed without any price on the label #}
+    {% for name, p in sp.parts.items() %}
+    {% set f = 'part-' ~ si ~ '-' ~ loop.index %}
+    <tr>
+      <td>
+        <input type="hidden" name="original_name" value="{{ name }}" form="{{ f }}">
+        <input name="name" required value="{{ name }}" form="{{ f }}" style="width:11rem">
+      </td>
+      <td class="num"><input name="price" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
+                             value="{{ p.price | de if p.price is not none else '' }}"
+                             placeholder="–" form="{{ f }}" style="width:6rem; text-align:right;"></td>
+      <td class="num"><input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
+                             value="{{ p.weight_kg | de(3) if p.weight_kg is not none else '' }}"
+                             placeholder="–" form="{{ f }}" style="width:6rem; text-align:right;"></td>
+      <td><textarea name="ingredients" rows="1" placeholder="–" form="{{ f }}"
+                    style="width:18rem; min-height:2.2rem; resize:vertical;">{{ p.ingredients or '' }}</textarea></td>
+      <td style="white-space:nowrap;">
+        <button class="small" type="submit" form="{{ f }}">Speichern</button>
+        <button class="small" type="submit" form="{{ f }}" formaction="/settings/parts/delete" formnovalidate
+                onclick="return confirm('Teilstück „{{ name }}“ bei {{ sp.name }} löschen?')">✕</button>
+      </td>
+    </tr>
+    {% endfor %}
+    <tr>
+      <td><input name="name" required placeholder="Neues Teilstück" form="part-{{ si }}-new" style="width:11rem"></td>
+      <td class="num"><input name="price" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
+                             placeholder="–" form="part-{{ si }}-new" style="width:6rem; text-align:right;"></td>
+      <td class="num"><input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
+                             placeholder="optional" form="part-{{ si }}-new" style="width:6rem; text-align:right;"></td>
+      <td><textarea name="ingredients" rows="1" placeholder="optional" form="part-{{ si }}-new"
+                    style="width:18rem; min-height:2.2rem; resize:vertical;"></textarea></td>
+      <td><button class="small" type="submit" form="part-{{ si }}-new">+ Hinzufügen</button></td>
+    </tr>
+  </table>
+  </div>
+
+  {# --- Vorgaben dieser Wildart --- #}
+  {% for preset in sp.presets %}
+  <form method="post" action="/settings/presets" id="preset-{{ si }}-{{ loop.index }}">
+    <input type="hidden" name="species" value="{{ sp.name }}">
+  </form>
+  {% endfor %}
+  <form method="post" action="/settings/presets" id="preset-{{ si }}-new">
+    <input type="hidden" name="species" value="{{ sp.name }}">
+  </form>
+  <h4>📋 Vorgaben (Sammeldruck)</h4>
+  <div class="table-scroll">
+  <table style="max-width:45rem;">
+    {% for preset in sp.presets %}
+    {% set f = 'preset-' ~ si ~ '-' ~ loop.index %}
+    <tr>
+      <td>
+        <input type="hidden" name="original_name" value="{{ preset.name }}" form="{{ f }}">
+        <input name="name" required value="{{ preset.name }}" form="{{ f }}" style="width:10rem">
+      </td>
+      <td>
+        <textarea name="items_text" required rows="2" style="width:100%;"
+                  placeholder="z. B. 2x Keule, 1x Rücken, 6x Hackfleisch" form="{{ f }}">{{ preset | preset_text }}</textarea>
+      </td>
+      <td style="white-space:nowrap;">
+        <button class="small" type="submit" form="{{ f }}">Speichern</button>
+        <button class="small" type="submit" form="{{ f }}" formaction="/settings/presets/delete" formnovalidate
+                onclick="return confirm('Vorgabe „{{ preset.name }}“ bei {{ sp.name }} löschen?')">✕</button>
+      </td>
+    </tr>
+    {% endfor %}
+    <tr>
+      <td><input name="name" required placeholder="Name, z. B. {{ sp.name }} komplett" form="preset-{{ si }}-new" style="width:10rem"></td>
+      <td>
+        <textarea name="items_text" required rows="2" style="width:100%;"
+                  placeholder="z. B. 2x Keule, 1x Rücken, 6x Hackfleisch" form="preset-{{ si }}-new"></textarea>
+      </td>
+      <td><button class="small" type="submit" form="preset-{{ si }}-new">+ Hinzufügen</button></td>
+    </tr>
+  </table>
+  </div>
+  <p style="font-size:0.8rem; color:#888; margin-top:0.3rem;">
+    Format: <code>2x Keule, 1x Rücken</code> — durch Kommas getrennt, nur Teilstücke von {{ sp.name }}.
+  </p>
+
+  <form method="post" action="/settings/species/delete" style="margin-top:1rem;"
+        onsubmit="return confirm('Wildart „{{ sp.name }}“ mit allen Teilstücken und Vorgaben löschen?\n\nBestehende Etiketten und Bestand bleiben erhalten.')">
+    <input type="hidden" name="name" value="{{ sp.name }}">
+    <button class="small" type="submit">✕ Wildart „{{ sp.name }}“ löschen</button>
+  </form>
+</details>
+{% endfor %}
+
+<form method="post" action="/settings/species" class="species-new">
+  <input name="name" required placeholder="Neue Wildart">
+  <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.9rem; color:#666;">
+    Teilstücke übernehmen von
+    <select name="copy_from">
+      <option value="">— keine —</option>
+      {% for sp in config.species %}<option>{{ sp.name }}</option>{% endfor %}
+    </select>
+  </label>
+  <button class="small" type="submit">+ Wildart hinzufügen</button>
+</form>
 
 <p style="margin-top:1.5rem; font-size:0.85rem; color:#888;">
   Änderungen werden direkt in die <code>config.yaml</code> geschrieben.
   Bestehende Etiketten und Bestandseinträge bleiben unverändert.
 </p>
+
+<style>
+  .species-block { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 1rem; margin: 0.8rem 0; }
+  .species-block > summary { cursor: pointer; font-size: 1.05rem; padding: 0.2rem 0; }
+  .species-block[open] > summary { margin-bottom: 0.4rem; }
+  .species-meta { color: #888; font-size: 0.85rem; margin-left: 0.6rem; }
+  .species-block h4 { margin: 1rem 0 0.4rem; }
+  .species-new { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.6rem; }
+</style>
 
 {% endblock %}

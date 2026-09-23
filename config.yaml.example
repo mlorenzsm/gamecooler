@@ -11,49 +11,67 @@ hunters:
   phone: 0123 456789
   email: max@example.com
 
+# Wildarten mit ihren eigenen Teilstücken und Vorgaben. Beim Drucken stehen nur
+# die Teilstücke der gewählten Wildart zur Auswahl; derselbe Name kann je Wildart
+# einen anderen Preis haben.
+#
+# Pro Teilstück (alles optional, leer = {}):
+#   price:       Preis pro kg — oder Festpreis, wenn beim Erfassen "5x" steht
+#   weight_kg:   Standardgewicht, wird im Formular vorbelegt
+#   ingredients: Zutaten, klein unten auf dem Info-Etikett
+#
+# Vorgaben für den Sammeldruck belegen die Zeilen vor und dürfen nur
+# Teilstücke derselben Wildart verwenden.
 species:
-- Reh
-- Wildschwein
-- Rotwild
-- Damwild
-- Hase
-- Wildente
-- Fasan
-
-# Preis pro kg. Leer lassen ({}), wenn das Teilstück ohne Vorgabe sein soll —
-# dann muss der Preis beim Erfassen eingetippt werden.
-parts:
-  Keule:
-    price: 16.0
-  Rücken:
-    price: 22.0
-  Schulter/Blatt:
-    price: 12.0
-  Filet:
-    price: 28.0
-  Hals/Träger:
-    price: 9.0
-  Bauch:
-    price: 9.0
-  Gulasch:
-    price: 11.0
-  Hackfleisch:
-    price: 9.5
-
-# Vorgaben für den Sammeldruck: erscheinen als Knopf, der die Zeilen vorbelegt.
-presets:
-- name: Reh komplett
-  items:
-  - part: Keule
-    count: 2
-  - part: Schulter/Blatt
-    count: 2
-  - part: Rücken
-    count: 1
-  - part: Filet
-    count: 1
-  - part: Hackfleisch
-    count: 6
+- name: Reh
+  parts:
+    Keule:
+      price: 16.0
+    Rücken:
+      price: 22.0
+    Schulter/Blatt:
+      price: 12.0
+    Filet:
+      price: 28.0
+    Hals/Träger:
+      price: 9.0
+    Gulasch:
+      price: 11.0
+    Hackfleisch:
+      price: 9.5
+  presets:
+  - name: Reh komplett
+    items:
+    - part: Keule
+      count: 2
+    - part: Schulter/Blatt
+      count: 2
+    - part: Rücken
+      count: 1
+    - part: Filet
+      count: 1
+    - part: Hackfleisch
+      count: 6
+- name: Wildschwein
+  parts:
+    Keule:
+      price: 14.0
+    Rücken:
+      price: 20.0
+    Bauch:
+      price: 9.0
+    Gulasch:
+      price: 11.0
+    Hackfleisch:
+      price: 9.5
+    Bratwurst:
+      ingredients: Wildschweinfleisch, Schweinespeck, Speisesalz, Gewürze, Naturdarm
+  presets: []
+- name: Fasan
+  parts:
+    Brust: {}
+    Keule: {}
+  presets: []
 
 # backend: pyusb | linux_kernel | network | agent   (siehe README)
 # identifier: usb://0x04f9:0x209b  ist die QL-800-Kennung, auf jedem Gerät gleich
