@@ -24,9 +24,10 @@
     <td><input name="phone" value="{{ h.phone }}" form="{{ f }}" style="width:100%; min-width:7rem"></td>
     <td><input name="email" value="{{ h.email }}" form="{{ f }}" style="width:100%; min-width:8rem"></td>
     <td class="row-actions">
-      <button class="small" type="submit" form="{{ f }}" title="Speichern">💾</button>
+      <button class="small" type="submit" form="{{ f }}" title="Speichern" aria-label="Speichern">💾</button>
       <button class="small" type="submit" form="{{ f }}" formaction="/settings/hunters/delete" formnovalidate
-              onclick="return confirm('Jäger „{{ h.name }}“ löschen?')">✕</button>
+              title="Löschen" aria-label="Löschen"
+              onclick="return confirm('Jäger „{{ h.name }}“ löschen?')">🗑️</button>
     </td>
   </tr>
   {% endfor %}
@@ -99,9 +100,10 @@
       <td><textarea name="ingredients" rows="1" placeholder="–" form="{{ f }}"
                     style="width:100%; min-width:9rem; min-height:2.2rem; resize:vertical;">{{ p.ingredients or '' }}</textarea></td>
       <td class="row-actions">
-        <button class="small" type="submit" form="{{ f }}" title="Speichern">💾</button>
+        <button class="small" type="submit" form="{{ f }}" title="Speichern" aria-label="Speichern">💾</button>
         <button class="small" type="submit" form="{{ f }}" formaction="/settings/parts/delete" formnovalidate
-                onclick="return confirm('„{{ name }}“ bei {{ sp.name }} löschen?')">✕</button>
+                title="Löschen" aria-label="Löschen"
+                onclick="return confirm('„{{ name }}“ bei {{ sp.name }} löschen?')">🗑️</button>
       </td>
     </tr>
     {% endfor %}
@@ -150,9 +152,10 @@
                   placeholder="z. B. 2x Keule, 1x Rücken, 6x Hackfleisch" form="{{ f }}">{{ preset | preset_text }}</textarea>
       </td>
       <td class="row-actions">
-        <button class="small" type="submit" form="{{ f }}" title="Speichern">💾</button>
+        <button class="small" type="submit" form="{{ f }}" title="Speichern" aria-label="Speichern">💾</button>
         <button class="small" type="submit" form="{{ f }}" formaction="/settings/presets/delete" formnovalidate
-                onclick="return confirm('Vorgabe „{{ preset.name }}“ bei {{ sp.name }} löschen?')">✕</button>
+                title="Löschen" aria-label="Löschen"
+                onclick="return confirm('Vorgabe „{{ preset.name }}“ bei {{ sp.name }} löschen?')">🗑️</button>
       </td>
     </tr>
     {% endfor %}
@@ -173,7 +176,7 @@
   <form method="post" action="/settings/species/delete" style="margin-top:1rem;"
         onsubmit="return confirm('Wildart „{{ sp.name }}“ mit allen Teilstücken und Vorgaben löschen?\n\nBestehende Etiketten und Bestand bleiben erhalten.')">
     <input type="hidden" name="name" value="{{ sp.name }}">
-    <button class="small" type="submit">✕ Wildart „{{ sp.name }}“ löschen</button>
+    <button class="small" type="submit">🗑️ Wildart „{{ sp.name }}“ löschen</button>
   </form>
 </details>
 {% endfor %}
