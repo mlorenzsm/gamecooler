@@ -32,6 +32,38 @@
 
   <div class="label-preview"><b>Auf dem Etikett:</b> Zutaten: <span></span></div>
 
+  {# Umrechnen: rein zur Anzeige, nichts davon wird gespeichert. Die Felder
+     haben kein name-Attribut, damit sie beim Speichern nicht mitgeschickt
+     werden. Nur für gespeicherte Rezepte — beim Anlegen gibt es noch nichts
+     umzurechnen. #}
+  {% if r %}
+  <div class="scale-box">
+    <b>⚖️ Umrechnen</b>
+    <span class="scale-hint">ändert das Rezept nicht</span>
+    <div class="scale-controls">
+      <label>Faktor ×
+        <input class="scale-factor" inputmode="decimal" value="1" style="width:5rem; text-align:right;">
+      </label>
+      <span class="scale-or">oder</span>
+      <label>ich habe
+        <input class="scale-have" inputmode="decimal" placeholder="Menge" style="width:6rem; text-align:right;">
+        <select class="scale-unit">
+          {% for u in units %}<option>{{ u }}</option>{% endfor %}
+        </select>
+        <select class="scale-base"></select>
+      </label>
+      <button type="button" class="small scale-reset">Zurücksetzen</button>
+    </div>
+    <div class="table-scroll">
+    <table class="scale-result">
+      <thead><tr><th>Zutat</th><th class="num">Rezept</th><th class="num">Abwiegen</th></tr></thead>
+      <tbody></tbody>
+      <tfoot><tr><td><b>Gesamt</b></td><td class="num scale-total-base scale-base-col"></td><td class="num scale-total"></td></tr></tfoot>
+    </table>
+    </div>
+  </div>
+  {% endif %}
+
   <label style="display:flex; flex-direction:column; gap:0.3rem; font-size:0.85rem; color:#666;">
     Zubereitung / Notizen
     <textarea name="notes" rows="4" placeholder="z. B. Fleisch mit 4-mm-Scheibe wolfen, Gewürze untermengen, in Naturdarm füllen">{{ r.notes if r else '' }}</textarea>

@@ -52,6 +52,26 @@
   }
   .recipe-items td.row-actions { white-space: nowrap; width: 1%; }
   .label-preview { background: #f7f7f2; border-radius: 8px; padding: 0.6rem 0.8rem; font-size: 0.85rem; margin: 0.6rem 0; }
+  .scale-box { border: 1px solid #cfe3cf; background: #f6fbf6; border-radius: 8px; padding: 0.7rem 0.9rem; margin: 0.8rem 0; }
+  .scale-hint { color: #888; font-size: 0.8rem; margin-left: 0.5rem; }
+  .scale-controls { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin: 0.5rem 0; font-size: 0.9rem; }
+  .scale-controls label { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+  .scale-controls select { padding: 0.4rem 0.5rem; }
+  .scale-or { color: #888; }
+  .scale-result { font-size: 0.9rem; }
+  .scale-result td, .scale-result th { padding: 0.3rem 0.5rem; }
+  .scale-result tfoot td { border-top: 2px solid #cfe3cf; border-bottom: none; }
+  .scale-result td.num, .scale-result th.num { white-space: nowrap; }
+  .scale-base-inline { display: none; }
+  /* Phone: drop the "Rezept" column so "Abwiegen" — the number that matters at
+     the scale — always fits; the recipe amount moves under the name. */
+  @media (max-width: 640px) {
+    .scale-box { padding: 0.6rem; }
+    .scale-result td, .scale-result th { padding: 0.3rem 0.3rem; }
+    .scale-result th { letter-spacing: 0; }
+    .scale-result .scale-base-col, .scale-result th:nth-child(2), .scale-result .scale-total-base { display: none; }
+    .scale-base-inline { display: block; color: #888; font-size: 0.75rem; }
+  }
   .recipe-buttons { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.8rem; }
 </style>
 
@@ -102,15 +122,142 @@ function updatePreview(formId) {
   form.querySelector('.label-preview span').textContent = text || '—';
 }
 
-document.addEventListener('input', e => { const f = e.target.closest('form.recipe-form'); if (f) updatePreview(f.id); });
-document.addEventListener('change', e => { const f = e.target.closest('form.recipe-form'); if (f) updatePreview(f.id); });
+// --- Umrechnen -------------------------------------------------------------
+// Scales the recipe for display only. Either a plain factor, or "I have X of
+// ingredient Y", from which the factor follows. Reads the rows currently in
+// the form, so unsaved edits scale too; nothing here is ever submitted.
+
+const MASS = { kg: 1000, g: 1 }, VOLUME = { l: 1000, ml: 1 };
+function family(unit) { return unit in MASS ? MASS : unit in VOLUME ? VOLUME : null; }
+
+// Readable amount: 1500 g -> "1,5 kg", 0.25 kg -> "250 g", 7.5 Stk. -> "7,5 Stk."
+function fmtAmount(amount, unit) {
+  const fam = family(unit);
+  if (fam) {
+    const base = amount * fam[unit];                        // in g or ml
+    const [big, small] = fam === MASS ? ['kg', 'g'] : ['l', 'ml'];
+    if (base >= 1000) { amount = base / 1000; unit = big; } else { amount = base; unit = small; }
+  }
+  // Up to 3 decimals for kg/l (a scale reads to the gram), fewer for larger
+  // small-unit numbers. Trailing zeros go only after a decimal point — a bare
+  // /0+$/ would turn 120 into 12.
+  const digits = unit === 'kg' || unit === 'l' ? 3 : amount >= 100 ? 0 : amount >= 10 ? 1 : 2;
+  let text = amount.toFixed(digits);
+  if (text.includes('.')) text = text.replace(/0+$/, '').replace(/\.$/, '');
+  return `${text.replace('.', ',')} ${unit}`;
+}
+
+function recipeRows(form) {
+  return [...form.querySelectorAll('.recipe-items tbody tr')].map(tr => ({
+    name: tr.querySelector('[name=item_name]').value.trim(),
+    amount: num(tr.querySelector('[name=item_amount]').value),
+    unit: tr.querySelector('[name=item_unit]').value,
+  })).filter(r => r.name);
+}
+
+function scaleFactor(box, rows) {
+  const have = num(box.querySelector('.scale-have').value);
+  const base = rows.find(r => r.name === box.querySelector('.scale-base').value);
+  if (!isNaN(have) && have > 0 && base && !isNaN(base.amount) && base.amount > 0) {
+    const haveUnit = box.querySelector('.scale-unit').value;
+    const fam = family(base.unit);
+    if (fam && fam === family(haveUnit)) return (have * fam[haveUnit]) / (base.amount * fam[base.unit]);
+    if (haveUnit === base.unit) return have / base.amount;
+    return null;                                           // e.g. "3 kg" against "Stk."
+  }
+  const f = num(box.querySelector('.scale-factor').value);
+  return !isNaN(f) && f > 0 ? f : 1;
+}
+
+function updateScale(form) {
+  const box = form.querySelector('.scale-box');
+  if (!box) return;
+  const rows = recipeRows(form);
+
+  // keep the "ich habe …" ingredient list in step with the rows
+  const baseSel = box.querySelector('.scale-base');
+  const chosen = baseSel.value;
+  const names = rows.filter(r => !isNaN(r.amount)).map(r => r.name);
+  if (names.join('\n') !== [...baseSel.options].map(o => o.value).join('\n')) {
+    baseSel.replaceChildren(...names.map(n => new Option(n, n)));
+    if (names.includes(chosen)) baseSel.value = chosen;
+  }
+
+  const factor = scaleFactor(box, rows);
+  const usingHave = box.querySelector('.scale-have').value.trim() !== '';
+  const factorInput = box.querySelector('.scale-factor');
+  factorInput.disabled = usingHave;
+  if (usingHave) {
+    let f = factor == null ? '–' : factor.toFixed(3);
+    if (f.includes('.')) f = f.replace(/0+$/, '').replace(/\.$/, '');
+    factorInput.value = f.replace('.', ',');
+  }
+
+  const tbody = box.querySelector('.scale-result tbody');
+  tbody.replaceChildren();
+  let totalBase = 0, total = 0;
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    const has = !isNaN(r.amount);
+    const cells = [r.name, has ? fmtAmount(r.amount, r.unit) : '–',
+                   has && factor != null ? fmtAmount(r.amount * factor, r.unit) : '–'];
+    cells.forEach((text, i) => {
+      const td = document.createElement('td');
+      td.textContent = text;
+      if (i) td.className = 'num';
+      if (i === 1) td.classList.add('scale-base-col');
+      if (i === 2) td.style.fontWeight = '600';
+      if (i === 0 && has) {                                // recipe amount again, shown only on phones
+        const small = document.createElement('small');
+        small.className = 'scale-base-inline';
+        small.textContent = 'Rezept: ' + cells[1];
+        td.append(small);
+      }
+      tr.append(td);
+    });
+    tbody.append(tr);
+    if (has && r.unit in MASS) { totalBase += r.amount * MASS[r.unit]; if (factor != null) total += r.amount * MASS[r.unit] * factor; }
+  }
+  // total mass only: pieces and casing metres don't add up with grams
+  box.querySelector('.scale-total-base').textContent = totalBase ? fmtAmount(totalBase, 'g') : '–';
+  box.querySelector('.scale-total').textContent = totalBase && factor != null ? fmtAmount(total, 'g') : '–';
+  box.querySelector('.scale-hint').textContent = factor == null
+    ? 'Einheit passt nicht zur Zutat' : 'ändert das Rezept nicht';
+}
+
+document.addEventListener('click', e => {
+  const reset = e.target.closest('.scale-reset');
+  if (!reset) return;
+  const box = reset.closest('.scale-box');
+  box.querySelector('.scale-have').value = '';
+  box.querySelector('.scale-factor').value = '1';
+  updateScale(reset.closest('form'));
+});
+
+// "ich habe" in the unit of the chosen ingredient by default
+document.addEventListener('change', e => {
+  if (!e.target.matches('.scale-base')) return;
+  const form = e.target.closest('form');
+  const row = recipeRows(form).find(r => r.name === e.target.value);
+  if (row) form.querySelector('.scale-unit').value = row.unit;
+});
+
+document.addEventListener('input', e => { const f = e.target.closest('form.recipe-form'); if (f) { updatePreview(f.id); updateScale(f); } });
+document.addEventListener('change', e => { const f = e.target.closest('form.recipe-form'); if (f) { updatePreview(f.id); updateScale(f); } });
 document.addEventListener('click', e => {
   const del = e.target.closest('.remove-item');
-  if (del) { const f = del.closest('form'); del.closest('tr').remove(); updatePreview(f.id); }
+  if (del) { const f = del.closest('form'); del.closest('tr').remove(); updatePreview(f.id); updateScale(f); }
 });
 document.querySelectorAll('form.recipe-form').forEach(f => {
   if (!f.querySelector('.recipe-items tbody tr')) addItem(f.id);
   updatePreview(f.id);
+  const base = f.querySelector('.scale-base');
+  updateScale(f);
+  if (base && base.options.length) {                      // default: the heaviest line, usually the meat
+    const rows = recipeRows(f).filter(r => r.unit in MASS && !isNaN(r.amount));
+    const heaviest = rows.sort((a, b) => b.amount * MASS[b.unit] - a.amount * MASS[a.unit])[0];
+    if (heaviest) { base.value = heaviest.name; f.querySelector('.scale-unit').value = heaviest.unit; }
+  }
 });
 </script>
 
