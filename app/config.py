@@ -51,9 +51,11 @@ class PartDefaults(BaseModel):
     price: float | None = None
     weight_kg: float | None = None
     # Printed small on the info label, e.g. for sausages. Empty = none.
+    # When a recipe is linked, the label text comes from the recipe instead.
     ingredients: str | None = None
+    recipe: str | None = None
 
-    @field_validator("ingredients", mode="before")
+    @field_validator("ingredients", "recipe", mode="before")
     @classmethod
     def _blank_is_none(cls, v):
         if v is None:
@@ -84,6 +86,53 @@ class Preset(BaseModel):
     items: list[PresetItem]
 
 
+# Units a recipe line can use. Mass and volume units convert to grams so the
+# label can list ingredients by weight; the rest (pieces, casing length) can't
+# be compared by weight and go last.
+UNITS = {"kg": 1000.0, "g": 1.0, "l": 1000.0, "ml": 1.0, "Stk.": None, "m": None}
+
+
+class RecipeItem(BaseModel):
+    name: str
+    amount: float | None = None
+    unit: str = "g"
+
+    @field_validator("amount", mode="before")
+    @classmethod
+    def _german_decimal(cls, v):
+        if v is None or v == "":
+            return None
+        return float(str(v).replace(",", "."))
+
+    @field_validator("unit", mode="before")
+    @classmethod
+    def _known_unit(cls, v):
+        return v if v in UNITS else "g"
+
+    def grams(self) -> float | None:
+        factor = UNITS.get(self.unit)
+        return self.amount * factor if factor is not None and self.amount is not None else None
+
+
+class Recipe(BaseModel):
+    name: str
+    items: list[RecipeItem] = []
+    notes: str = ""
+
+    def label_text(self) -> str | None:
+        """Ingredient list for the label: by weight, heaviest first, no amounts.
+
+        Food labelling (LMIV Art. 18) lists ingredients in descending order of
+        weight. Lines without a comparable weight (pieces, metres of casing,
+        no amount) keep their order and come after the weighed ones.
+        """
+        weighed = sorted((i for i in self.items if i.grams() is not None),
+                         key=lambda i: i.grams(), reverse=True)
+        rest = [i for i in self.items if i.grams() is None]
+        names = [i.name for i in weighed + rest if i.name.strip()]
+        return ", ".join(names) or None
+
+
 def _parts_dict(v) -> dict:
     """A bare number as a part's value is its price (older config shape)."""
     return {
@@ -101,11 +150,30 @@ class Species(BaseModel):
     name: str
     parts: dict[str, PartDefaults] = {}
     presets: list[Preset] = []
+    # Per species too: a Wildschwein-Salsiccia and a Reh-Salsiccia are
+    # different recipes, and a part can only link a recipe of its own species.
+    recipes: list[Recipe] = []
 
     @field_validator("parts", mode="before")
     @classmethod
     def _scalar_is_price(cls, v):
         return _parts_dict(v)
+
+    def find_recipe(self, name: str | None) -> Recipe | None:
+        return next((r for r in self.recipes if r.name == name), None) if name else None
+
+    def ingredients_for(self, part: PartDefaults | None) -> str | None:
+        """What goes on the label: the linked recipe's list, else the typed text."""
+        if part is None:
+            return None
+        recipe = self.find_recipe(part.recipe)
+        if recipe is not None:
+            return recipe.label_text()
+        return part.ingredients
+
+    def recipe_users(self, name: str) -> list[str]:
+        """Names of this species' parts that link the recipe."""
+        return [n for n, p in self.parts.items() if p.recipe == name]
 
     def parts_by_kind(self) -> dict[str, dict[str, "PartDefaults"]]:
         """Parts grouped as Teilstücke / Zubereitungen, each in list order."""
@@ -157,6 +225,37 @@ class Config(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
+    def _migrate_global_recipes(cls, data):
+        """Accept the shape where recipes were one list shared by all species.
+
+        A recipe goes to every species with a part that links it. A recipe no
+        part links yet goes to every species, so it isn't lost; unwanted copies
+        are deleted on the recipes page.
+        """
+        if not isinstance(data, dict) or not data.get("recipes"):
+            return data
+        data = dict(data)
+        recipes = data.pop("recipes")
+        species = [dict(sp) if isinstance(sp, dict) else sp for sp in data.get("species") or []]
+
+        def links(sp) -> set:
+            if not isinstance(sp, dict):
+                return set()
+            return {e.get("recipe") for e in (sp.get("parts") or {}).values() if isinstance(e, dict)}
+
+        linked_anywhere = set().union(*(links(sp) for sp in species)) if species else set()
+        for sp in species:
+            if isinstance(sp, dict):
+                own = links(sp)
+                sp["recipes"] = list(sp.get("recipes") or []) + [
+                    r for r in recipes
+                    if r.get("name") in own or r.get("name") not in linked_anywhere
+                ]
+        data["species"] = species
+        return data
+
+    @model_validator(mode="before")
+    @classmethod
     def _migrate_single_printer(cls, data):
         """Accept the pre-multi-printer config shape."""
         if not isinstance(data, dict):
@@ -186,6 +285,11 @@ class Config(BaseModel):
         s = self.find_species(species)
         return s.parts.get(part) if s else None
 
+    def ingredients_for(self, species: str, part: str) -> str | None:
+        """Label ingredients of one part of one species."""
+        s = self.find_species(species)
+        return s.ingredients_for(s.parts.get(part)) if s else None
+
     def printer(self, name: str | None = None) -> PrinterTarget:
         """Resolve a printer by name, falling back to the default."""
         wanted = name or self.default_printer
@@ -210,7 +314,18 @@ def _part_yaml(p: PartDefaults) -> dict:
         | ({"price": p.price} if p.price is not None else {})
         | ({"weight_kg": p.weight_kg} if p.weight_kg is not None else {})
         | ({"ingredients": p.ingredients} if p.ingredients else {})
+        | ({"recipe": p.recipe} if p.recipe else {})
     )
+
+
+def _recipe_yaml(r: Recipe) -> dict:
+    return {
+        "name": r.name,
+        "items": [
+            {"name": i.name, "unit": i.unit} | ({"amount": i.amount} if i.amount is not None else {})
+            for i in r.items
+        ],
+    } | ({"notes": r.notes} if r.notes else {})
 
 
 def save_config(config: Config) -> None:
@@ -221,6 +336,7 @@ def save_config(config: Config) -> None:
                 "name": s.name,
                 "parts": {name: _part_yaml(p) for name, p in s.parts.items()},
                 "presets": [p.model_dump() for p in s.presets],
+                "recipes": [_recipe_yaml(r) for r in s.recipes],
             }
             for s in config.species
         ],

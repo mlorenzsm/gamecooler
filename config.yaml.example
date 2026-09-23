@@ -18,7 +18,9 @@ hunters:
 # Pro Teilstück (alles optional, leer = {}):
 #   price:       Preis pro kg — oder Festpreis, wenn beim Erfassen "5x" steht
 #   weight_kg:   Standardgewicht, wird im Formular vorbelegt
+#   kind:        cut (Teilstück, Standard) oder prep (Zubereitung)
 #   ingredients: Zutaten, klein unten auf dem Info-Etikett
+#   recipe:      Name eines Rezepts dieser Wildart — ersetzt "ingredients"
 #
 # Vorgaben für den Sammeldruck belegen die Zeilen vor und dürfen nur
 # Teilstücke derselben Wildart verwenden.
@@ -65,8 +67,30 @@ species:
     Hackfleisch:
       price: 9.5
     Bratwurst:
-      ingredients: Wildschweinfleisch, Schweinespeck, Speisesalz, Gewürze, Naturdarm
+      kind: prep
+      recipe: Salsiccia
   presets: []
+  # Rezepte gehören zur Wildart. Eine Zubereitung mit "recipe:" bekommt die
+  # Zutaten fürs Etikett aus dem Rezept, nach Gewicht sortiert.
+  recipes:
+  - name: Salsiccia
+    items:
+    - name: Wildschweinfleisch
+      amount: 5.0
+      unit: kg
+    - name: Schweinespeck
+      amount: 1.0
+      unit: kg
+    - name: Speisesalz
+      amount: 120.0
+      unit: g
+    - name: Fenchel
+      amount: 30.0
+      unit: g
+    - name: Naturdarm (Schwein)
+      amount: 3.0
+      unit: m
+    notes: Fleisch mit 4-mm-Scheibe wolfen, Gewürze untermengen, in Naturdarm füllen.
 - name: Fasan
   parts:
     Brust: {}
