@@ -3,52 +3,54 @@
 
 {% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
 
-<h2>🧊 Bestand</h2>
+<h2>🧊 {{ t("Bestand") }}</h2>
 <p id="summary-line">
-  <b id="sum-count">{{ inventory_count }}</b> Teilstücke,
-  <b id="sum-weight">{{ inventory_weight | de(3) }} kg</b>,
-  Warenwert <b id="sum-value">{{ inventory_value | de }} €</b>
+  {# The values are numbers, so the translated sentence is safe to emit as markup. #}
+  {{ t("{count} Teilstücke, {weight}, Warenwert {value}",
+       count='<b id="sum-count">' ~ inventory_count ~ '</b>',
+       weight='<b id="sum-weight">' ~ (inventory_weight | de(3)) ~ ' kg</b>',
+       value='<b id="sum-value">' ~ (inventory_value | de) ~ ' €</b>') | safe }}
   <span id="sum-hint" style="color:#888; font-size:0.85rem;">{{ inventory_hint }}</span>
 </p>
 
 <div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-bottom:1rem;">
   <select id="f-species">
-    <option value="">Alle Wildarten</option>
+    <option value="">{{ t("Alle Wildarten") }}</option>
     {% for s in config.species %}<option>{{ s.name }}</option>{% endfor %}
   </select>
   <select id="f-part">
-    <option value="">Alle Teilstücke</option>
+    <option value="">{{ t("Alle Teilstücke") }}</option>
     {% for kind, names in (config.species | all_part_names).items() if names %}
-    <optgroup label="{{ PART_KINDS[kind] }}">
+    <optgroup label="{{ t(PART_KINDS[kind]) }}">
       {% for p in names %}<option>{{ p }}</option>{% endfor %}
     </optgroup>
     {% endfor %}
   </select>
   <select id="f-status">
-    <option value="stock">Im Bestand</option>
-    <option value="consumed">Entnommen</option>
-    <option value="">Alle</option>
+    <option value="stock">{{ t("Im Bestand") }}</option>
+    <option value="consumed">{{ t("Entnommen") }}</option>
+    <option value="">{{ t("Alle") }}</option>
   </select>
-  <input id="f-search" type="search" placeholder="Suche…" style="flex:1; min-width:10rem;">
+  <input id="f-search" type="search" placeholder="{{ t("Suche…") }}" style="flex:1; min-width:10rem;">
 </div>
 
 <form method="post" action="/parts/consume-many" id="consume-form">
   <p id="consume-bar" style="display:none; gap:0.6rem; flex-wrap:wrap;">
     <button type="submit" class="print" style="padding:0.5rem 1rem;"
-            onclick="return confirm(`${countSelected()} Teilstücke entnehmen?`)">
-      🧊 <span id="consume-count"></span> Teilstücke entnehmen
+            onclick="return confirm(T['{n} Teilstücke entnehmen?'].replace('{n}', countSelected()))">
+      🧊 {{ t("{n} Teilstücke entnehmen", n='<span id="consume-count"></span>') | safe }}
     </button>
     <button type="submit" formaction="/sell" class="print" style="padding:0.5rem 1rem;">
-      💶 <span id="sell-count"></span> Teilstücke verkaufen
+      💶 {{ t("{n} Teilstücke verkaufen", n='<span id="sell-count"></span>') | safe }}
     </button>
   </p>
 </form>
 
 <table class="responsive inventory">
   <tr>
-    <th><input type="checkbox" id="check-all" title="Alle auswählen"></th>
-    <th>Datum</th><th>Wildart</th><th>Teilstück</th><th>Jäger</th>
-    <th class="num">Menge</th><th class="num">€/kg</th><th class="num">€</th><th>ID</th><th>Status</th><th></th>
+    <th><input type="checkbox" id="check-all" title="{{ t("Alle auswählen") }}"></th>
+    <th>{{ t("Datum") }}</th><th>{{ t("Wildart") }}</th><th>{{ t("Teilstück") }}</th><th>{{ t("Jäger") }}</th>
+    <th class="num">{{ t("Menge") }}</th><th class="num">€/kg</th><th class="num">€</th><th>ID</th><th>{{ t("Status") }}</th><th></th>
   </tr>
   {% for r in records %}
   <tr class="part-row" {% if r.consumed_at %}style="opacity: 0.5;"{% endif %}
@@ -58,43 +60,49 @@
       data-weight="{{ r.weight_kg if r.weight_kg is not none else 0 }}"
     data-price="{{ r.total_price if r.total_price is not none else 0 }}"
     data-unweighed="{{ 1 if r.weight_kg is none and r.pieces is none else 0 }}"
-      data-search="{{ (r.species ~ ' ' ~ r.part ~ ' ' ~ r.hunter ~ ' ' ~ r.uuid ~ ' ' ~ r.created_at[:10]) | lower }}">
+      data-search="{{ (r.species ~ ' ' ~ r.part ~ ' ' ~ r.hunter ~ ' ' ~ r.uuid ~ ' ' ~ r.created_at[:10] ~ ' ' ~ (r.created_at | date)) | lower }}">
     <td data-label="">
       {% if not r.consumed_at %}
       <input type="checkbox" class="pick" name="uuid" value="{{ r.uuid }}" form="consume-form">
       {% endif %}
     </td>
-    <td data-label="Datum">{{ r.created_at[:10] }}</td>
-    <td data-label="Wildart">{{ r.species }}</td>
-    <td data-label="Teilstück">{{ r.part }}</td>
+    <td data-label="{{ t("Datum") }}">{{ r.created_at | date }}</td>
+    <td data-label="{{ t("Wildart") }}">{{ r.species }}</td>
+    <td data-label="{{ t("Teilstück") }}">{{ r.part }}</td>
     {# Erzwingt auf dem Telefon den Umbruch nach der Titelzeile. Am Desktop
        ausgeblendet, damit die Spalten unverändert bleiben. #}
     <td class="row-break" aria-hidden="true"></td>
-    <td data-label="Jäger">{{ r.hunter }}</td>
-    <td class="num" data-label="Menge">{{ r | amount }}</td>
+    <td data-label="{{ t("Jäger") }}">{{ r.hunter }}</td>
+    <td class="num" data-label="{{ t("Menge") }}">{{ r | amount }}</td>
     <td class="num" data-label="€/kg">{{ r.price_per_kg | de }}</td>
     <td class="num" data-label="€">{{ r.total_price | de }}</td>
     <td data-label="ID"><code>{{ r.uuid[:8] }}</code></td>
-    <td data-label="Status">{% if r.consumed_at %}entnommen {{ r.consumed_at[:10] }}{% else %}im Bestand{% endif %}</td>
+    <td data-label="{{ t("Status") }}">{% if r.consumed_at %}{{ t("entnommen {date}", date=r.consumed_at | date) }}{% else %}{{ t("im Bestand") }}{% endif %}</td>
     <td data-label="">
       <form method="post" action="/parts/{{ r.uuid }}/reprint"
-            onsubmit="return confirm('2 Etiketten nachdrucken?\n\n{{ r.species }} – {{ r.part }}, {{ r | amount }}')">
-        <button class="small" type="submit">Nachdrucken</button>
+            onsubmit='return confirm({{ (t("2 Etiketten nachdrucken?") ~ "\n\n" ~ r.species ~ " – " ~ r.part ~ ", " ~ (r | amount)) | tojson }})'>
+        <button class="small" type="submit">{{ t("Nachdrucken") }}</button>
       </form>
     </td>
   </tr>
   {% endfor %}
 </table>
-<p id="no-match" hidden>Keine Treffer.</p>
+<p id="no-match" hidden>{{ t("Keine Treffer.") }}</p>
 
 <script>
+const T = {{ {
+  "{n} Teilstücke entnehmen?": t("{n} Teilstücke entnehmen?"),
+  "{n} ohne Gewicht": t("{n} ohne Gewicht"),
+  "{n} ohne Preis": t("{n} ohne Preis"),
+} | tojson }};
+const DEC = {{ decimal_separator() | tojson }};
 const rows = [...document.querySelectorAll('.part-row')];
 const fSpecies = document.getElementById('f-species');
 const fPart = document.getElementById('f-part');
 const fStatus = document.getElementById('f-status');
 const fSearch = document.getElementById('f-search');
 
-function fmt(n, d = 2) { return n.toFixed(d).replace('.', ','); }
+function fmt(n, d = 2) { return n.toFixed(d).replace('.', DEC); }
 
 function visiblePicks() {
   return rows.filter(r => !r.hidden).flatMap(r => [...r.querySelectorAll('.pick')]);
@@ -129,8 +137,8 @@ function applyFilter() {
     }
   }
   const notes = [];
-  if (unweighed) notes.push(`${unweighed} ohne Gewicht`);
-  if (unpriced) notes.push(`${unpriced} ohne Preis`);
+  if (unweighed) notes.push(T['{n} ohne Gewicht'].replace('{n}', unweighed));
+  if (unpriced) notes.push(T['{n} ohne Preis'].replace('{n}', unpriced));
   document.getElementById('no-match').hidden = shown > 0;
   document.getElementById('sum-count').textContent = count;
   document.getElementById('sum-weight').textContent = fmt(weight, 3) + ' kg';

@@ -1,67 +1,78 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h2>💶 Verkauf</h2>
+<h2>💶 {{ t("Verkauf") }}</h2>
 
 <form method="post" action="/sell/confirm" id="sell-form"
-      onsubmit="return confirm(`Verkauf abschließen?\n\n${document.querySelectorAll('.item-price').length} Teilstücke für ${document.getElementById('total').textContent}`)">
+      onsubmit="return confirmSale()">
 
   <div class="part-form" style="display:grid; grid-template-columns:1fr 1fr; gap:0.8rem; margin-bottom:1rem;">
-    <label style="display:flex; flex-direction:column; gap:0.3rem;">Verkäufer (Jäger)
+    <label style="display:flex; flex-direction:column; gap:0.3rem;">{{ t("Verkäufer (Jäger)") }}
       <select name="hunter" required>
         {% for h in config.hunters %}<option>{{ h.name }}</option>{% endfor %}
       </select>
     </label>
     <span></span>
-    <label style="display:flex; flex-direction:column; gap:0.3rem;">Käufer
-      <input name="buyer_name" required placeholder="Max Mustermann">
+    <label style="display:flex; flex-direction:column; gap:0.3rem;">{{ t("Käufer") }}
+      <input name="buyer_name" required placeholder="{{ t("Max Mustermann") }}">
     </label>
-    <label style="display:flex; flex-direction:column; gap:0.3rem;">Adresse
-      <textarea name="buyer_address" id="buyer-address" required rows="3" placeholder="Straße Nr.&#10;PLZ Ort"></textarea>
+    <label style="display:flex; flex-direction:column; gap:0.3rem;">{{ t("Adresse") }}
+      <textarea name="buyer_address" id="buyer-address" required rows="3" placeholder="{{ t("Straße Nr.\nPLZ Ort") }}"></textarea>
     </label>
     <label style="display:flex; align-items:center; gap:0.5rem; grid-column:1 / -1;">
       <input type="checkbox" id="same-address" checked>
-      Lieferadresse = Käuferadresse
+      {{ t("Lieferadresse = Käuferadresse") }}
     </label>
-    <label id="delivery-label" style="display:none; flex-direction:column; gap:0.3rem; grid-column:1 / -1;">Lieferadresse
-      <textarea name="delivery_address" id="delivery-address" rows="3" placeholder="Straße Nr.&#10;PLZ Ort"></textarea>
+    <label id="delivery-label" style="display:none; flex-direction:column; gap:0.3rem; grid-column:1 / -1;">{{ t("Lieferadresse") }}
+      <textarea name="delivery_address" id="delivery-address" rows="3" placeholder="{{ t("Straße Nr.\nPLZ Ort") }}"></textarea>
     </label>
   </div>
 
   <table class="responsive sale-items">
     <tr>
-      <th>Wildart</th><th>Teilstück</th><th class="num">Menge</th><th class="num">€/kg</th><th class="num">Preis (€)</th><th>ID</th>
+      <th>{{ t("Wildart") }}</th><th>{{ t("Teilstück") }}</th><th class="num">{{ t("Menge") }}</th><th class="num">€/kg</th><th class="num">{{ t("Preis (€)") }}</th><th>ID</th>
     </tr>
     {% for r in records %}
     <tr>
-      <td data-label="Wildart">{{ r.species }}</td>
-      <td data-label="Teilstück">{{ r.part }}</td>
-      <td class="num" data-label="Menge">{{ r | amount }}</td>
+      <td data-label="{{ t("Wildart") }}">{{ r.species }}</td>
+      <td data-label="{{ t("Teilstück") }}">{{ r.part }}</td>
+      <td class="num" data-label="{{ t("Menge") }}">{{ r | amount }}</td>
       <td class="num" data-label="€/kg">{{ r.price_per_kg | de }}</td>
-      <td class="num" data-label="Preis (€)">
+      <td class="num" data-label="{{ t("Preis (€)") }}">
         <input type="hidden" name="uuid" value="{{ r.uuid }}">
         <input name="item_price" class="item-price num" inputmode="decimal"
                pattern="[0-9]+([.,][0-9]+)?" value="{{ r.total_price | de if r.total_price is not none else '' }}"
-               placeholder="0,00" style="width:6rem; text-align:right;">
+               placeholder="{{ t("0,00") }}" style="width:6rem; text-align:right;">
       </td>
       <td data-label="ID"><code>{{ r.uuid[:8] }}</code></td>
     </tr>
     {% endfor %}
     <tr class="total-row">
-      <td colspan="4" style="text-align:right;"><b>Gesamt</b></td>
+      <td colspan="4" style="text-align:right;"><b>{{ t("Gesamt") }}</b></td>
       <td class="num"><b id="total">{{ total | de }} €</b></td>
       <td></td>
     </tr>
   </table>
 
   <button class="print" type="submit" style="width:100%; padding:0.8rem; font-weight:bold; margin-top:1rem;">
-    💶 Verkauf abschließen
+    💶 {{ t("Verkauf abschließen") }}
   </button>
 </form>
 
 <script>
+const T = {{ {
+  "Verkauf abschließen?": t("Verkauf abschließen?"),
+  "{n} Teilstücke für {total}": t("{n} Teilstücke für {total}"),
+} | tojson }};
+const DEC = {{ decimal_separator() | tojson }};
+function confirmSale() {
+  const n = document.querySelectorAll('.item-price').length;
+  const total = document.getElementById('total').textContent;
+  return confirm(`${T['Verkauf abschließen?']}\n\n` +
+    T['{n} Teilstücke für {total}'].replace('{n}', n).replace('{total}', total));
+}
 function num(s) { return parseFloat((s || '').replace(',', '.')) || 0; }
-function fmt(n) { return n.toFixed(2).replace('.', ','); }
+function fmt(n) { return n.toFixed(2).replace('.', DEC); }
 
 function updateTotal() {
   let total = 0;

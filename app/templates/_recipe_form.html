@@ -3,35 +3,35 @@
   <input type="hidden" name="species" value="{{ sp.name }}">
   <input type="hidden" name="original_name" value="{{ r.name if r else '' }}">
   <label style="display:flex; flex-direction:column; gap:0.3rem; max-width:24rem; font-size:0.85rem; color:#666;">
-    Name
-    <input name="name" required value="{{ r.name if r else '' }}" placeholder="z. B. Salsiccia">
+    {{ t("Name") }}
+    <input name="name" required value="{{ r.name if r else '' }}" placeholder="{{ t('z. B. Salsiccia') }}">
   </label>
 
-  <h4 style="margin:1rem 0 0.3rem;">Zutaten</h4>
+  <h4 style="margin:1rem 0 0.3rem;">{{ t("Zutaten") }}</h4>
   <div class="table-scroll">
   <table class="recipe-items">
-    <thead><tr><th>Zutat</th><th style="width:1%;">Menge</th><th style="width:1%;">Einheit</th><th></th></tr></thead>
+    <thead><tr><th>{{ t("Zutat") }}</th><th style="width:1%;">{{ t("Menge") }}</th><th style="width:1%;">{{ t("Einheit") }}</th><th></th></tr></thead>
     <tbody>
       {% for i in (r.items if r else []) %}
       <tr>
         <td><input name="item_name" value="{{ i.name }}" style="width:100%; min-width:10rem"></td>
         <td><input name="item_amount" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
-                   value="{{ (i.amount | de(3)).rstrip('0').rstrip(',') if i.amount is not none else '' }}"
-                   placeholder="Menge" style="width:6rem; text-align:right;"></td>
+                   value="{{ (i.amount | de(3)).rstrip('0').rstrip(decimal_separator()) if i.amount is not none else '' }}"
+                   placeholder="{{ t('Menge') }}" style="width:6rem; text-align:right;"></td>
         <td>
           <select name="item_unit">
-            {% for u in units %}<option {% if u == i.unit %}selected{% endif %}>{{ u }}</option>{% endfor %}
+            {% for u in units %}<option value="{{ u }}" {% if u == i.unit %}selected{% endif %}>{{ t(u) if u == 'Stk.' else u }}</option>{% endfor %}
           </select>
         </td>
-        <td class="row-actions"><button type="button" class="small remove-item" title="Zutat entfernen" aria-label="Zutat entfernen">🗑️</button></td>
+        <td class="row-actions"><button type="button" class="small remove-item" title="{{ t('Zutat entfernen') }}" aria-label="{{ t('Zutat entfernen') }}">🗑️</button></td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
   </div>
-  <button type="button" class="small" onclick="addItem('{{ form_id }}').querySelector('input').focus()">+ Zutat</button>
+  <button type="button" class="small" onclick="addItem('{{ form_id }}').querySelector('input').focus()">+ {{ t("Zutat") }}</button>
 
-  <div class="label-preview"><b>Auf dem Etikett:</b> Zutaten: <span></span></div>
+  <div class="label-preview"><b>{{ t("Auf dem Etikett:") }}</b> {{ t("Zutaten:") }} <span></span></div>
 
   {# Umrechnen: rein zur Anzeige, nichts davon wird gespeichert. Die Felder
      haben kein name-Attribut, damit sie beim Speichern nicht mitgeschickt
@@ -39,44 +39,44 @@
      umzurechnen. #}
   {% if r %}
   <div class="scale-box">
-    <b>⚖️ Umrechnen</b>
-    <span class="scale-hint">ändert das Rezept nicht</span>
+    <b>⚖️ {{ t("Umrechnen") }}</b>
+    <span class="scale-hint">{{ t("ändert das Rezept nicht") }}</span>
     <div class="scale-controls">
-      <label>Faktor ×
+      <label>{{ t("Faktor ×") }}
         <input class="scale-factor" inputmode="decimal" value="1" style="width:5rem; text-align:right;">
       </label>
-      <span class="scale-or">oder</span>
-      <label>ich habe
-        <input class="scale-have" inputmode="decimal" placeholder="Menge" style="width:6rem; text-align:right;">
+      <span class="scale-or">{{ t("oder") }}</span>
+      <label>{{ t("ich habe") }}
+        <input class="scale-have" inputmode="decimal" placeholder="{{ t('Menge') }}" style="width:6rem; text-align:right;">
         <select class="scale-unit">
-          {% for u in units %}<option>{{ u }}</option>{% endfor %}
+          {% for u in units %}<option value="{{ u }}">{{ t(u) if u == 'Stk.' else u }}</option>{% endfor %}
         </select>
         <select class="scale-base"></select>
       </label>
-      <button type="button" class="small scale-reset">Zurücksetzen</button>
+      <button type="button" class="small scale-reset">{{ t("Zurücksetzen") }}</button>
     </div>
     <div class="table-scroll">
     <table class="scale-result">
-      <thead><tr><th>Zutat</th><th class="num">Rezept</th><th class="num">Abwiegen</th></tr></thead>
+      <thead><tr><th>{{ t("Zutat") }}</th><th class="num">{{ t("Rezept") }}</th><th class="num">{{ t("Abwiegen") }}</th></tr></thead>
       <tbody></tbody>
-      <tfoot><tr><td><b>Gesamt</b></td><td class="num scale-total-base scale-base-col"></td><td class="num scale-total"></td></tr></tfoot>
+      <tfoot><tr><td><b>{{ t("Gesamt") }}</b></td><td class="num scale-total-base scale-base-col"></td><td class="num scale-total"></td></tr></tfoot>
     </table>
     </div>
   </div>
   {% endif %}
 
   <label style="display:flex; flex-direction:column; gap:0.3rem; font-size:0.85rem; color:#666;">
-    Zubereitung / Notizen
-    <textarea name="notes" rows="4" placeholder="z. B. Fleisch mit 4-mm-Scheibe wolfen, Gewürze untermengen, in Naturdarm füllen">{{ r.notes if r else '' }}</textarea>
+    {{ t("Zubereitung / Notizen") }}
+    <textarea name="notes" rows="4" placeholder="{{ t('z. B. Fleisch mit 4-mm-Scheibe wolfen, Gewürze untermengen, in Naturdarm füllen') }}">{{ r.notes if r else '' }}</textarea>
   </label>
 
   <div class="recipe-buttons">
-    <button class="print" type="submit" style="padding:0.5rem 1.2rem;">💾 {{ 'Speichern' if r else 'Rezept anlegen' }}</button>
+    <button class="print" type="submit" style="padding:0.5rem 1.2rem;">💾 {{ t('Speichern') if r else t('Rezept anlegen') }}</button>
     {% if r %}
     <button class="small" type="submit" formaction="/recipes/delete" formnovalidate
-            {% if users %}disabled title="Erst die Verknüpfung in den Einstellungen lösen"{% endif %}
-            onclick="return confirm('Rezept „{{ r.name }}“ löschen?')">🗑️ Rezept löschen</button>
-    {% if users %}<span style="font-size:0.8rem; color:#888;">Löschen erst, wenn keine Zubereitung mehr darauf verweist.</span>{% endif %}
+            {% if users %}disabled title="{{ t('Erst die Verknüpfung in den Einstellungen lösen') }}"{% endif %}
+            onclick='return confirm({{ t("Rezept „{name}“ löschen?", name=r.name) | tojson }})'>🗑️ {{ t("Rezept löschen") }}</button>
+    {% if users %}<span style="font-size:0.8rem; color:#888;">{{ t("Löschen erst, wenn keine Zubereitung mehr darauf verweist.") }}</span>{% endif %}
     {% endif %}
   </div>
 </form>
@@ -87,13 +87,13 @@
 <form method="post" action="/recipes/copy" class="recipe-copy">
   <input type="hidden" name="species" value="{{ sp.name }}">
   <input type="hidden" name="original_name" value="{{ r.name }}">
-  <span>Kopieren nach</span>
+  <span>{{ t("Kopieren nach") }}</span>
   <select name="target">
     {% for other in config.species if other.name != sp.name %}
     <option {% if other.find_recipe(r.name) %}disabled{% endif %}>{{ other.name }}</option>
     {% endfor %}
   </select>
-  <button class="small" type="submit">📋 Kopieren</button>
-  <span class="copy-hint">die Kopie ist danach unabhängig</span>
+  <button class="small" type="submit">📋 {{ t("Kopieren") }}</button>
+  <span class="copy-hint">{{ t("die Kopie ist danach unabhängig") }}</span>
 </form>
 {% endif %}

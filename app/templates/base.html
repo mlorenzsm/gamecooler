@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="{{ get_lang() }}">
 <head>
   <meta charset="utf-8">
   <!-- viewport-fit=cover: ohne das bleibt der Bereich neben der Notch ungenutzt
@@ -135,6 +135,10 @@
     .dry-run { background: #fdf3d7; color: #6b5200; border-left: 4px solid var(--amber); padding: 0.7rem 1rem; border-radius: 10px; margin-bottom: 1.2rem; }
 
     table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+    .lang-switch { display: flex; gap: 0.2rem; justify-content: flex-end; }
+    .lang-switch a { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; padding: 0.2rem 0.5rem;
+                     border-radius: 999px; text-decoration: none; color: var(--muted); border: 1px solid var(--line); }
+    .lang-switch a.active { background: var(--forest); border-color: var(--forest); color: #fff; }
     /* Tabellen mit Eingabefeldern sind oft breiter als die Karte. Ohne das
        ragen sie über deren Rand hinaus; so scrollen sie innerhalb der Karte.
        Gilt auf jeder Breite, nicht nur am Telefon. */
@@ -362,7 +366,8 @@
   // Fill a part <select> with Teilstücke and Zubereitungen as two groups.
   // parts: {name: {kind, ...}} in display order. Keeps the current choice if
   // it still exists. Uses textContent, so part names can't inject markup.
-  const PART_KINDS = {{ PART_KINDS | tojson }};
+  // headings translated for the UI language; the keys (cut/prep) are data
+  const PART_KINDS = {{ PART_KINDS | map_kinds | tojson }};
   function fillPartSelect(select, parts, extra = []) {
     const current = select.value;
     select.replaceChildren();
@@ -384,19 +389,27 @@
     <h1>🦌 Gamecooler</h1>
     <nav>
       {# aria-label, weil auf dem Telefon nur das Emoji sichtbar ist #}
-      <a href="/" {% if active == 'index' %}class="active"{% endif %}
-         aria-label="Einzeldruck" title="Einzeldruck">🏷️ <span class="nav-label">Einzeldruck</span></a>
-      <a href="/bulk" {% if active == 'bulk' %}class="active"{% endif %}
-         aria-label="Sammeldruck" title="Sammeldruck">🖨️ <span class="nav-label">Sammeldruck</span></a>
-      <a href="/scan" {% if active == 'scan' %}class="active"{% endif %}
-         aria-label="Entnahme" title="Entnahme">📷 <span class="nav-label">Entnahme</span></a>
-      <a href="/inventory" {% if active == 'inventory' %}class="active"{% endif %}
-         aria-label="Bestand" title="Bestand">🧊 <span class="nav-label">Bestand</span></a>
-      <a href="/recipes" {% if active == 'recipes' %}class="active"{% endif %}
-         aria-label="Rezepte" title="Rezepte">📖 <span class="nav-label">Rezepte</span></a>
-      <a href="/settings" {% if active == 'settings' %}class="active"{% endif %}
-         aria-label="Einstellungen" title="Einstellungen">⚙️ <span class="nav-label">Einstellungen</span></a>
+      {% for href, key, icon, text in [
+          ('/', 'index', '🏷️', t('Einzeldruck')),
+          ('/bulk', 'bulk', '🖨️', t('Sammeldruck')),
+          ('/scan', 'scan', '📷', t('Entnahme')),
+          ('/inventory', 'inventory', '🧊', t('Bestand')),
+          ('/recipes', 'recipes', '📖', t('Rezepte')),
+          ('/settings', 'settings', '⚙️', t('Einstellungen')),
+        ] %}
+      <a href="{{ href }}" {% if active == key %}class="active"{% endif %}
+         aria-label="{{ text }}" title="{{ text }}">{{ icon }} <span class="nav-label">{{ text }}</span></a>
+      {% endfor %}
     </nav>
+    {# Sprachwahl. Merkt sich die Wahl per Cookie; ohne Wahl gilt die
+       Browsersprache. "back" führt auf dieselbe Seite zurück. #}
+    <div class="lang-switch" role="group" aria-label="{{ t('Sprache') }}">
+      {% for code in LANGUAGES %}
+      <a href="/lang/{{ code }}?back={{ (request.url.path ~ ('?' ~ request.url.query if request.url.query else '')) | urlencode }}"
+         {% if code == get_lang() %}class="active" aria-current="true"{% endif %}
+         hreflang="{{ code }}" lang="{{ code }}" title="{{ LANGUAGES[code] }}">{{ code | upper }}</a>
+      {% endfor %}
+    </div>
   </header>
   <main class="card">
   {% block content %}{% endblock %}
