@@ -11,7 +11,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from . import registry, sales
-from .config import Hunter, PartDefaults, Preset, PresetItem, Species, load_config, save_config
+from .config import PART_KINDS, Hunter, PartDefaults, Preset, PresetItem, Species, load_config, save_config
 from .labels import render_info_label, render_qr_label
 from .models import (
     PIECES_RE,
@@ -56,20 +56,30 @@ def species_json(species: list[Species]) -> dict:
     """Parts and presets per species, for the entry pages' JavaScript."""
     return {
         s.name: {
-            "parts": {name: p.model_dump() for name, p in s.parts.items()},
+            # Teilstücke first, then Zubereitungen, so the dropdowns can group
+            # them without re-sorting.
+            "parts": {
+                name: p.model_dump()
+                for group in s.parts_by_kind().values()
+                for name, p in group.items()
+            },
             "presets": {pr.name: [i.model_dump() for i in pr.items] for pr in s.presets},
         }
         for s in species
     }
 
 
-def all_part_names(species: list[Species]) -> list[str]:
-    """Every part name across all species, first-seen order, for filters."""
-    seen: dict[str, None] = {}
+def all_part_names(species: list[Species]) -> dict[str, list[str]]:
+    """Every part name across all species, grouped by kind, for filters.
+
+    A name that is a Teilstück for one species and a Zubereitung for another
+    is listed under both headings — the filter matches by name either way.
+    """
+    groups: dict[str, dict[str, None]] = {kind: {} for kind in PART_KINDS}
     for s in species:
-        for name in s.parts:
-            seen.setdefault(name)
-    return list(seen)
+        for name, p in s.parts.items():
+            groups[p.kind].setdefault(name)
+    return {kind: list(names) for kind, names in groups.items()}
 
 
 def preset_text(preset: Preset) -> str:
@@ -78,6 +88,10 @@ def preset_text(preset: Preset) -> str:
 
 templates.env.filters["species_json"] = species_json
 templates.env.filters["all_part_names"] = all_part_names
+templates.env.globals["PART_KINDS"] = PART_KINDS
+# tojson sorts object keys by default, which would throw away the part order
+# set by drag and drop (and presets' order) on the way to the page.
+templates.env.policies["json.dumps_kwargs"] = {"sort_keys": False}
 templates.env.filters["preset_text"] = preset_text
 
 config = load_config()
@@ -559,6 +573,7 @@ def settings_part_save(
     price: str = Form(""),
     weight_kg: str = Form(""),
     ingredients: str = Form(""),
+    kind: str = Form("cut"),
 ):
     sp = _species_or_404(species)
     name = name.strip()
@@ -577,8 +592,39 @@ def settings_part_save(
             for item in preset.items:
                 if item.part == original_name:
                     item.part = name
+    # Editing a row must not move it to the other list: the kind is only
+    # changed by dragging. A new part lands in the list it was added to.
+    existing = sp.parts.get(name)
+    defaults.kind = existing.kind if existing else (kind if kind in PART_KINDS else "cut")
     sp.parts[name] = defaults
-    return _settings_redirect(f"Teilstück „{name}“ ({sp.name}) gespeichert", sp.name)
+    return _settings_redirect(f"„{name}“ ({sp.name}) gespeichert", sp.name)
+
+
+@app.post("/settings/parts/order")
+async def settings_part_order(request: Request):
+    """Apply a drag-and-drop arrangement of one species' parts.
+
+    The page sends the complete new layout — every part with its kind, in
+    display order — so a drop can't leave the two lists half-updated. It must
+    name exactly the parts the species has; anything else means the page is
+    stale (edited in another tab) and is refused rather than guessed at.
+    """
+    body = await request.json()
+    sp = _species_or_404(str(body.get("species", "")))
+    layout = body.get("parts") or []
+    names = [str(e.get("name", "")) for e in layout]
+    if sorted(names) != sorted(sp.parts) or len(set(names)) != len(names):
+        return JSONResponse(
+            {"ok": False, "error": "Seite ist veraltet — bitte neu laden"}, status_code=409
+        )
+    reordered = {}
+    for entry, name in zip(layout, names):
+        part = sp.parts[name]
+        part.kind = entry.get("kind") if entry.get("kind") in PART_KINDS else "cut"
+        reordered[name] = part
+    sp.parts = reordered
+    save_config(config)
+    return JSONResponse({"ok": True})
 
 
 @app.post("/settings/parts/delete")

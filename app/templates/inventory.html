@@ -18,7 +18,11 @@
   </select>
   <select id="f-part">
     <option value="">Alle Teilstücke</option>
-    {% for p in config.species | all_part_names %}<option>{{ p }}</option>{% endfor %}
+    {% for kind, names in (config.species | all_part_names).items() if names %}
+    <optgroup label="{{ PART_KINDS[kind] }}">
+      {% for p in names %}<option>{{ p }}</option>{% endfor %}
+    </optgroup>
+    {% endfor %}
   </select>
   <select id="f-status">
     <option value="stock">Im Bestand</option>

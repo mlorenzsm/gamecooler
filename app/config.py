@@ -41,7 +41,13 @@ class PrinterTarget(BaseModel):
     identifier: str = "usb://0x04f9:0x209b"
 
 
+PART_KINDS = {"cut": "Teilstücke", "prep": "Zubereitungen"}
+
+
 class PartDefaults(BaseModel):
+    # "cut" = Teilstück (Keule, Rücken), "prep" = Zubereitung (Bratwurst,
+    # Hackfleisch). Only groups the lists; labels print the same either way.
+    kind: str = "cut"
     price: float | None = None
     weight_kg: float | None = None
     # Printed small on the info label, e.g. for sausages. Empty = none.
@@ -54,6 +60,11 @@ class PartDefaults(BaseModel):
             return None
         v = " ".join(str(v).split())
         return v or None
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def _known_kind(cls, v):
+        return v if v in PART_KINDS else "cut"
 
     @field_validator("price", "weight_kg", mode="before")
     @classmethod
@@ -95,6 +106,13 @@ class Species(BaseModel):
     @classmethod
     def _scalar_is_price(cls, v):
         return _parts_dict(v)
+
+    def parts_by_kind(self) -> dict[str, dict[str, "PartDefaults"]]:
+        """Parts grouped as Teilstücke / Zubereitungen, each in list order."""
+        return {
+            kind: {n: p for n, p in self.parts.items() if p.kind == kind}
+            for kind in PART_KINDS
+        }
 
 
 class Config(BaseModel):
@@ -188,7 +206,8 @@ def load_config() -> Config:
 def _part_yaml(p: PartDefaults) -> dict:
     """Only the fields that are set, so the file stays short and readable."""
     return (
-        ({"price": p.price} if p.price is not None else {})
+        ({"kind": p.kind} if p.kind != "cut" else {})
+        | ({"price": p.price} if p.price is not None else {})
         | ({"weight_kg": p.weight_kg} if p.weight_kg is not None else {})
         | ({"ingredients": p.ingredients} if p.ingredients else {})
     )

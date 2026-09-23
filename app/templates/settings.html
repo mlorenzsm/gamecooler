@@ -51,26 +51,41 @@
 <details class="species-block" id="species-{{ si }}" {% if open_species == sp.name or (not open_species and loop.first) %}open{% endif %}>
   <summary>
     <b>{{ sp.name }}</b>
-    <span class="species-meta">{{ sp.parts | length }} Teilstücke · {{ sp.presets | length }} Vorgaben</span>
+    {% set g = sp.parts_by_kind() %}
+    <span class="species-meta">{{ g.cut | length }} Teilstücke · {{ g.prep | length }} Zubereitungen · {{ sp.presets | length }} Vorgaben</span>
   </summary>
 
-  {# --- Teilstücke dieser Wildart --- #}
+  {# --- Teilstücke und Zubereitungen dieser Wildart ---
+     Zwei Listen, zwischen denen die Zeilen per Ziehen am Griff (⠿) wandern.
+     Beim Loslassen schickt das Script die komplette neue Reihenfolge samt
+     Art an /settings/parts/order. Jede Zeile hat ihr eigenes Formular
+     (per form=…), damit "Speichern" nur diese Zeile schickt. #}
   {% for name in sp.parts %}
   <form method="post" action="/settings/parts" id="part-{{ si }}-{{ loop.index }}">
     <input type="hidden" name="species" value="{{ sp.name }}">
   </form>
   {% endfor %}
-  <form method="post" action="/settings/parts" id="part-{{ si }}-new">
+  {% set part_index = {} %}
+  {% for name in sp.parts %}{% set _ = part_index.update({name: loop.index}) %}{% endfor %}
+
+  {% for kind, heading in PART_KINDS.items() %}
+  {% set group = sp.parts_by_kind()[kind] %}
+  <form method="post" action="/settings/parts" id="part-{{ si }}-new-{{ kind }}">
     <input type="hidden" name="species" value="{{ sp.name }}">
+    <input type="hidden" name="kind" value="{{ kind }}">
   </form>
-  <h4>🥩 Teilstücke</h4>
+  <h4>{{ '🥩' if kind == 'cut' else '🌭' }} {{ heading }}</h4>
   <div class="table-scroll">
-  <table style="max-width:62rem;">
-    <tr><th>Name</th><th class="num">Preis/kg (€)</th><th class="num">Standardgewicht (kg)</th><th>Zutaten (klein auf dem Etikett)</th><th></th></tr>
+  <table class="parts-table" style="max-width:64rem;">
+    <thead>
+      <tr><th></th><th>Name</th><th class="num">Preis/kg (€)</th><th class="num">Standardgewicht (kg)</th><th>Zutaten (klein auf dem Etikett)</th><th></th></tr>
+    </thead>
     {# empty price = part printed without any price on the label #}
-    {% for name, p in sp.parts.items() %}
-    {% set f = 'part-' ~ si ~ '-' ~ loop.index %}
-    <tr>
+    <tbody class="part-list" data-species="{{ sp.name }}" data-kind="{{ kind }}">
+    {% for name, p in group.items() %}
+    {% set f = 'part-' ~ si ~ '-' ~ part_index[name] %}
+    <tr class="part-row" data-name="{{ name }}">
+      <td class="drag-handle" title="Ziehen, um zu verschieben">⠿</td>
       <td>
         <input type="hidden" name="original_name" value="{{ name }}" form="{{ f }}">
         <input name="name" required value="{{ name }}" form="{{ f }}" style="width:11rem">
@@ -86,22 +101,30 @@
       <td style="white-space:nowrap;">
         <button class="small" type="submit" form="{{ f }}">Speichern</button>
         <button class="small" type="submit" form="{{ f }}" formaction="/settings/parts/delete" formnovalidate
-                onclick="return confirm('Teilstück „{{ name }}“ bei {{ sp.name }} löschen?')">✕</button>
+                onclick="return confirm('„{{ name }}“ bei {{ sp.name }} löschen?')">✕</button>
       </td>
     </tr>
     {% endfor %}
-    <tr>
-      <td><input name="name" required placeholder="Neues Teilstück" form="part-{{ si }}-new" style="width:11rem"></td>
-      <td class="num"><input name="price" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
-                             placeholder="–" form="part-{{ si }}-new" style="width:6rem; text-align:right;"></td>
-      <td class="num"><input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
-                             placeholder="optional" form="part-{{ si }}-new" style="width:6rem; text-align:right;"></td>
-      <td><textarea name="ingredients" rows="1" placeholder="optional" form="part-{{ si }}-new"
-                    style="width:18rem; min-height:2.2rem; resize:vertical;"></textarea></td>
-      <td><button class="small" type="submit" form="part-{{ si }}-new">+ Hinzufügen</button></td>
+    <tr class="drop-hint"{% if group %} hidden{% endif %}>
+      <td colspan="6">Noch keine {{ heading }} — hierher ziehen oder unten hinzufügen.</td>
     </tr>
+    </tbody>
+    <tfoot>
+    <tr>
+      <td></td>
+      <td><input name="name" required placeholder="{{ 'Neues Teilstück' if kind == 'cut' else 'Neue Zubereitung' }}" form="part-{{ si }}-new-{{ kind }}" style="width:11rem"></td>
+      <td class="num"><input name="price" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
+                             placeholder="–" form="part-{{ si }}-new-{{ kind }}" style="width:6rem; text-align:right;"></td>
+      <td class="num"><input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
+                             placeholder="optional" form="part-{{ si }}-new-{{ kind }}" style="width:6rem; text-align:right;"></td>
+      <td><textarea name="ingredients" rows="1" placeholder="optional" form="part-{{ si }}-new-{{ kind }}"
+                    style="width:18rem; min-height:2.2rem; resize:vertical;"></textarea></td>
+      <td><button class="small" type="submit" form="part-{{ si }}-new-{{ kind }}">+ Hinzufügen</button></td>
+    </tr>
+    </tfoot>
   </table>
   </div>
+  {% endfor %}
 
   {# --- Vorgaben dieser Wildart --- #}
   {% for preset in sp.presets %}
@@ -172,6 +195,137 @@
   Bestehende Etiketten und Bestandseinträge bleiben unverändert.
 </p>
 
+<script>
+// Drag and drop between the Teilstücke / Zubereitungen lists of one species.
+//
+// Pointer events instead of the HTML5 drag API: that one doesn't work with a
+// finger on iOS, and this page is used on the phone. Dragging starts only on
+// the handle (⠿), so scrolling and typing in the row still work normally.
+// Rows only move within their own species; on drop the whole new layout of
+// that species is saved in one request.
+(function () {
+  let drag = null;   // { row, species, fromList, fromNext, placeholder, offsetY }
+
+  function listUnder(x, y, species) {
+    for (const list of document.querySelectorAll(`.part-list[data-species="${CSS.escape(species)}"]`)) {
+      const r = list.closest('table').getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top - 20 && y <= r.bottom + 20) return list;
+    }
+    return null;
+  }
+
+  function rowAfter(list, y) {
+    // the first row whose middle is below the pointer: insert before it
+    for (const row of list.querySelectorAll('.part-row:not(.dragging)')) {
+      const r = row.getBoundingClientRect();
+      if (y < r.top + r.height / 2) return row;
+    }
+    return list.querySelector('.drop-hint');
+  }
+
+  function refreshHints(species) {
+    document.querySelectorAll(`.part-list[data-species="${CSS.escape(species)}"]`).forEach(list => {
+      const hint = list.querySelector('.drop-hint');
+      hint.hidden = list.querySelectorAll('.part-row:not(.dragging)').length > 0
+                 || list.contains(drag?.placeholder);
+    });
+  }
+
+  document.addEventListener('pointerdown', e => {
+    const handle = e.target.closest('.drag-handle');
+    if (!handle || e.button > 0) return;
+    const row = handle.closest('.part-row');
+    const list = row.closest('.part-list');
+    e.preventDefault();
+    const rect = row.getBoundingClientRect();
+    const placeholder = document.createElement('tr');
+    placeholder.className = 'drag-placeholder';
+    placeholder.innerHTML = `<td colspan="6" style="height:${rect.height}px"></td>`;
+    drag = { row, species: list.dataset.species, fromList: list, fromNext: row.nextElementSibling,
+             placeholder, offsetY: e.clientY - rect.top };
+    row.after(placeholder);
+    row.classList.add('dragging');
+    row.style.width = rect.width + 'px';
+    row.style.top = rect.top + 'px';
+    row.style.left = rect.left + 'px';
+    handle.setPointerCapture(e.pointerId);
+    refreshHints(drag.species);
+  });
+
+  document.addEventListener('pointermove', e => {
+    if (!drag) return;
+    drag.row.style.top = (e.clientY - drag.offsetY) + 'px';
+    const list = listUnder(e.clientX, e.clientY, drag.species);
+    if (list) {
+      const before = rowAfter(list, e.clientY);
+      if (drag.placeholder.nextElementSibling !== before) list.insertBefore(drag.placeholder, before);
+    }
+    refreshHints(drag.species);
+    // keep scrolling when dragging near the edge of the screen
+    if (e.clientY < 60) window.scrollBy(0, -12);
+    else if (e.clientY > window.innerHeight - 60) window.scrollBy(0, 12);
+  });
+
+  function finish(cancel) {
+    const d = drag;
+    drag = null;
+    d.row.classList.remove('dragging');
+    d.row.style.width = d.row.style.top = d.row.style.left = '';
+    if (cancel) {
+      d.fromList.insertBefore(d.row, d.fromNext);
+    } else {
+      d.placeholder.replaceWith(d.row);
+    }
+    d.placeholder.remove();
+    refreshHints(d.species);
+    return d;
+  }
+
+  function layout(species) {
+    const parts = [];
+    document.querySelectorAll(`.part-list[data-species="${CSS.escape(species)}"]`).forEach(list => {
+      list.querySelectorAll('.part-row').forEach(row => parts.push({ name: row.dataset.name, kind: list.dataset.kind }));
+    });
+    return parts;
+  }
+
+  async function save(d) {
+    const before = { list: d.fromList, next: d.fromNext };
+    if (d.row.parentElement === before.list && d.row.nextElementSibling === before.next) return; // no change
+    d.row.classList.add('saving');
+    try {
+      const resp = await fetch('/settings/parts/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ species: d.species, parts: layout(d.species) }),
+      });
+      const data = await resp.json();
+      if (!data.ok) throw new Error(data.error || 'Speichern fehlgeschlagen');
+      updateCounts(d.species);
+    } catch (err) {
+      // put the row back so the page matches what is saved
+      before.list.insertBefore(d.row, before.next);
+      refreshHints(d.species);
+      alert(err.message);
+    } finally {
+      d.row.classList.remove('saving');
+    }
+  }
+
+  function updateCounts(species) {
+    const block = document.querySelector(`.part-list[data-species="${CSS.escape(species)}"]`).closest('.species-block');
+    const n = kind => block.querySelectorAll(`.part-list[data-kind="${kind}"] .part-row`).length;
+    const meta = block.querySelector('.species-meta');
+    meta.textContent = meta.textContent.replace(/^\d+ Teilstücke · \d+ Zubereitungen/,
+      `${n('cut')} Teilstücke · ${n('prep')} Zubereitungen`);
+  }
+
+  document.addEventListener('pointerup', () => { if (drag) save(finish(false)); });
+  document.addEventListener('pointercancel', () => { if (drag) finish(true); });
+  document.addEventListener('keydown', e => { if (drag && e.key === 'Escape') finish(true); });
+})();
+</script>
+
 <style>
   .species-block { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 1rem; margin: 0.8rem 0; }
   .species-block > summary { cursor: pointer; font-size: 1.05rem; padding: 0.2rem 0; }
@@ -179,6 +333,12 @@
   .species-meta { color: #888; font-size: 0.85rem; margin-left: 0.6rem; }
   .species-block h4 { margin: 1rem 0 0.4rem; }
   .species-new { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.6rem; }
+  .drag-handle { cursor: grab; color: #aaa; font-size: 1.2rem; padding: 0 0.4rem; user-select: none; touch-action: none; }
+  .drag-handle:hover { color: #555; }
+  .part-row.dragging { position: fixed; z-index: 10; background: #fff; box-shadow: 0 6px 18px rgba(0,0,0,0.18); pointer-events: none; display: table; }
+  .part-row.saving { opacity: 0.5; }
+  .drag-placeholder td { background: #eef6ee; border: 2px dashed #9c9; }
+  .drop-hint td { color: #999; font-style: italic; font-size: 0.85rem; padding: 0.6rem; }
 </style>
 
 {% endblock %}

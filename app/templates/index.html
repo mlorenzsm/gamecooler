@@ -17,7 +17,7 @@
   </label>
   <label>Teilstück
     <select name="part" required id="part-select">
-      {% for p in config.species[0].parts %}<option>{{ p }}</option>{% endfor %}
+
     </select>
   </label>
   <label>Gewicht (kg) oder Stückzahl <span style="font-weight:400; color:#888;">(z. B. 1,25 oder 5x · leer = keine Angabe auf dem Etikett)</span>
@@ -46,21 +46,17 @@
 <script>
 const SPECIES = {{ config.species | species_json | tojson }};
 const speciesSelect = document.getElementById('species-select');
+const partSelect = document.getElementById('part-select');
 // Parts belong to a species, so the part list follows the species choice.
 // The current part is kept if the new species has it too.
 function fillParts() {
-  const current = partSelect.value;
-  const names = Object.keys(SPECIES[speciesSelect.value]?.parts || {});
-  partSelect.innerHTML = names.map(n => `<option></option>`).join('');
-  [...partSelect.options].forEach((o, i) => { o.textContent = names[i]; });
-  if (names.includes(current)) partSelect.value = current;
+  fillPartSelect(partSelect, SPECIES[speciesSelect.value]?.parts || {});
 }
 function partDefaults() {
   return SPECIES[speciesSelect.value]?.parts[partSelect.value] || {};
 }
 const priceInput = document.getElementById('price-input');
 const weightInput = document.getElementById('weight-input');
-const partSelect = document.getElementById('part-select');
 function fillDefaults() {
   const p = partDefaults();
   priceInput.value = p.price != null ? p.price.toFixed(2).replace('.', ',') : '';

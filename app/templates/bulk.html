@@ -73,14 +73,13 @@ function addRow(item = { part: null, count: 1 }) {
   // a preset may name a part that is no longer in the config; keep the row
   // faithful to the preset instead of silently falling back to the first part
   const unknown = item.part && !(item.part in PARTS) ? [item.part] : [];
-  const partOptions = Object.keys(PARTS).concat(unknown)
-    .map(p => `<option>${escapeHtml(p)}</option>`).join('');
+
   // data-label traegt die Beschriftung fuer die Kartenansicht auf dem
   // Telefon (siehe table.responsive in base.html) — dort ist die Kopfzeile
   // ausgeblendet, also muss jede Zelle ihren eigenen Titel mitbringen.
   row.innerHTML = `
     <td data-label="Anzahl"><input name="count" type="number" min="1" value="${item.count}" required style="width:4.5rem"></td>
-    <td data-label="Teilstück"><select name="part" required>${partOptions}</select></td>
+    <td data-label="Teilstück"><select name="part" required></select></td>
     <td data-label="Gewicht/Stück (kg) oder 5x"><input name="weight_kg" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]" placeholder="0,4 / 5x" value="${defaultWeight(item.part || firstPart)}" style="width:7rem"></td>
     <td data-label="Preis/kg bzw. Festpreis (€)"><input name="price_per_kg" inputmode="decimal" enterkeyhint="done" pattern="[0-9]+([.,][0-9]+)?" placeholder="${pricePlaceholder(item.part || firstPart)}" style="width:7rem"></td>
     <td data-label="kein Preis" style="text-align:center;">
@@ -89,7 +88,9 @@ function addRow(item = { part: null, count: 1 }) {
     </td>
     <td data-label=""><button type="button" class="small" onclick="this.closest('tr').remove(); updateSummary()">✕ entfernen</button></td>
   `;
-  if (item.part) row.querySelector('select[name=part]').value = item.part;
+  const partSelect = row.querySelector('select[name=part]');
+  fillPartSelect(partSelect, PARTS, unknown);
+  if (item.part) partSelect.value = item.part;
   row.querySelector('select[name=part]').addEventListener('change', e => {
     const tr = e.target.closest('tr');
     tr.querySelector('input[name=price_per_kg]').placeholder = pricePlaceholder(e.target.value);

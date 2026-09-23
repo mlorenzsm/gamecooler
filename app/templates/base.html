@@ -356,6 +356,26 @@
       table.responsive tr.total-row td::before { content: none; }
     }
   </style>
+  <script>
+  // Fill a part <select> with Teilstücke and Zubereitungen as two groups.
+  // parts: {name: {kind, ...}} in display order. Keeps the current choice if
+  // it still exists. Uses textContent, so part names can't inject markup.
+  const PART_KINDS = {{ PART_KINDS | tojson }};
+  function fillPartSelect(select, parts, extra = []) {
+    const current = select.value;
+    select.replaceChildren();
+    for (const [kind, heading] of Object.entries(PART_KINDS)) {
+      const names = Object.keys(parts).filter(n => (parts[n].kind || 'cut') === kind);
+      if (!names.length) continue;
+      const group = document.createElement('optgroup');
+      group.label = heading;
+      for (const n of names) group.append(new Option(n, n));
+      select.append(group);
+    }
+    for (const n of extra) select.append(new Option(n, n));
+    if ([...select.options].some(o => o.value === current)) select.value = current;
+  }
+</script>
 </head>
 <body>
   <header class="site">
@@ -377,7 +397,7 @@
   <main class="card">
   {% block content %}{% endblock %}
   </main>
-  <script>
+    <script>
     // Nur zur Installierbarkeit. Ohne Cache — siehe app/static/sw.js.
     // Nur über HTTPS registrieren: auf http:// würde der Browser den Worker
     // ohnehin ablehnen, und die Fehlermeldung in der Konsole verwirrt.
