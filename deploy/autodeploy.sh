@@ -40,7 +40,7 @@ BAD_MARKER="$STATE/.autodeploy-bad"
 BRANCH_FILE=/etc/default/gamecooler-autodeploy
 
 log() { echo "[autodeploy] $*"; }
-die() { echo "[autodeploy] FEHLER: $*" >&2; exit 1; }
+die() { echo "[autodeploy] ERROR: $*" >&2; exit 1; }
 
 # --- Read configuration -----------------------------------------------------
 
@@ -58,7 +58,7 @@ fi
 case "$BRANCH" in
 	dev | main) ;;
 	*)
-		echo "usage: GAMECOOLER_BRANCH muss 'dev' oder 'main' sein (ist: '$BRANCH')" >&2
+		echo "usage: GAMECOOLER_BRANCH must be 'dev' or 'main' (is: '$BRANCH')" >&2
 		exit 2
 		;;
 esac
@@ -69,8 +69,8 @@ esac
 # gamecooler-test.home.arpa got no certificate. A missing value must fail more
 # loudly than a wrong one.
 if [ -z "$HOST" ]; then
-	echo "usage: GAMECOOLER_HOST fehlt in $BRANCH_FILE" >&2
-	echo "       z.B. GAMECOOLER_HOST=gamecooler-test.home.arpa" >&2
+	echo "usage: GAMECOOLER_HOST missing in $BRANCH_FILE" >&2
+	echo "       e.g. GAMECOOLER_HOST=gamecooler-test.home.arpa" >&2
 	exit 2
 fi
 
@@ -132,7 +132,7 @@ site_healthy() {
 # be straightened out without this call.
 apply_caddy() {
 	[ -r "$REPO/deploy/Caddyfile" ] || {
-		log "Caddyfile fehlt im Repo"
+		log "Caddyfile missing from the repo"
 		return 1
 	}
 
@@ -140,23 +140,23 @@ apply_caddy() {
 	# /etc/caddy/Caddyfile stays untouched instead of half-written.
 	local rendered
 	rendered=$(mktemp) || {
-		log "mktemp fehlgeschlagen"
+		log "mktemp failed"
 		return 1
 	}
 	if ! sed "s|__HOST__|$HOST|g" "$REPO/deploy/Caddyfile" >"$rendered"; then
-		log "Caddyfile konnte nicht gerendert werden"
+		log "could not render the Caddyfile"
 		rm -f "$rendered"
 		return 1
 	fi
 	# Check that rendering really happened: a leftover __HOST__ or a typo in
 	# the placeholder would otherwise pass as a site name.
 	if grep -q '__HOST__' "$rendered"; then
-		log "Caddyfile enthält noch __HOST__ — Platzhalter nicht ersetzt?"
+		log "Caddyfile still contains __HOST__ — placeholder not replaced?"
 		rm -f "$rendered"
 		return 1
 	fi
 	if ! install -m644 "$rendered" /etc/caddy/Caddyfile; then
-		log "Caddyfile konnte nicht installiert werden"
+		log "could not install the Caddyfile"
 		rm -f "$rendered"
 		return 1
 	fi
@@ -165,17 +165,17 @@ apply_caddy() {
 	# validate before reload: a syntax error would otherwise kill Caddy on
 	# reload, and you'd look for the fault in the certificate instead of the file.
 	caddy validate --config /etc/caddy/Caddyfile || {
-		log "Caddyfile ungültig"
+		log "Caddyfile invalid"
 		return 1
 	}
 	systemctl reload caddy || {
-		log "Caddy-Reload fehlgeschlagen"
+		log "Caddy reload failed"
 		return 1
 	}
 	return 0
 }
 
-cd "$REPO" || die "$REPO fehlt"
+cd "$REPO" || die "$REPO missing"
 
 # This script runs as root, but /opt/gamecooler is owned by gamecooler (see
 # docs/deploy.md phase 4). In this setup git refuses every command:
@@ -199,7 +199,7 @@ PREV=$(git rev-parse HEAD)
 # a different commit shows up, so "broken and no deploy needed" is the only
 # sensible outcome here.
 if ! app_healthy 3; then
-	log "App antwortet nicht auf $HEALTH_URL — kein Deploy. Erst reparieren."
+	log "app not answering on $HEALTH_URL — no deploy. Fix it first."
 	exit 1
 fi
 
@@ -214,13 +214,13 @@ fi
 # isn't. A rollback would render the same Caddyfile with the same name and go
 # round in circles; a marker would block a good commit.
 if ! site_healthy 3; then
-	log "Caddy antwortet nicht auf https://$HOST/ — Caddyfile neu rendern"
+	log "Caddy not answering on https://$HOST/ — re-rendering the Caddyfile"
 	if apply_caddy && site_healthy 5; then
-		log "geradegerückt — erreichbar als $HOST"
+		log "fixed — reachable as $HOST"
 	else
-		log "WARNUNG: https://$HOST/ bleibt unerreichbar."
-		log "WARNUNG: prüfen: grep -n home.arpa /etc/caddy/Caddyfile"
-		log "WARNUNG: und GAMECOOLER_HOST in $BRANCH_FILE"
+		log "WARNING: https://$HOST/ is still unreachable."
+		log "WARNING: check: grep -n home.arpa /etc/caddy/Caddyfile"
+		log "WARNING: and GAMECOOLER_HOST in $BRANCH_FILE"
 		exit 1
 	fi
 fi
@@ -235,13 +235,13 @@ fi
 # script immediately. A brief network outage would then look like a broken
 # deploy, when GitHub was merely unreachable for a moment.
 NEU=$(git ls-remote origin "refs/heads/$BRANCH" 2>/dev/null | cut -f1) || {
-	log "origin nicht erreichbar — nächster Lauf versucht es erneut"
+	log "origin unreachable — the next run will try again"
 	exit 0
 }
-[ -n "$NEU" ] || die "Branch '$BRANCH' nicht auf origin gefunden"
+[ -n "$NEU" ] || die "branch '$BRANCH' not found on origin"
 
 if [ "$NEU" = "$PREV" ]; then
-	log "nichts zu tun — $BRANCH ist auf $PREV"
+	log "nothing to do — $BRANCH is at $PREV"
 	exit 0
 fi
 
@@ -249,22 +249,22 @@ fi
 # this marker the timer would run into an endless loop: deploy, fail, roll
 # back, and the same again five minutes later.
 if [ -f "$BAD_MARKER" ] && [ "$(cat "$BAD_MARKER")" = "$NEU" ]; then
-	log "Commit $NEU ist als fehlerhaft markiert — übersprungen."
-	log "Nach einem Fix auf $BRANCH verschwindet der Merker von selbst."
+	log "commit $NEU is marked as bad — skipped."
+	log "The marker clears itself once a fix lands on $BRANCH."
 	exit 0
 fi
 
 log "Deploy $BRANCH: $PREV -> $NEU"
 
-git fetch --depth=1 origin "$BRANCH" || die "git fetch fehlgeschlagen"
-git checkout -q -B "$BRANCH" FETCH_HEAD || die "git checkout fehlgeschlagen"
+git fetch --depth=1 origin "$BRANCH" || die "git fetch failed"
+git checkout -q -B "$BRANCH" FETCH_HEAD || die "git checkout failed"
 
 # Applies the checked-out state: dependencies, Caddyfile, unit, restart.
 #
 # Deliberately a function with a return value rather than a sequence of
 # commands with "|| die". If the sequence aborts halfway, the repo is already on
 # the new commit while the service is still running the old code — and the next
-# run sees NEU == PREV and reports "nichts zu tun". The half-rolled-out state
+# run sees NEU == PREV and reports "nothing to do". The half-rolled-out state
 # would stay forever. As a function, every partial failure ends up in the same
 # rollback as a failed health check.
 #
@@ -273,11 +273,11 @@ apply_release() {
 	# --locked aborts if uv.lock doesn't match the code, instead of silently
 	# re-resolving. A forgotten "uv lock" gets caught here.
 	uv sync --locked --no-dev || {
-		log "uv sync fehlgeschlagen"
+		log "uv sync failed"
 		return 1
 	}
 	chown -R gamecooler:gamecooler "$REPO" || {
-		log "chown fehlgeschlagen"
+		log "chown failed"
 		return 1
 	}
 
@@ -286,12 +286,12 @@ apply_release() {
 	fi
 
 	install -m644 "$REPO/deploy/gamecooler.service" /etc/systemd/system/gamecooler.service || {
-		log "gamecooler.service fehlt im Repo"
+		log "gamecooler.service missing from the repo"
 		return 1
 	}
 	systemctl daemon-reload || return 1
 	systemctl restart gamecooler || {
-		log "Neustart fehlgeschlagen"
+		log "restart failed"
 		return 1
 	}
 	return 0
@@ -304,15 +304,15 @@ if apply_release && app_healthy 10; then
 	# commit is fine, the configuration isn't, and so the marker stays
 	# unwritten: it would block a good commit.
 	if ! site_healthy 5; then
-		log "WARNUNG: die App läuft, aber Caddy antwortet nicht auf https://$HOST/"
-		log "WARNUNG: erwartet wird ein Zertifikat für '$HOST' — kommt"
-		log "WARNUNG: 'tlsv1 alert internal error', bedient Caddy einen anderen Namen."
-		log "WARNUNG: prüfen: grep -n home.arpa /etc/caddy/Caddyfile"
-		log "WARNUNG: und GAMECOOLER_HOST in $BRANCH_FILE"
+		log "WARNING: the app is running, but Caddy does not answer on https://$HOST/"
+		log "WARNING: a certificate for '$HOST' is expected — if you get"
+		log "WARNING: 'tlsv1 alert internal error', Caddy is serving a different name."
+		log "WARNING: check: grep -n home.arpa /etc/caddy/Caddyfile"
+		log "WARNING: and GAMECOOLER_HOST in $BRANCH_FILE"
 		exit 1
 	fi
 
-	log "OK — läuft auf $NEU, erreichbar als $HOST"
+	log "OK — running $NEU, reachable as $HOST"
 	rm -f "$BAD_MARKER"
 	exit 0
 fi
@@ -321,30 +321,30 @@ fi
 # middle of the recovery — the service would keep running the broken state and
 # the marker would never be written, so the timer would retry the same commit
 # endlessly.
-log "Deploy von $NEU fehlgeschlagen — Rollback auf $PREV"
+log "deploy of $NEU failed — rolling back to $PREV"
 
 if git checkout -q --detach "$PREV"; then
-	log "zurück auf $PREV"
+	log "back on $PREV"
 else
 	# Shouldn't happen with --depth=1 (PREV is still in the object store), but
 	# if it does, a second attempt with a full fetch is cheaper than a
 	# container stuck on a broken commit.
-	log "WARNUNG: $PREV nicht im Objektspeicher — hole vollständig nach"
+	log "WARNING: $PREV not in the object store — fetching the full history"
 	git fetch --unshallow origin 2>/dev/null ||
 		git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" ||
-		log "WARNUNG: Nachladen fehlgeschlagen"
-	git checkout -q --detach "$PREV" || log "WARNUNG: Rollback-Checkout fehlgeschlagen"
+		log "WARNING: fetching failed"
+	git checkout -q --detach "$PREV" || log "WARNING: rollback checkout failed"
 fi
 
 # The same path as for rollout, just with the old state — so the Caddyfile is
 # also back to its previous content in case apply_release only failed after
 # that step.
-apply_release || log "WARNUNG: Wiederherstellen des alten Stands unvollständig"
+apply_release || log "WARNING: restoring the previous state is incomplete"
 
 if app_healthy 10; then
-	log "Rollback erfolgreich — läuft wieder auf $PREV"
+	log "rollback succeeded — running $PREV again"
 else
-	log "WARNUNG: auch der Rollback ist nicht gesund. Eingreifen nötig."
+	log "WARNING: the rollback is not healthy either. Manual intervention needed."
 fi
 
 # Write the marker only AFTER the rollback: if the script dies before that
@@ -355,10 +355,10 @@ fi
 # has to be loud, otherwise you end up looking in the wrong place later.
 mkdir -p "$STATE" 2>/dev/null || true
 if ! echo "$NEU" >"$BAD_MARKER" 2>/dev/null; then
-	log "WARNUNG: konnte $BAD_MARKER nicht schreiben!"
-	log "WARNUNG: der fehlerhafte Commit wird beim nächsten Lauf ERNEUT versucht."
-	log "WARNUNG: Timer stoppen, bis die Ursache behoben ist:"
-	log "WARNUNG:   systemctl stop gamecooler-autodeploy.timer"
+	log "WARNING: could not write $BAD_MARKER!"
+	log "WARNING: the bad commit will be tried AGAIN on the next run."
+	log "WARNING: stop the timer until the cause is fixed:"
+	log "WARNING:   systemctl stop gamecooler-autodeploy.timer"
 fi
 
 # The timer should make the failure visible, hence no exit 0.

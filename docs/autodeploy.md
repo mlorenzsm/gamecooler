@@ -191,7 +191,7 @@ container firewall doesn't route that back. From outside, from the laptop or
 phone, it works. The deploy isn't affected — its health check goes against
 `http://127.0.0.1:8010/`, not against the HTTPS name.
 
-The first run should report `nichts zu tun` if step 1 was carried out —
+The first run should report `nothing to do` if step 1 was carried out —
 the repo is then already on the current commit. That's exactly the expected
 result and proves the SHA comparison works.
 
@@ -227,7 +227,7 @@ the process — the name comes from `GAMECOOLER_HOST`, no longer from the file.
 - Does the test container really have its **own** volume
   (`pct config <id> | grep mp0`), not prod's shared one?
 - Is prod running right now? If the app is already sick, the run aborts
-  before the deploy (`App antwortet nicht ...`) — fix that first.
+  before the deploy (`app not answering ...`) — fix that first.
 
 ## Operations
 
@@ -250,19 +250,19 @@ second.
 
 | Journal message | Meaning |
 |---|---|
-| `nichts zu tun — dev ist auf <sha>` | Normal, no deploy needed |
-| `App antwortet nicht auf ... — kein Deploy` | The app was already sick **before** the deploy. Find the cause, don't deploy. |
-| `Commit <sha> ist als fehlerhaft markiert` | The rollback kicked in. Push a fix to the branch; the marker clears itself. |
-| `Caddyfile ungültig` | Syntax error in the repo Caddyfile. `caddy validate` rejected it, so Caddy was not reloaded and keeps running with the old configuration. |
-| `GAMECOOLER_HOST fehlt in ...` / `exit 2` | This environment's name isn't set. Intentional: without it, a wrong name would be installed. |
-| `Caddyfile enthält noch __HOST__` | The placeholder wasn't replaced — typo in the Caddyfile. **Nothing** was installed. |
-| `OK — läuft auf <sha>, erreichbar als <host>` | Normal, not an error: the deploy succeeded, and the line shows which name Caddy now serves. |
-| `Deploy von <sha> fehlgeschlagen — Rollback auf <sha>` | The new commit didn't start (or a deploy step failed). The script rolls back; `Rollback erfolgreich — läuft wieder auf <sha>` confirms it runs on the old state again. |
-| `auch der Rollback ist nicht gesund` | Serious case: both states sick. Intervene by hand. |
-| `uv sync fehlgeschlagen` | Usually a `uv.lock` that doesn't match the commit (`--locked` then aborts). Run `uv lock` locally and push again. |
+| `nothing to do — dev is at <sha>` | Normal, no deploy needed |
+| `app not answering on ... — no deploy` | The app was already sick **before** the deploy. Find the cause, don't deploy. |
+| `commit <sha> is marked as bad` | The rollback kicked in. Push a fix to the branch; the marker clears itself. |
+| `Caddyfile invalid` | Syntax error in the repo Caddyfile. `caddy validate` rejected it, so Caddy was not reloaded and keeps running with the old configuration. |
+| `GAMECOOLER_HOST missing in ...` / `exit 2` | This environment's name isn't set. Intentional: without it, a wrong name would be installed. |
+| `Caddyfile still contains __HOST__` | The placeholder wasn't replaced — typo in the Caddyfile. **Nothing** was installed. |
+| `OK — running <sha>, reachable as <host>` | Normal, not an error: the deploy succeeded, and the line shows which name Caddy now serves. |
+| `deploy of <sha> failed — rolling back to <sha>` | The new commit didn't start (or a deploy step failed). The script rolls back; `rollback succeeded — running <sha> again` confirms it runs on the old state again. |
+| `the rollback is not healthy either` | Serious case: both states sick. Intervene by hand. |
+| `uv sync failed` | Usually a `uv.lock` that doesn't match the commit (`--locked` then aborts). Run `uv lock` locally and push again. |
 | `fatal: $HOME not set` / `status=128` | systemd doesn't set `HOME` (no `User=` in the unit). The script sets it to `/root` itself — if the message still appears, the unit was installed from an old commit. |
 | `fatal: detected dubious ownership` | `/opt/gamecooler` is owned by `gamecooler`, the script runs as root. The script sets `safe.directory` itself; when run by hand in a different repo, the exception is missing. |
-| `konnte .../.autodeploy-bad nicht schreiben` | The protection against the endless loop is gone — the timer rolls the same commit out and back again and again. Stop the timer immediately. |
+| `could not write .../.autodeploy-bad` | The protection against the endless loop is gone — the timer rolls the same commit out and back again and again. Stop the timer immediately. |
 
 **Delete the marker by hand** if a commit failed but is actually fine
 (e.g. the fault was outside the repo):
