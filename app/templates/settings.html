@@ -12,30 +12,30 @@
 <form method="post" action="/settings/hunters" id="hunter-new"></form>
 <div class="table-scroll">
 <table>
-  <tr><th>Name</th><th>Adresse</th><th>Telefon</th><th>E-Mail</th><th></th></tr>
+  <tr><th style="width:18%">Name</th><th style="width:34%">Adresse</th><th style="width:18%">Telefon</th><th>E-Mail</th><th></th></tr>
   {% for h in config.hunters %}
   {% set f = 'hunter-' ~ loop.index %}
   <tr>
     <td>
       <input type="hidden" name="original_name" value="{{ h.name }}" form="{{ f }}">
-      <input name="name" required value="{{ h.name }}" form="{{ f }}" style="width:10rem">
+      <input name="name" required value="{{ h.name }}" form="{{ f }}" style="width:100%; min-width:7rem">
     </td>
-    <td><input name="address" required value="{{ h.address }}" form="{{ f }}" style="width:14rem"></td>
-    <td><input name="phone" value="{{ h.phone }}" form="{{ f }}" style="width:9rem"></td>
-    <td><input name="email" value="{{ h.email }}" form="{{ f }}" style="width:12rem"></td>
-    <td style="white-space:nowrap;">
-      <button class="small" type="submit" form="{{ f }}">Speichern</button>
+    <td><input name="address" required value="{{ h.address }}" form="{{ f }}" style="width:100%; min-width:9rem"></td>
+    <td><input name="phone" value="{{ h.phone }}" form="{{ f }}" style="width:100%; min-width:7rem"></td>
+    <td><input name="email" value="{{ h.email }}" form="{{ f }}" style="width:100%; min-width:8rem"></td>
+    <td class="row-actions">
+      <button class="small" type="submit" form="{{ f }}" title="Speichern">💾</button>
       <button class="small" type="submit" form="{{ f }}" formaction="/settings/hunters/delete" formnovalidate
               onclick="return confirm('Jäger „{{ h.name }}“ löschen?')">✕</button>
     </td>
   </tr>
   {% endfor %}
   <tr>
-    <td><input name="name" required placeholder="Neuer Jäger" form="hunter-new" style="width:10rem"></td>
-    <td><input name="address" required placeholder="Straße Nr., PLZ Ort" form="hunter-new" style="width:14rem"></td>
-    <td><input name="phone" placeholder="Telefon" form="hunter-new" style="width:9rem"></td>
-    <td><input name="email" placeholder="E-Mail" form="hunter-new" style="width:12rem"></td>
-    <td><button class="small" type="submit" form="hunter-new">+ Hinzufügen</button></td>
+    <td><input name="name" required placeholder="Neuer Jäger" form="hunter-new" style="width:100%; min-width:7rem"></td>
+    <td><input name="address" required placeholder="Straße Nr., PLZ Ort" form="hunter-new" style="width:100%; min-width:9rem"></td>
+    <td><input name="phone" placeholder="Telefon" form="hunter-new" style="width:100%; min-width:7rem"></td>
+    <td><input name="email" placeholder="E-Mail" form="hunter-new" style="width:100%; min-width:8rem"></td>
+    <td class="row-actions"><button class="small" type="submit" form="hunter-new">+ Hinzufügen</button></td>
   </tr>
 </table>
 </div>
@@ -76,9 +76,9 @@
   </form>
   <h4>{{ '🥩' if kind == 'cut' else '🌭' }} {{ heading }}</h4>
   <div class="table-scroll">
-  <table class="parts-table" style="max-width:64rem;">
+  <table class="parts-table">
     <thead>
-      <tr><th></th><th>Name</th><th class="num">Preis/kg (€)</th><th class="num">Standardgewicht (kg)</th><th>Zutaten (klein auf dem Etikett)</th><th></th></tr>
+      <tr><th></th><th>Name</th><th class="num">€/kg</th><th class="num">Std.-Gewicht (kg)</th><th>Zutaten</th><th></th></tr>
     </thead>
     {# empty price = part printed without any price on the label #}
     <tbody class="part-list" data-species="{{ sp.name }}" data-kind="{{ kind }}">
@@ -88,18 +88,18 @@
       <td class="drag-handle" title="Ziehen, um zu verschieben">⠿</td>
       <td>
         <input type="hidden" name="original_name" value="{{ name }}" form="{{ f }}">
-        <input name="name" required value="{{ name }}" form="{{ f }}" style="width:11rem">
+        <input name="name" required value="{{ name }}" form="{{ f }}" style="width:100%; min-width:8rem">
       </td>
       <td class="num"><input name="price" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
                              value="{{ p.price | de if p.price is not none else '' }}"
-                             placeholder="–" form="{{ f }}" style="width:6rem; text-align:right;"></td>
+                             placeholder="–" form="{{ f }}" style="width:5.5rem; text-align:right;"></td>
       <td class="num"><input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
                              value="{{ p.weight_kg | de(3) if p.weight_kg is not none else '' }}"
-                             placeholder="–" form="{{ f }}" style="width:6rem; text-align:right;"></td>
+                             placeholder="–" form="{{ f }}" style="width:5.5rem; text-align:right;"></td>
       <td><textarea name="ingredients" rows="1" placeholder="–" form="{{ f }}"
-                    style="width:18rem; min-height:2.2rem; resize:vertical;">{{ p.ingredients or '' }}</textarea></td>
-      <td style="white-space:nowrap;">
-        <button class="small" type="submit" form="{{ f }}">Speichern</button>
+                    style="width:100%; min-width:9rem; min-height:2.2rem; resize:vertical;">{{ p.ingredients or '' }}</textarea></td>
+      <td class="row-actions">
+        <button class="small" type="submit" form="{{ f }}" title="Speichern">💾</button>
         <button class="small" type="submit" form="{{ f }}" formaction="/settings/parts/delete" formnovalidate
                 onclick="return confirm('„{{ name }}“ bei {{ sp.name }} löschen?')">✕</button>
       </td>
@@ -112,14 +112,14 @@
     <tfoot>
     <tr>
       <td></td>
-      <td><input name="name" required placeholder="{{ 'Neues Teilstück' if kind == 'cut' else 'Neue Zubereitung' }}" form="part-{{ si }}-new-{{ kind }}" style="width:11rem"></td>
+      <td><input name="name" required placeholder="{{ 'Neues Teilstück' if kind == 'cut' else 'Neue Zubereitung' }}" form="part-{{ si }}-new-{{ kind }}" style="width:100%; min-width:8rem"></td>
       <td class="num"><input name="price" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
-                             placeholder="–" form="part-{{ si }}-new-{{ kind }}" style="width:6rem; text-align:right;"></td>
+                             placeholder="–" form="part-{{ si }}-new-{{ kind }}" style="width:5.5rem; text-align:right;"></td>
       <td class="num"><input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
-                             placeholder="optional" form="part-{{ si }}-new-{{ kind }}" style="width:6rem; text-align:right;"></td>
+                             placeholder="optional" form="part-{{ si }}-new-{{ kind }}" style="width:5.5rem; text-align:right;"></td>
       <td><textarea name="ingredients" rows="1" placeholder="optional" form="part-{{ si }}-new-{{ kind }}"
-                    style="width:18rem; min-height:2.2rem; resize:vertical;"></textarea></td>
-      <td><button class="small" type="submit" form="part-{{ si }}-new-{{ kind }}">+ Hinzufügen</button></td>
+                    style="width:100%; min-width:9rem; min-height:2.2rem; resize:vertical;"></textarea></td>
+      <td class="row-actions"><button class="small" type="submit" form="part-{{ si }}-new-{{ kind }}">+ Hinzufügen</button></td>
     </tr>
     </tfoot>
   </table>
@@ -137,32 +137,32 @@
   </form>
   <h4>📋 Vorgaben (Sammeldruck)</h4>
   <div class="table-scroll">
-  <table style="max-width:45rem;">
+  <table class="presets-table">
     {% for preset in sp.presets %}
     {% set f = 'preset-' ~ si ~ '-' ~ loop.index %}
     <tr>
       <td>
         <input type="hidden" name="original_name" value="{{ preset.name }}" form="{{ f }}">
-        <input name="name" required value="{{ preset.name }}" form="{{ f }}" style="width:10rem">
+        <input name="name" required value="{{ preset.name }}" form="{{ f }}" style="width:100%; min-width:8rem">
       </td>
       <td>
-        <textarea name="items_text" required rows="2" style="width:100%;"
+        <textarea name="items_text" required rows="2" style="width:100%; min-height:2.6rem; resize:vertical;"
                   placeholder="z. B. 2x Keule, 1x Rücken, 6x Hackfleisch" form="{{ f }}">{{ preset | preset_text }}</textarea>
       </td>
-      <td style="white-space:nowrap;">
-        <button class="small" type="submit" form="{{ f }}">Speichern</button>
+      <td class="row-actions">
+        <button class="small" type="submit" form="{{ f }}" title="Speichern">💾</button>
         <button class="small" type="submit" form="{{ f }}" formaction="/settings/presets/delete" formnovalidate
                 onclick="return confirm('Vorgabe „{{ preset.name }}“ bei {{ sp.name }} löschen?')">✕</button>
       </td>
     </tr>
     {% endfor %}
     <tr>
-      <td><input name="name" required placeholder="Name, z. B. {{ sp.name }} komplett" form="preset-{{ si }}-new" style="width:10rem"></td>
+      <td><input name="name" required placeholder="Name, z. B. {{ sp.name }} komplett" form="preset-{{ si }}-new" style="width:100%; min-width:8rem"></td>
       <td>
-        <textarea name="items_text" required rows="2" style="width:100%;"
+        <textarea name="items_text" required rows="2" style="width:100%; min-height:2.6rem; resize:vertical;"
                   placeholder="z. B. 2x Keule, 1x Rücken, 6x Hackfleisch" form="preset-{{ si }}-new"></textarea>
       </td>
-      <td><button class="small" type="submit" form="preset-{{ si }}-new">+ Hinzufügen</button></td>
+      <td class="row-actions"><button class="small" type="submit" form="preset-{{ si }}-new">+ Hinzufügen</button></td>
     </tr>
   </table>
   </div>
@@ -332,6 +332,9 @@
   .species-block[open] > summary { margin-bottom: 0.4rem; }
   .species-meta { color: #888; font-size: 0.85rem; margin-left: 0.6rem; }
   .species-block h4 { margin: 1rem 0 0.4rem; }
+  td.row-actions { white-space: nowrap; width: 1%; }
+  table.presets-table td:first-child { width: 28%; }
+  td.row-actions button + button { margin-left: 0.3rem; }
   .species-new { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.6rem; }
   .drag-handle { cursor: grab; color: #aaa; font-size: 1.2rem; padding: 0 0.4rem; user-select: none; touch-action: none; }
   .drag-handle:hover { color: #555; }
