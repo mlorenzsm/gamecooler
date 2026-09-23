@@ -133,15 +133,24 @@ def render_qr_label(record: PartRecord, best_before_months: int = 12) -> Image.I
     short_id = record.uuid.split("-")[0].upper()
     draw.text((text_x, MARGIN + 10), short_id, font=_font(72, bold=True), fill=0)
 
-    lines = [f"{record.species} – {record.part}"]
+    # Next to the QR code there is only about half the label width. Long part
+    # names (Bratwurst "Salsiccia Art") don't fit on one line with the species,
+    # so the part moves to its own line; there is room for one extra line
+    # above the UUID. Anything still too wide is shrunk rather than cut off.
+    text_width = WIDTH - MARGIN - text_x
+    info_font = _font(32)
+    title = f"{record.species} – {record.part}"
+    if draw.textlength(title, font=info_font) <= text_width:
+        lines = [title]
+    else:
+        lines = [record.species, record.part]
     if record.weight_kg is not None:
         lines.append(f"{format_de(record.weight_kg, 3)} kg")
     lines.append(f"Mind. haltbar bis: {_best_before(record.created_at, best_before_months)}")
 
-    info_font = _font(32)
     y = MARGIN + 120
     for line in lines:
-        draw.text((text_x, y), line, font=info_font, fill=0)
+        draw.text((text_x, y), line, font=_fit_text(draw, line, 32, text_width, min_size=22), fill=0)
         y += 48
 
     uuid_font = _font(20)
