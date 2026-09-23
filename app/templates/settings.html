@@ -98,17 +98,17 @@
                              value="{{ p.weight_kg | de(3) if p.weight_kg is not none else '' }}"
                              placeholder="–" form="{{ f }}" style="width:5.5rem; text-align:right;"></td>
       <td class="ingredients-cell">
-        {% if config.recipes %}
-        <select name="recipe" form="{{ f }}" class="recipe-link" title="Rezept verknüpfen">
+        {% if sp.recipes %}
+        <select name="recipe" form="{{ f }}" class="recipe-link" title="Rezept verknüpfen" data-species="{{ sp.name }}">
           <option value="">— eigener Text —</option>
-          {% for r in config.recipes %}<option {% if r.name == p.recipe %}selected{% endif %}>{{ r.name }}</option>{% endfor %}
+          {% for r in sp.recipes %}<option {% if r.name == p.recipe %}selected{% endif %}>{{ r.name }}</option>{% endfor %}
         </select>
         {% endif %}
         {# Mit Rezept: Text aus dem Rezept, nur zur Ansicht. Ohne: frei eintippen. #}
         <textarea name="ingredients" rows="1" placeholder="–" form="{{ f }}"
                   style="width:100%; min-width:9rem; min-height:2.2rem; resize:vertical;"
                   data-own="{{ p.ingredients or '' }}"
-                  {% if config.find_recipe(p.recipe) %}readonly{% endif %}>{{ config.ingredients_for(p) or '' }}</textarea>
+                  {% if sp.find_recipe(p.recipe) %}readonly{% endif %}>{{ sp.ingredients_for(p) or '' }}</textarea>
       </td>
       <td class="row-actions">
         <button class="small" type="submit" form="{{ f }}" title="Speichern" aria-label="Speichern">💾</button>
@@ -220,7 +220,7 @@ document.addEventListener('change', e => {
   const area = sel.closest('td').querySelector('textarea[name=ingredients]');
   if (sel.value) {
     if (!area.readOnly) area.dataset.own = area.value;
-    area.value = RECIPE_TEXT[sel.value] || '';
+    area.value = (RECIPE_TEXT[sel.dataset.species] || {})[sel.value] || '';
     area.readOnly = true;
   } else {
     area.value = area.dataset.own || '';

@@ -150,11 +150,30 @@ class Species(BaseModel):
     name: str
     parts: dict[str, PartDefaults] = {}
     presets: list[Preset] = []
+    # Per species too: a Wildschwein-Salsiccia and a Reh-Salsiccia are
+    # different recipes, and a part can only link a recipe of its own species.
+    recipes: list[Recipe] = []
 
     @field_validator("parts", mode="before")
     @classmethod
     def _scalar_is_price(cls, v):
         return _parts_dict(v)
+
+    def find_recipe(self, name: str | None) -> Recipe | None:
+        return next((r for r in self.recipes if r.name == name), None) if name else None
+
+    def ingredients_for(self, part: PartDefaults | None) -> str | None:
+        """What goes on the label: the linked recipe's list, else the typed text."""
+        if part is None:
+            return None
+        recipe = self.find_recipe(part.recipe)
+        if recipe is not None:
+            return recipe.label_text()
+        return part.ingredients
+
+    def recipe_users(self, name: str) -> list[str]:
+        """Names of this species' parts that link the recipe."""
+        return [n for n, p in self.parts.items() if p.recipe == name]
 
     def parts_by_kind(self) -> dict[str, dict[str, "PartDefaults"]]:
         """Parts grouped as Teilstücke / Zubereitungen, each in list order."""
@@ -167,8 +186,6 @@ class Species(BaseModel):
 class Config(BaseModel):
     hunters: list[Hunter]
     species: list[Species]
-    # Shared by all species: one Salsiccia recipe can serve Reh and Wildschwein.
-    recipes: list[Recipe] = []
     printers: list[PrinterTarget] = []
     default_printer: str = ""
     best_before_months: int = 12
@@ -208,6 +225,37 @@ class Config(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
+    def _migrate_global_recipes(cls, data):
+        """Accept the shape where recipes were one list shared by all species.
+
+        A recipe goes to every species with a part that links it. A recipe no
+        part links yet goes to every species, so it isn't lost; unwanted copies
+        are deleted on the recipes page.
+        """
+        if not isinstance(data, dict) or not data.get("recipes"):
+            return data
+        data = dict(data)
+        recipes = data.pop("recipes")
+        species = [dict(sp) if isinstance(sp, dict) else sp for sp in data.get("species") or []]
+
+        def links(sp) -> set:
+            if not isinstance(sp, dict):
+                return set()
+            return {e.get("recipe") for e in (sp.get("parts") or {}).values() if isinstance(e, dict)}
+
+        linked_anywhere = set().union(*(links(sp) for sp in species)) if species else set()
+        for sp in species:
+            if isinstance(sp, dict):
+                own = links(sp)
+                sp["recipes"] = list(sp.get("recipes") or []) + [
+                    r for r in recipes
+                    if r.get("name") in own or r.get("name") not in linked_anywhere
+                ]
+        data["species"] = species
+        return data
+
+    @model_validator(mode="before")
+    @classmethod
     def _migrate_single_printer(cls, data):
         """Accept the pre-multi-printer config shape."""
         if not isinstance(data, dict):
@@ -237,21 +285,10 @@ class Config(BaseModel):
         s = self.find_species(species)
         return s.parts.get(part) if s else None
 
-    def find_recipe(self, name: str | None) -> Recipe | None:
-        return next((r for r in self.recipes if r.name == name), None) if name else None
-
-    def ingredients_for(self, part: PartDefaults | None) -> str | None:
-        """What goes on the label: the linked recipe's list, else the typed text."""
-        if part is None:
-            return None
-        recipe = self.find_recipe(part.recipe)
-        if recipe is not None:
-            return recipe.label_text()
-        return part.ingredients
-
-    def recipe_users(self, name: str) -> list[str]:
-        """"Species – part" of every part linked to this recipe."""
-        return [f"{s.name} – {n}" for s in self.species for n, p in s.parts.items() if p.recipe == name]
+    def ingredients_for(self, species: str, part: str) -> str | None:
+        """Label ingredients of one part of one species."""
+        s = self.find_species(species)
+        return s.ingredients_for(s.parts.get(part)) if s else None
 
     def printer(self, name: str | None = None) -> PrinterTarget:
         """Resolve a printer by name, falling back to the default."""
@@ -281,6 +318,16 @@ def _part_yaml(p: PartDefaults) -> dict:
     )
 
 
+def _recipe_yaml(r: Recipe) -> dict:
+    return {
+        "name": r.name,
+        "items": [
+            {"name": i.name, "unit": i.unit} | ({"amount": i.amount} if i.amount is not None else {})
+            for i in r.items
+        ],
+    } | ({"notes": r.notes} if r.notes else {})
+
+
 def save_config(config: Config) -> None:
     data = {
         "hunters": [h.model_dump() for h in config.hunters],
@@ -289,18 +336,9 @@ def save_config(config: Config) -> None:
                 "name": s.name,
                 "parts": {name: _part_yaml(p) for name, p in s.parts.items()},
                 "presets": [p.model_dump() for p in s.presets],
+                "recipes": [_recipe_yaml(r) for r in s.recipes],
             }
             for s in config.species
-        ],
-        "recipes": [
-            {
-                "name": r.name,
-                "items": [
-                    {"name": i.name, "unit": i.unit} | ({"amount": i.amount} if i.amount is not None else {})
-                    for i in r.items
-                ],
-            } | ({"notes": r.notes} if r.notes else {})
-            for r in config.recipes
         ],
         "printers": [p.model_dump() for p in config.printers],
         "default_printer": config.default_printer,

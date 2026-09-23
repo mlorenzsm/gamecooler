@@ -5,15 +5,25 @@
 
 <h2>📖 Rezepte</h2>
 <p style="font-size:0.85rem; color:#888; margin-top:0;">
-  Ein Rezept lässt sich in den Einstellungen mit einer Zubereitung verknüpfen.
-  Die Zutaten auf dem Etikett kommen dann aus dem Rezept — nach Gewicht
-  sortiert, die schwerste Zutat zuerst, ohne Mengenangaben.
+  Jede Wildart hat ihre eigenen Rezepte. In den Einstellungen lässt sich ein
+  Rezept mit einer Zubereitung derselben Wildart verknüpfen; die Zutaten auf dem
+  Etikett kommen dann aus dem Rezept — nach Gewicht sortiert, die schwerste
+  Zutat zuerst, ohne Mengenangaben.
 </p>
+
+{# Wildart-Wahl: ein Link pro Wildart, die Zahl zeigt, wo es schon Rezepte gibt. #}
+<nav class="species-tabs" aria-label="Wildart">
+  {% for s in config.species %}
+  <a href="/recipes?species={{ s.name | urlencode }}" {% if s.name == sp.name %}class="active" aria-current="page"{% endif %}>
+    {{ s.name }}{% if s.recipes %} <span class="count">{{ s.recipes | length }}</span>{% endif %}
+  </a>
+  {% endfor %}
+</nav>
 
 {# Ein Formular pro Rezept, das neue ganz unten. Die Zutatenzeilen werden als
    parallele Listen geschickt (item_name / item_amount / item_unit). #}
-{% for r in config.recipes %}
-{% set users = config.recipe_users(r.name) %}
+{% for r in sp.recipes %}
+{% set users = sp.recipe_users(r.name) %}
 <details class="recipe-block" {% if open_recipe == r.name %}open{% endif %}>
   <summary>
     <b>{{ r.name }}</b>
@@ -25,8 +35,9 @@
 </details>
 {% endfor %}
 
-<details class="recipe-block" {% if not config.recipes or open_recipe == '__new__' %}open{% endif %}>
-  <summary><b>+ Neues Rezept</b></summary>
+{% if not sp.recipes %}<p style="color:#888;">Noch keine Rezepte für {{ sp.name }}.</p>{% endif %}
+<details class="recipe-block" {% if not sp.recipes or open_recipe == '__new__' %}open{% endif %}>
+  <summary><b>+ Neues Rezept für {{ sp.name }}</b></summary>
   {% set r = none %}
   {% set users = [] %}
   {% set form_id = 'recipe-new' %}
@@ -34,6 +45,11 @@
 </details>
 
 <style>
+  .species-tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.8rem 0 0.4rem; }
+  .species-tabs a { padding: 0.35rem 0.8rem; border: 1px solid #ddd; border-radius: 999px; text-decoration: none; color: inherit; font-size: 0.9rem; }
+  .species-tabs a.active { background: var(--green, #378537); border-color: var(--green, #378537); color: #fff; }
+  .species-tabs .count { display: inline-block; min-width: 1.2rem; padding: 0 0.3rem; margin-left: 0.2rem; border-radius: 999px; background: rgba(0,0,0,0.08); font-size: 0.75rem; text-align: center; }
+  .species-tabs a.active .count { background: rgba(255,255,255,0.25); }
   .recipe-block { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 1rem; margin: 0.8rem 0; }
   .recipe-block > summary { cursor: pointer; font-size: 1.05rem; padding: 0.2rem 0; }
   .recipe-block[open] > summary { margin-bottom: 0.6rem; }
@@ -72,6 +88,9 @@
     .scale-result .scale-base-col, .scale-result th:nth-child(2), .scale-result .scale-total-base { display: none; }
     .scale-base-inline { display: block; color: #888; font-size: 0.75rem; }
   }
+  .recipe-copy { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px dashed #ddd; font-size: 0.9rem; }
+  .recipe-copy select { padding: 0.35rem 0.5rem; }
+  .copy-hint { color: #888; font-size: 0.8rem; }
   .recipe-buttons { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.8rem; }
 </style>
 

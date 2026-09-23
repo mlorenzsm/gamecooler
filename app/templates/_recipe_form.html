@@ -1,5 +1,6 @@
 {# Formular für ein Rezept. Erwartet r (Recipe oder none), users und form_id. #}
 <form method="post" action="/recipes" class="recipe-form" id="{{ form_id }}">
+  <input type="hidden" name="species" value="{{ sp.name }}">
   <input type="hidden" name="original_name" value="{{ r.name if r else '' }}">
   <label style="display:flex; flex-direction:column; gap:0.3rem; max-width:24rem; font-size:0.85rem; color:#666;">
     Name
@@ -79,3 +80,20 @@
     {% endif %}
   </div>
 </form>
+
+{# Kopieren in eine andere Wildart: eigenes Formular, damit es nicht mit dem
+   Speichern-Formular vermischt wird. Die Kopie ist danach unabhängig. #}
+{% if r and config.species | length > 1 %}
+<form method="post" action="/recipes/copy" class="recipe-copy">
+  <input type="hidden" name="species" value="{{ sp.name }}">
+  <input type="hidden" name="original_name" value="{{ r.name }}">
+  <span>Kopieren nach</span>
+  <select name="target">
+    {% for other in config.species if other.name != sp.name %}
+    <option {% if other.find_recipe(r.name) %}disabled{% endif %}>{{ other.name }}</option>
+    {% endfor %}
+  </select>
+  <button class="small" type="submit">📋 Kopieren</button>
+  <span class="copy-hint">die Kopie ist danach unabhängig</span>
+</form>
+{% endif %}
