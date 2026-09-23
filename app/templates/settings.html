@@ -79,7 +79,7 @@
   <div class="table-scroll">
   <table class="parts-table">
     <thead>
-      <tr><th></th><th>Name</th><th class="num">€/kg</th><th class="num">Std.-Gewicht (kg)</th><th>Zutaten</th><th></th></tr>
+      <tr><th></th><th>Name</th><th class="num">€/kg</th><th class="num">Std.-Gewicht (kg)</th><th>Zutaten / Rezept</th><th></th></tr>
     </thead>
     {# empty price = part printed without any price on the label #}
     <tbody class="part-list" data-species="{{ sp.name }}" data-kind="{{ kind }}">
@@ -97,8 +97,19 @@
       <td class="num"><input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
                              value="{{ p.weight_kg | de(3) if p.weight_kg is not none else '' }}"
                              placeholder="–" form="{{ f }}" style="width:5.5rem; text-align:right;"></td>
-      <td><textarea name="ingredients" rows="1" placeholder="–" form="{{ f }}"
-                    style="width:100%; min-width:9rem; min-height:2.2rem; resize:vertical;">{{ p.ingredients or '' }}</textarea></td>
+      <td class="ingredients-cell">
+        {% if config.recipes %}
+        <select name="recipe" form="{{ f }}" class="recipe-link" title="Rezept verknüpfen">
+          <option value="">— eigener Text —</option>
+          {% for r in config.recipes %}<option {% if r.name == p.recipe %}selected{% endif %}>{{ r.name }}</option>{% endfor %}
+        </select>
+        {% endif %}
+        {# Mit Rezept: Text aus dem Rezept, nur zur Ansicht. Ohne: frei eintippen. #}
+        <textarea name="ingredients" rows="1" placeholder="–" form="{{ f }}"
+                  style="width:100%; min-width:9rem; min-height:2.2rem; resize:vertical;"
+                  data-own="{{ p.ingredients or '' }}"
+                  {% if config.find_recipe(p.recipe) %}readonly{% endif %}>{{ config.ingredients_for(p) or '' }}</textarea>
+      </td>
       <td class="row-actions">
         <button class="small" type="submit" form="{{ f }}" title="Speichern" aria-label="Speichern">💾</button>
         <button class="small" type="submit" form="{{ f }}" formaction="/settings/parts/delete" formnovalidate
@@ -197,6 +208,26 @@
   Änderungen werden direkt in die <code>config.yaml</code> geschrieben.
   Bestehende Etiketten und Bestandseinträge bleiben unverändert.
 </p>
+
+<script>
+// Picking a recipe fills the ingredients field with that recipe's label text
+// (read-only — it is edited on the recipes page). Going back to "eigener Text"
+// restores what was typed before. Saving the row stores the link.
+const RECIPE_TEXT = {{ recipe_texts | tojson }};
+document.addEventListener('change', e => {
+  const sel = e.target.closest('select.recipe-link');
+  if (!sel) return;
+  const area = sel.closest('td').querySelector('textarea[name=ingredients]');
+  if (sel.value) {
+    if (!area.readOnly) area.dataset.own = area.value;
+    area.value = RECIPE_TEXT[sel.value] || '';
+    area.readOnly = true;
+  } else {
+    area.value = area.dataset.own || '';
+    area.readOnly = false;
+  }
+});
+</script>
 
 <script>
 // Drag and drop between the Teilstücke / Zubereitungen lists of one species.
@@ -336,6 +367,8 @@
   .species-meta { color: #888; font-size: 0.85rem; margin-left: 0.6rem; }
   .species-block h4 { margin: 1rem 0 0.4rem; }
   td.row-actions { white-space: nowrap; width: 1%; }
+  td.ingredients-cell select.recipe-link { width: 100%; margin-bottom: 0.3rem; font-size: 0.85rem; padding: 0.3rem 0.5rem; }
+  td.ingredients-cell textarea[readonly] { background: #f7f7f2; color: #555; }
   table.presets-table td:first-child { width: 28%; }
   td.row-actions button + button { margin-left: 0.3rem; }
   .species-new { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.6rem; }

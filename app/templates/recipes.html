@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+
+<h2>📖 Rezepte</h2>
+<p style="font-size:0.85rem; color:#888; margin-top:0;">
+  Ein Rezept lässt sich in den Einstellungen mit einer Zubereitung verknüpfen.
+  Die Zutaten auf dem Etikett kommen dann aus dem Rezept — nach Gewicht
+  sortiert, die schwerste Zutat zuerst, ohne Mengenangaben.
+</p>
+
+{# Ein Formular pro Rezept, das neue ganz unten. Die Zutatenzeilen werden als
+   parallele Listen geschickt (item_name / item_amount / item_unit). #}
+{% for r in config.recipes %}
+{% set users = config.recipe_users(r.name) %}
+<details class="recipe-block" {% if open_recipe == r.name %}open{% endif %}>
+  <summary>
+    <b>{{ r.name }}</b>
+    <span class="recipe-meta">{{ r.items | length }} Zutaten ·
+      {% if users %}verknüpft mit {{ users | join(', ') }}{% else %}nicht verknüpft{% endif %}</span>
+  </summary>
+  {% set form_id = 'recipe-' ~ loop.index %}
+  {% include "_recipe_form.html" %}
+</details>
+{% endfor %}
+
+<details class="recipe-block" {% if not config.recipes or open_recipe == '__new__' %}open{% endif %}>
+  <summary><b>+ Neues Rezept</b></summary>
+  {% set r = none %}
+  {% set users = [] %}
+  {% set form_id = 'recipe-new' %}
+  {% include "_recipe_form.html" %}
+</details>
+
+<style>
+  .recipe-block { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 1rem; margin: 0.8rem 0; }
+  .recipe-block > summary { cursor: pointer; font-size: 1.05rem; padding: 0.2rem 0; }
+  .recipe-block[open] > summary { margin-bottom: 0.6rem; }
+  .recipe-meta { color: #888; font-size: 0.85rem; margin-left: 0.6rem; }
+  .recipe-items td { padding: 0.3rem 0.4rem; }
+  .recipe-items th { white-space: nowrap; }
+  /* Phone: one ingredient per two lines instead of a sideways-scrolling table —
+     name on its own line, amount / unit / delete below it. */
+  @media (max-width: 640px) {
+    .recipe-items thead { display: none; }
+    .recipe-items tbody tr { display: grid; grid-template-columns: 1fr auto auto; gap: 0.4rem; padding: 0.5rem 0; border-bottom: 1px solid #eee; }
+    .recipe-items tbody td { padding: 0; border: none; }
+    .recipe-items tbody td:first-child { grid-column: 1 / -1; }
+    .recipe-items tbody td input[name=item_amount] { width: 100% !important; }
+    .recipe-items td.row-actions { width: auto; }
+  }
+  .recipe-items td.row-actions { white-space: nowrap; width: 1%; }
+  .label-preview { background: #f7f7f2; border-radius: 8px; padding: 0.6rem 0.8rem; font-size: 0.85rem; margin: 0.6rem 0; }
+  .recipe-buttons { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.8rem; }
+</style>
+
+<template id="recipe-item-template">
+  <tr>
+    <td><input name="item_name" placeholder="Zutat, z. B. Wildschweinfleisch" style="width:100%; min-width:10rem"></td>
+    <td><input name="item_amount" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="Menge"
+               style="width:6rem; text-align:right;"></td>
+    <td>
+      <select name="item_unit">
+        {% for u in units %}<option>{{ u }}</option>{% endfor %}
+      </select>
+    </td>
+    <td class="row-actions"><button type="button" class="small remove-item" title="Zutat entfernen" aria-label="Zutat entfernen">🗑️</button></td>
+  </tr>
+</template>
+
+<script>
+// Rows are added in the browser; saving sends all of them at once. The label
+// preview mirrors Recipe.label_text() so the order is visible while typing.
+const UNIT_GRAMS = {{ {'kg': 1000, 'g': 1, 'l': 1000, 'ml': 1, 'Stk.': none, 'm': none} | tojson }};
+
+function addItem(formId, item = { name: '', amount: '', unit: 'g' }) {
+  const tbody = document.querySelector(`#${formId} .recipe-items tbody`);
+  const tpl = document.getElementById('recipe-item-template');
+  const row = tpl.content.firstElementChild.cloneNode(true);
+  row.querySelector('[name=item_name]').value = item.name;
+  row.querySelector('[name=item_amount]').value = item.amount;
+  row.querySelector('[name=item_unit]').value = item.unit;
+  tbody.append(row);
+  updatePreview(formId);
+  return row;
+}
+
+function num(s) { return parseFloat((s || '').replace(',', '.')); }
+
+function updatePreview(formId) {
+  const form = document.getElementById(formId);
+  const rows = [...form.querySelectorAll('.recipe-items tbody tr')].map((tr, i) => {
+    const name = tr.querySelector('[name=item_name]').value.trim();
+    const amount = num(tr.querySelector('[name=item_amount]').value);
+    const factor = UNIT_GRAMS[tr.querySelector('[name=item_unit]').value];
+    return { name, i, grams: factor != null && !isNaN(amount) ? amount * factor : null };
+  }).filter(r => r.name);
+  const weighed = rows.filter(r => r.grams != null).sort((a, b) => b.grams - a.grams);
+  const rest = rows.filter(r => r.grams == null);
+  const text = weighed.concat(rest).map(r => r.name).join(', ');
+  form.querySelector('.label-preview span').textContent = text || '—';
+}
+
+document.addEventListener('input', e => { const f = e.target.closest('form.recipe-form'); if (f) updatePreview(f.id); });
+document.addEventListener('change', e => { const f = e.target.closest('form.recipe-form'); if (f) updatePreview(f.id); });
+document.addEventListener('click', e => {
+  const del = e.target.closest('.remove-item');
+  if (del) { const f = del.closest('form'); del.closest('tr').remove(); updatePreview(f.id); }
+});
+document.querySelectorAll('form.recipe-form').forEach(f => {
+  if (!f.querySelector('.recipe-items tbody tr')) addItem(f.id);
+  updatePreview(f.id);
+});
+</script>
+
+
+{% endblock %}

@@ -1,0 +1,49 @@
+{# Formular für ein Rezept. Erwartet r (Recipe oder none), users und form_id. #}
+<form method="post" action="/recipes" class="recipe-form" id="{{ form_id }}">
+  <input type="hidden" name="original_name" value="{{ r.name if r else '' }}">
+  <label style="display:flex; flex-direction:column; gap:0.3rem; max-width:24rem; font-size:0.85rem; color:#666;">
+    Name
+    <input name="name" required value="{{ r.name if r else '' }}" placeholder="z. B. Salsiccia">
+  </label>
+
+  <h4 style="margin:1rem 0 0.3rem;">Zutaten</h4>
+  <div class="table-scroll">
+  <table class="recipe-items">
+    <thead><tr><th>Zutat</th><th style="width:1%;">Menge</th><th style="width:1%;">Einheit</th><th></th></tr></thead>
+    <tbody>
+      {% for i in (r.items if r else []) %}
+      <tr>
+        <td><input name="item_name" value="{{ i.name }}" style="width:100%; min-width:10rem"></td>
+        <td><input name="item_amount" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
+                   value="{{ (i.amount | de(3)).rstrip('0').rstrip(',') if i.amount is not none else '' }}"
+                   placeholder="Menge" style="width:6rem; text-align:right;"></td>
+        <td>
+          <select name="item_unit">
+            {% for u in units %}<option {% if u == i.unit %}selected{% endif %}>{{ u }}</option>{% endfor %}
+          </select>
+        </td>
+        <td class="row-actions"><button type="button" class="small remove-item" title="Zutat entfernen" aria-label="Zutat entfernen">🗑️</button></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <button type="button" class="small" onclick="addItem('{{ form_id }}').querySelector('input').focus()">+ Zutat</button>
+
+  <div class="label-preview"><b>Auf dem Etikett:</b> Zutaten: <span></span></div>
+
+  <label style="display:flex; flex-direction:column; gap:0.3rem; font-size:0.85rem; color:#666;">
+    Zubereitung / Notizen
+    <textarea name="notes" rows="4" placeholder="z. B. Fleisch mit 4-mm-Scheibe wolfen, Gewürze untermengen, in Naturdarm füllen">{{ r.notes if r else '' }}</textarea>
+  </label>
+
+  <div class="recipe-buttons">
+    <button class="print" type="submit" style="padding:0.5rem 1.2rem;">💾 {{ 'Speichern' if r else 'Rezept anlegen' }}</button>
+    {% if r %}
+    <button class="small" type="submit" formaction="/recipes/delete" formnovalidate
+            {% if users %}disabled title="Erst die Verknüpfung in den Einstellungen lösen"{% endif %}
+            onclick="return confirm('Rezept „{{ r.name }}“ löschen?')">🗑️ Rezept löschen</button>
+    {% if users %}<span style="font-size:0.8rem; color:#888;">Löschen erst, wenn keine Zubereitung mehr darauf verweist.</span>{% endif %}
+    {% endif %}
+  </div>
+</form>

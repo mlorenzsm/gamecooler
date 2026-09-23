@@ -11,7 +11,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from . import registry, sales
-from .config import PART_KINDS, Hunter, PartDefaults, Preset, PresetItem, Species, load_config, save_config
+from .config import PART_KINDS, UNITS, Hunter, PartDefaults, Preset, PresetItem, Recipe, RecipeItem, Species, load_config, save_config
 from .labels import render_info_label, render_qr_label
 from .models import (
     PIECES_RE,
@@ -116,8 +116,10 @@ def find_hunter(name: str) -> Hunter | None:
 
 
 def part_ingredients(species: str, part: str) -> str | None:
-    defaults = config.part(species, part)
-    return defaults.ingredients if defaults else None
+    # A linked recipe wins over typed text, and is read at print time — so a
+    # recipe change reaches the next label. The record still keeps a copy, so
+    # reprints of older parts show the recipe as it was then.
+    return config.ingredients_for(config.part(species, part))
 
 
 @app.get("/")
@@ -489,7 +491,10 @@ def settings_page(request: Request, msg: str = "", species: str = ""):
     return templates.TemplateResponse(
         request,
         "settings.html",
-        {"config": config, "msg": msg, "active": "settings", "open_species": species},
+        {
+            "config": config, "msg": msg, "active": "settings", "open_species": species,
+            "recipe_texts": {r.name: r.label_text() or "" for r in config.recipes},
+        },
     )
 
 
@@ -574,15 +579,21 @@ def settings_part_save(
     weight_kg: str = Form(""),
     ingredients: str = Form(""),
     kind: str = Form("cut"),
+    recipe: str = Form(""),
 ):
     sp = _species_or_404(species)
     name = name.strip()
     if name != original_name and name in sp.parts:
         return _settings_error(sp.name, f"„{name}“ gibt es bei {sp.name} schon")
+    linked = config.find_recipe(recipe)
+    previous = sp.parts.get(original_name or name)
     defaults = PartDefaults(
         price=parse_optional_decimal(price),
         weight_kg=parse_optional_decimal(weight_kg),
-        ingredients=ingredients,
+        # With a recipe linked the field only shows the recipe's text; keep the
+        # part's own text as it was, so unlinking later brings it back.
+        ingredients=(previous.ingredients if previous else None) if linked else ingredients,
+        recipe=linked.name if linked else None,
     )
     if original_name and original_name != name:
         # Rename in place so the part keeps its position, and carry the new
@@ -638,6 +649,76 @@ def settings_part_delete(species: str = Form(...), name: str = Form(""), origina
         return _settings_error(sp.name, f"„{name}“ wird noch in Vorgaben verwendet: {', '.join(in_presets)}")
     del sp.parts[name]
     return _settings_redirect(f"Teilstück „{name}“ ({sp.name}) gelöscht", sp.name)
+
+
+# --- Rezepte ----------------------------------------------------------------
+
+
+def _recipe_or_404(name: str) -> Recipe:
+    recipe = config.find_recipe(name)
+    if recipe is None:
+        raise HTTPException(status_code=404, detail="Rezept nicht gefunden")
+    return recipe
+
+
+def _recipes_redirect(msg: str, name: str = "") -> RedirectResponse:
+    save_config(config)
+    url = f"/recipes?msg={quote(msg)}"
+    if name:
+        url += f"&open={quote(name)}"
+    return RedirectResponse(url=url, status_code=303)
+
+
+@app.get("/recipes")
+def recipes_page(request: Request, msg: str = "", open: str = ""):
+    return templates.TemplateResponse(
+        request,
+        "recipes.html",
+        {"config": config, "msg": msg, "active": "recipes", "open_recipe": open, "units": list(UNITS)},
+    )
+
+
+@app.post("/recipes")
+async def recipe_save(request: Request):
+    """Create or update a recipe. The ingredient lines arrive as parallel lists."""
+    form = await request.form()
+    original_name = str(form.get("original_name", ""))
+    name = str(form.get("name", "")).strip()
+    if not name:
+        return RedirectResponse(url="/recipes?msg=Name fehlt", status_code=303)
+    if name != original_name and config.find_recipe(name):
+        return RedirectResponse(url=f"/recipes?msg={quote(f'Rezept „{name}“ gibt es schon')}", status_code=303)
+    items = [
+        RecipeItem(name=n.strip(), amount=a, unit=u)
+        for n, a, u in zip(form.getlist("item_name"), form.getlist("item_amount"), form.getlist("item_unit"))
+        if n.strip()
+    ]
+    recipe = Recipe(name=name, items=items, notes=str(form.get("notes", "")).strip())
+    existing = config.find_recipe(original_name)
+    if existing:
+        config.recipes[config.recipes.index(existing)] = recipe
+        if name != original_name:
+            # carry the rename into every linked part, or they'd lose the link
+            for sp in config.species:
+                for part in sp.parts.values():
+                    if part.recipe == original_name:
+                        part.recipe = name
+    else:
+        config.recipes.append(recipe)
+    return _recipes_redirect(f"Rezept „{name}“ gespeichert", name)
+
+
+@app.post("/recipes/delete")
+def recipe_delete(original_name: str = Form(...)):
+    # original_name, not the name field: that one may hold an unsaved edit
+    name = original_name
+    recipe = _recipe_or_404(name)
+    users = config.recipe_users(name)
+    if users:
+        msg = f"„{name}“ ist noch verknüpft mit: " + ", ".join(users)
+        return RedirectResponse(url=f"/recipes?open={quote(name)}&msg={quote(msg)}", status_code=303)
+    config.recipes.remove(recipe)
+    return _recipes_redirect(f"Rezept „{name}“ gelöscht")
 
 
 @app.get("/parts.json")

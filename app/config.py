@@ -51,9 +51,11 @@ class PartDefaults(BaseModel):
     price: float | None = None
     weight_kg: float | None = None
     # Printed small on the info label, e.g. for sausages. Empty = none.
+    # When a recipe is linked, the label text comes from the recipe instead.
     ingredients: str | None = None
+    recipe: str | None = None
 
-    @field_validator("ingredients", mode="before")
+    @field_validator("ingredients", "recipe", mode="before")
     @classmethod
     def _blank_is_none(cls, v):
         if v is None:
@@ -82,6 +84,53 @@ class PresetItem(BaseModel):
 class Preset(BaseModel):
     name: str
     items: list[PresetItem]
+
+
+# Units a recipe line can use. Mass and volume units convert to grams so the
+# label can list ingredients by weight; the rest (pieces, casing length) can't
+# be compared by weight and go last.
+UNITS = {"kg": 1000.0, "g": 1.0, "l": 1000.0, "ml": 1.0, "Stk.": None, "m": None}
+
+
+class RecipeItem(BaseModel):
+    name: str
+    amount: float | None = None
+    unit: str = "g"
+
+    @field_validator("amount", mode="before")
+    @classmethod
+    def _german_decimal(cls, v):
+        if v is None or v == "":
+            return None
+        return float(str(v).replace(",", "."))
+
+    @field_validator("unit", mode="before")
+    @classmethod
+    def _known_unit(cls, v):
+        return v if v in UNITS else "g"
+
+    def grams(self) -> float | None:
+        factor = UNITS.get(self.unit)
+        return self.amount * factor if factor is not None and self.amount is not None else None
+
+
+class Recipe(BaseModel):
+    name: str
+    items: list[RecipeItem] = []
+    notes: str = ""
+
+    def label_text(self) -> str | None:
+        """Ingredient list for the label: by weight, heaviest first, no amounts.
+
+        Food labelling (LMIV Art. 18) lists ingredients in descending order of
+        weight. Lines without a comparable weight (pieces, metres of casing,
+        no amount) keep their order and come after the weighed ones.
+        """
+        weighed = sorted((i for i in self.items if i.grams() is not None),
+                         key=lambda i: i.grams(), reverse=True)
+        rest = [i for i in self.items if i.grams() is None]
+        names = [i.name for i in weighed + rest if i.name.strip()]
+        return ", ".join(names) or None
 
 
 def _parts_dict(v) -> dict:
@@ -118,6 +167,8 @@ class Species(BaseModel):
 class Config(BaseModel):
     hunters: list[Hunter]
     species: list[Species]
+    # Shared by all species: one Salsiccia recipe can serve Reh and Wildschwein.
+    recipes: list[Recipe] = []
     printers: list[PrinterTarget] = []
     default_printer: str = ""
     best_before_months: int = 12
@@ -186,6 +237,22 @@ class Config(BaseModel):
         s = self.find_species(species)
         return s.parts.get(part) if s else None
 
+    def find_recipe(self, name: str | None) -> Recipe | None:
+        return next((r for r in self.recipes if r.name == name), None) if name else None
+
+    def ingredients_for(self, part: PartDefaults | None) -> str | None:
+        """What goes on the label: the linked recipe's list, else the typed text."""
+        if part is None:
+            return None
+        recipe = self.find_recipe(part.recipe)
+        if recipe is not None:
+            return recipe.label_text()
+        return part.ingredients
+
+    def recipe_users(self, name: str) -> list[str]:
+        """"Species – part" of every part linked to this recipe."""
+        return [f"{s.name} – {n}" for s in self.species for n, p in s.parts.items() if p.recipe == name]
+
     def printer(self, name: str | None = None) -> PrinterTarget:
         """Resolve a printer by name, falling back to the default."""
         wanted = name or self.default_printer
@@ -210,6 +277,7 @@ def _part_yaml(p: PartDefaults) -> dict:
         | ({"price": p.price} if p.price is not None else {})
         | ({"weight_kg": p.weight_kg} if p.weight_kg is not None else {})
         | ({"ingredients": p.ingredients} if p.ingredients else {})
+        | ({"recipe": p.recipe} if p.recipe else {})
     )
 
 
@@ -223,6 +291,16 @@ def save_config(config: Config) -> None:
                 "presets": [p.model_dump() for p in s.presets],
             }
             for s in config.species
+        ],
+        "recipes": [
+            {
+                "name": r.name,
+                "items": [
+                    {"name": i.name, "unit": i.unit} | ({"amount": i.amount} if i.amount is not None else {})
+                    for i in r.items
+                ],
+            } | ({"notes": r.notes} if r.notes else {})
+            for r in config.recipes
         ],
         "printers": [p.model_dump() for p in config.printers],
         "default_printer": config.default_printer,
