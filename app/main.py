@@ -531,12 +531,19 @@ def settings_preset_delete(species: str = Form(...), name: str = Form(...)):
 
 
 @app.get("/settings")
-def settings_page(request: Request, msg: str = "", species: str = ""):
+def settings_page(request: Request, msg: str = "", species: str = "", tab: str = ""):
+    # Two tabs: "general" (hunters, label language) and "species" (one species
+    # at a time). Naming a species implies the species tab.
+    current = config.find_species(species)
+    if tab not in ("general", "species"):
+        tab = "species" if current else "general"
+    if tab == "species" and current is None:
+        current = config.species[0]
     return templates.TemplateResponse(
         request,
         "settings.html",
         {
-            "config": config, "msg": msg, "active": "settings", "open_species": species,
+            "config": config, "msg": msg, "active": "settings", "tab": tab, "sp": current,
             # per species, since recipes are: {species: {recipe: label text}}
             "recipe_texts": {
                 sp.name: {r.name: r.label_text() or "" for r in sp.recipes} for sp in config.species
@@ -546,18 +553,21 @@ def settings_page(request: Request, msg: str = "", species: str = ""):
 
 
 def _settings_url(msg: str, species: str = "") -> str:
-    # The anchor brings the page back to the species that was just edited,
-    # instead of the top of a long settings page.
+    # Back to the species that was just edited; without one, to the general tab.
     url = f"/settings?msg={quote(msg)}"
-    index = next((i for i, s in enumerate(config.species, 1) if s.name == species), None)
-    if index:
-        url += f"&species={quote(species)}#species-{index}"
+    if config.find_species(species):
+        url += f"&species={quote(species)}"
     return url
 
 
 def _settings_redirect(msg: str, species: str = "") -> RedirectResponse:
     save_config(config)
     return RedirectResponse(url=_settings_url(msg, species), status_code=303)
+
+
+def _settings_general(msg: str) -> RedirectResponse:
+    save_config(config)
+    return RedirectResponse(url=f"/settings?tab=general&msg={quote(msg)}", status_code=303)
 
 
 def _settings_error(species: str, msg: str) -> RedirectResponse:
@@ -578,7 +588,7 @@ def settings_hunter_save(
         config.hunters[config.hunters.index(existing)] = hunter
     else:
         config.hunters.append(hunter)
-    return _settings_redirect(t("Jäger „{name}“ gespeichert", name=hunter.name))
+    return _settings_general(t("Jäger „{name}“ gespeichert", name=hunter.name))
 
 
 @app.post("/settings/hunters/delete")
@@ -588,16 +598,16 @@ def settings_hunter_delete(name: str = Form(""), original_name: str = Form("")):
     if hunter is None:
         raise HTTPException(status_code=404, detail=t("Jäger nicht gefunden"))
     if len(config.hunters) == 1:
-        return RedirectResponse(url="/settings?msg=" + quote(t("Der letzte Jäger kann nicht gelöscht werden")), status_code=303)
+        return RedirectResponse(url="/settings?tab=general&msg=" + quote(t("Der letzte Jäger kann nicht gelöscht werden")), status_code=303)
     config.hunters.remove(hunter)
-    return _settings_redirect(t("Jäger „{name}“ gelöscht", name=name))
+    return _settings_general(t("Jäger „{name}“ gelöscht", name=name))
 
 
 @app.post("/settings/label-language")
 def settings_label_language(label_language: str = Form(...)):
     if label_language in LANGUAGES:
         config.label_language = label_language
-    return _settings_redirect(t("Etikettensprache: {language}", language=LANGUAGES[config.label_language]))
+    return _settings_general(t("Etikettensprache: {language}", language=LANGUAGES[config.label_language]))
 
 
 @app.post("/settings/species")
@@ -615,13 +625,26 @@ def settings_species_add(name: str = Form(...), copy_from: str = Form("")):
     return _settings_redirect(t("Wildart „{name}“ hinzugefügt", name=name), name)
 
 
+@app.post("/settings/species/rename")
+def settings_species_rename(original_name: str = Form(...), name: str = Form(...)):
+    sp = _species_or_404(original_name)
+    name = name.strip()
+    if not name or name == sp.name:
+        return _settings_error(sp.name, t("Name fehlt") if not name else t("Unverändert"))
+    if config.find_species(name):
+        return _settings_error(sp.name, t("Wildart existiert bereits"))
+    # Existing records keep the old name — they describe what was printed.
+    sp.name = name
+    return _settings_redirect(t("Wildart „{old}“ heißt jetzt „{name}“", old=original_name, name=name), name)
+
+
 @app.post("/settings/species/delete")
 def settings_species_delete(name: str = Form(...)):
     sp = _species_or_404(name)
     if len(config.species) == 1:
         return RedirectResponse(url="/settings?msg=" + quote(t("Die letzte Wildart kann nicht gelöscht werden")), status_code=303)
     config.species.remove(sp)
-    return _settings_redirect(t("Wildart „{name}“ gelöscht", name=name))
+    return _settings_redirect(t("Wildart „{name}“ gelöscht", name=name), config.species[0].name)
 
 
 @app.post("/settings/parts")

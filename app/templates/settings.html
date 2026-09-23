@@ -5,224 +5,233 @@
 
 <h2>⚙️ {{ t("Einstellungen") }}</h2>
 
-<h3>🧑‍🌾 {{ t("Jäger") }}</h3>
-{% for h in config.hunters %}
-<form method="post" action="/settings/hunters" id="hunter-{{ loop.index }}"></form>
-{% endfor %}
-<form method="post" action="/settings/hunters" id="hunter-new"></form>
-<div class="table-scroll">
-<table>
-  <tr><th style="width:18%">{{ t("Name") }}</th><th style="width:34%">{{ t("Adresse") }}</th><th style="width:18%">{{ t("Telefon") }}</th><th>{{ t("E-Mail") }}</th><th></th></tr>
+{# Zwei Reiter. "Allgemein" ändert sich selten (Jäger, Etikettensprache),
+   "Wildarten" ist der Alltag — deshalb eigene Seiten statt einer langen. #}
+<nav class="settings-tabs" aria-label="{{ t('Einstellungen') }}">
+  <a href="/settings?tab=species" {% if tab == 'species' %}class="active" aria-current="page"{% endif %}>🦌 {{ t("Wildarten") }}</a>
+  <a href="/settings?tab=general" {% if tab == 'general' %}class="active" aria-current="page"{% endif %}>🧑‍🌾 {{ t("Allgemein") }}</a>
+</nav>
+
+{% if tab == 'general' %}
+{# ============================== Allgemein ============================== #}
+
+<section class="settings-card">
+  <h3>🧑‍🌾 {{ t("Jäger") }}</h3>
+  <p class="hint">{{ t("Name, Adresse und Telefon stehen auf jedem Info-Etikett.") }}</p>
   {% for h in config.hunters %}
-  {% set f = 'hunter-' ~ loop.index %}
-  <tr>
-    <td>
-      <input type="hidden" name="original_name" value="{{ h.name }}" form="{{ f }}">
-      <input name="name" required value="{{ h.name }}" form="{{ f }}" style="width:100%; min-width:7rem">
-    </td>
-    <td><input name="address" required value="{{ h.address }}" form="{{ f }}" style="width:100%; min-width:9rem"></td>
-    <td><input name="phone" value="{{ h.phone }}" form="{{ f }}" style="width:100%; min-width:7rem"></td>
-    <td><input name="email" value="{{ h.email }}" form="{{ f }}" style="width:100%; min-width:8rem"></td>
-    <td class="row-actions">
-      <button class="small" type="submit" form="{{ f }}" title="{{ t('Speichern') }}" aria-label="{{ t('Speichern') }}">💾</button>
-      <button class="small" type="submit" form="{{ f }}" formaction="/settings/hunters/delete" formnovalidate
-              title="{{ t('Löschen') }}" aria-label="{{ t('Löschen') }}"
-              onclick='return confirm({{ t("Jäger „{name}“ löschen?", name=h.name) | tojson }})'>🗑️</button>
-    </td>
-  </tr>
+  <form method="post" action="/settings/hunters" id="hunter-{{ loop.index }}"></form>
   {% endfor %}
-  <tr>
-    <td><input name="name" required placeholder="{{ t('Neuer Jäger') }}" form="hunter-new" style="width:100%; min-width:7rem"></td>
-    <td><input name="address" required placeholder="{{ t('Straße Nr., PLZ Ort') }}" form="hunter-new" style="width:100%; min-width:9rem"></td>
-    <td><input name="phone" placeholder="{{ t('Telefon') }}" form="hunter-new" style="width:100%; min-width:7rem"></td>
-    <td><input name="email" placeholder="{{ t('E-Mail') }}" form="hunter-new" style="width:100%; min-width:8rem"></td>
-    <td class="row-actions"><button class="small" type="submit" form="hunter-new">+ {{ t("Hinzufügen") }}</button></td>
-  </tr>
-</table>
-</div>
-
-<h3 style="margin-top:2rem;">🏷️ {{ t("Etikettensprache") }}</h3>
-<p style="font-size:0.85rem; color:#888; margin-top:0;">
-  {{ t("Etiketten und Rechnungen werden in dieser Sprache gedruckt — unabhängig von der Sprache der Oberfläche.") }}
-</p>
-<form method="post" action="/settings/label-language" class="label-language">
-  <select name="label_language" aria-label="{{ t('Etikettensprache') }}">
-    {% for code, language in LANGUAGES.items() %}
-    <option value="{{ code }}" {% if code == config.label_language %}selected{% endif %}>{{ language }}</option>
-    {% endfor %}
-  </select>
-  <button class="small" type="submit">💾 {{ t("Speichern") }}</button>
-</form>
-
-<h3 style="margin-top:2rem;">🦌 {{ t("Wildarten, Teilstücke & Vorgaben") }}</h3>
-<p style="font-size:0.85rem; color:#888; margin-top:0;">
-  {{ t("Jede Wildart hat ihre eigenen Teilstücke, Preise und Vorgaben. Beim Drucken stehen nur die Teilstücke der gewählten Wildart zur Auswahl.") }}
-</p>
-
-{% for sp in config.species %}
-{% set si = loop.index %}
-<details class="species-block" id="species-{{ si }}" {% if open_species == sp.name or (not open_species and loop.first) %}open{% endif %}>
-  <summary>
-    <b>{{ sp.name }}</b>
-    {% set g = sp.parts_by_kind() %}
-    <span class="species-meta" data-presets="{{ sp.presets | length }}">{{ t("{cuts} Teilstücke · {preps} Zubereitungen · {presets} Vorgaben", cuts=g.cut | length, preps=g.prep | length, presets=sp.presets | length) }}</span>
-  </summary>
-
-  {# --- Teilstücke und Zubereitungen dieser Wildart ---
-     Zwei Listen, zwischen denen die Zeilen per Ziehen am Griff (⠿) wandern.
-     Beim Loslassen schickt das Script die komplette neue Reihenfolge samt
-     Art an /settings/parts/order. Jede Zeile hat ihr eigenes Formular
-     (per form=…), damit "Speichern" nur diese Zeile schickt. #}
-  {% for name in sp.parts %}
-  <form method="post" action="/settings/parts" id="part-{{ si }}-{{ loop.index }}">
-    <input type="hidden" name="species" value="{{ sp.name }}">
-  </form>
-  {% endfor %}
-  {% set part_index = {} %}
-  {% for name in sp.parts %}{% set _ = part_index.update({name: loop.index}) %}{% endfor %}
-
-  {% for kind, heading in PART_KINDS.items() %}
-  {% set group = sp.parts_by_kind()[kind] %}
-  <form method="post" action="/settings/parts" id="part-{{ si }}-new-{{ kind }}">
-    <input type="hidden" name="species" value="{{ sp.name }}">
-    <input type="hidden" name="kind" value="{{ kind }}">
-  </form>
-  <h4>{{ '🥩' if kind == 'cut' else '🌭' }} {{ t(heading) }}</h4>
+  <form method="post" action="/settings/hunters" id="hunter-new"></form>
   <div class="table-scroll">
-  <table class="parts-table">
-    <thead>
-      <tr><th></th><th>{{ t('Name') }}</th><th class="num">€/kg</th><th class="num">{{ t('Std.-Gewicht (kg)') }}</th><th>{{ t('Zutaten / Rezept') if kind == 'prep' else t('Zutaten') }}</th><th></th></tr>
-    </thead>
-    {# empty price = part printed without any price on the label #}
-    <tbody class="part-list" data-species="{{ sp.name }}" data-kind="{{ kind }}">
-    {% for name, p in group.items() %}
-    {% set f = 'part-' ~ si ~ '-' ~ part_index[name] %}
-    <tr class="part-row" data-name="{{ name }}">
-      <td class="drag-handle" title="{{ t('Ziehen, um zu verschieben') }}">⠿</td>
+  <table>
+    <tr><th style="width:18%">{{ t("Name") }}</th><th style="width:34%">{{ t("Adresse") }}</th><th style="width:18%">{{ t("Telefon") }}</th><th>{{ t("E-Mail") }}</th><th></th></tr>
+    {% for h in config.hunters %}
+    {% set f = 'hunter-' ~ loop.index %}
+    <tr>
       <td>
-        <input type="hidden" name="original_name" value="{{ name }}" form="{{ f }}">
-        <input name="name" required value="{{ name }}" form="{{ f }}" style="width:100%; min-width:8rem">
+        <input type="hidden" name="original_name" value="{{ h.name }}" form="{{ f }}">
+        <input name="name" required value="{{ h.name }}" form="{{ f }}" style="width:100%; min-width:7rem">
       </td>
-      <td class="num"><input name="price" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
-                             value="{{ p.price | de if p.price is not none else '' }}"
-                             placeholder="–" form="{{ f }}" style="width:5.5rem; text-align:right;"></td>
-      <td class="num"><input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
-                             value="{{ p.weight_kg | de(3) if p.weight_kg is not none else '' }}"
-                             placeholder="–" form="{{ f }}" style="width:5.5rem; text-align:right;"></td>
-      <td class="ingredients-cell">
-        {# Rezepte gibt es nur für Zubereitungen — ein Teilstück hat keins. #}
-        {% if kind == 'prep' and sp.recipes %}
-        <select name="recipe" form="{{ f }}" class="recipe-link" title="{{ t('Rezept verknüpfen') }}" data-species="{{ sp.name }}">
-          <option value="">— {{ t("eigener Text") }} —</option>
-          {% for r in sp.recipes %}<option {% if r.name == p.recipe %}selected{% endif %}>{{ r.name }}</option>{% endfor %}
-        </select>
-        {% endif %}
-        {# Mit Rezept: Text aus dem Rezept, nur zur Ansicht. Ohne: frei eintippen. #}
-        <textarea name="ingredients" rows="1" placeholder="–" form="{{ f }}"
-                  style="width:100%; min-width:9rem; min-height:2.2rem; resize:vertical;"
-                  data-own="{{ p.ingredients or '' }}"
-                  {% if sp.find_recipe(p.recipe) %}readonly{% endif %}>{{ sp.ingredients_for(p) or '' }}</textarea>
-      </td>
+      <td><input name="address" required value="{{ h.address }}" form="{{ f }}" style="width:100%; min-width:9rem"></td>
+      <td><input name="phone" value="{{ h.phone }}" form="{{ f }}" style="width:100%; min-width:7rem"></td>
+      <td><input name="email" value="{{ h.email }}" form="{{ f }}" style="width:100%; min-width:8rem"></td>
       <td class="row-actions">
         <button class="small" type="submit" form="{{ f }}" title="{{ t('Speichern') }}" aria-label="{{ t('Speichern') }}">💾</button>
-        <button class="small" type="submit" form="{{ f }}" formaction="/settings/parts/delete" formnovalidate
+        <button class="small" type="submit" form="{{ f }}" formaction="/settings/hunters/delete" formnovalidate
                 title="{{ t('Löschen') }}" aria-label="{{ t('Löschen') }}"
-                onclick='return confirm({{ t("„{name}“ bei {species} löschen?", name=name, species=sp.name) | tojson }})'>🗑️</button>
-      </td>
-    </tr>
-    {% endfor %}
-    <tr class="drop-hint"{% if group %} hidden{% endif %}>
-      <td colspan="6">{{ t('Noch keine Teilstücke — hierher ziehen oder unten hinzufügen.') if kind == 'cut' else t('Noch keine Zubereitungen — hierher ziehen oder unten hinzufügen.') }}</td>
-    </tr>
-    </tbody>
-    <tfoot>
-    <tr>
-      <td></td>
-      <td><input name="name" required placeholder="{{ t('Neues Teilstück') if kind == 'cut' else t('Neue Zubereitung') }}" form="part-{{ si }}-new-{{ kind }}" style="width:100%; min-width:8rem"></td>
-      <td class="num"><input name="price" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
-                             placeholder="–" form="part-{{ si }}-new-{{ kind }}" style="width:5.5rem; text-align:right;"></td>
-      <td class="num"><input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
-                             placeholder="{{ t('optional') }}" form="part-{{ si }}-new-{{ kind }}" style="width:5.5rem; text-align:right;"></td>
-      <td><textarea name="ingredients" rows="1" placeholder="{{ t('optional') }}" form="part-{{ si }}-new-{{ kind }}"
-                    style="width:100%; min-width:9rem; min-height:2.2rem; resize:vertical;"></textarea></td>
-      <td class="row-actions"><button class="small" type="submit" form="part-{{ si }}-new-{{ kind }}">+ {{ t("Hinzufügen") }}</button></td>
-    </tr>
-    </tfoot>
-  </table>
-  </div>
-  {% endfor %}
-
-  {# --- Vorgaben dieser Wildart --- #}
-  {% for preset in sp.presets %}
-  <form method="post" action="/settings/presets" id="preset-{{ si }}-{{ loop.index }}">
-    <input type="hidden" name="species" value="{{ sp.name }}">
-  </form>
-  {% endfor %}
-  <form method="post" action="/settings/presets" id="preset-{{ si }}-new">
-    <input type="hidden" name="species" value="{{ sp.name }}">
-  </form>
-  <h4>📋 {{ t("Vorgaben (Sammeldruck)") }}</h4>
-  <div class="table-scroll">
-  <table class="presets-table">
-    {% for preset in sp.presets %}
-    {% set f = 'preset-' ~ si ~ '-' ~ loop.index %}
-    <tr>
-      <td>
-        <input type="hidden" name="original_name" value="{{ preset.name }}" form="{{ f }}">
-        <input name="name" required value="{{ preset.name }}" form="{{ f }}" style="width:100%; min-width:8rem">
-      </td>
-      <td>
-        <textarea name="items_text" required rows="2" style="width:100%; min-height:2.6rem; resize:vertical;"
-                  placeholder="{{ t('z. B. 2x Keule, 1x Rücken, 6x Hackfleisch') }}" form="{{ f }}">{{ preset | preset_text }}</textarea>
-      </td>
-      <td class="row-actions">
-        <button class="small" type="submit" form="{{ f }}" title="{{ t('Speichern') }}" aria-label="{{ t('Speichern') }}">💾</button>
-        <button class="small" type="submit" form="{{ f }}" formaction="/settings/presets/delete" formnovalidate
-                title="{{ t('Löschen') }}" aria-label="{{ t('Löschen') }}"
-                onclick='return confirm({{ t("Vorgabe „{name}“ bei {species} löschen?", name=preset.name, species=sp.name) | tojson }})'>🗑️</button>
+                onclick='return confirm({{ t("Jäger „{name}“ löschen?", name=h.name) | tojson }})'>🗑️</button>
       </td>
     </tr>
     {% endfor %}
     <tr>
-      <td><input name="name" required placeholder="{{ t('Name, z. B. {species} komplett', species=sp.name) }}" form="preset-{{ si }}-new" style="width:100%; min-width:8rem"></td>
-      <td>
-        <textarea name="items_text" required rows="2" style="width:100%; min-height:2.6rem; resize:vertical;"
-                  placeholder="{{ t('z. B. 2x Keule, 1x Rücken, 6x Hackfleisch') }}" form="preset-{{ si }}-new"></textarea>
-      </td>
-      <td class="row-actions"><button class="small" type="submit" form="preset-{{ si }}-new">+ {{ t("Hinzufügen") }}</button></td>
+      <td><input name="name" required placeholder="{{ t('Neuer Jäger') }}" form="hunter-new" style="width:100%; min-width:7rem"></td>
+      <td><input name="address" required placeholder="{{ t('Straße Nr., PLZ Ort') }}" form="hunter-new" style="width:100%; min-width:9rem"></td>
+      <td><input name="phone" placeholder="{{ t('Telefon') }}" form="hunter-new" style="width:100%; min-width:7rem"></td>
+      <td><input name="email" placeholder="{{ t('E-Mail') }}" form="hunter-new" style="width:100%; min-width:8rem"></td>
+      <td class="row-actions"><button class="small" type="submit" form="hunter-new">+ {{ t("Hinzufügen") }}</button></td>
     </tr>
   </table>
   </div>
-  <p style="font-size:0.8rem; color:#888; margin-top:0.3rem;">
-    {%- set example %}<code>{{ t("2x Keule, 1x Rücken") }}</code>{% endset %}
-    {# example is Markup, the species name gets escaped here — so the result may be output as safe #}
-    {{ t("Format: {example} — durch Kommas getrennt, nur Teilstücke von {species}.", example=example, species=sp.name | e) | safe }}
-  </p>
+</section>
 
-  <form method="post" action="/settings/species/delete" style="margin-top:1rem;"
-        onsubmit='return confirm({{ t("Wildart „{name}“ mit allen Teilstücken und Vorgaben löschen?\n\nBestehende Etiketten und Bestand bleiben erhalten.", name=sp.name) | tojson }})'>
-    <input type="hidden" name="name" value="{{ sp.name }}">
-    <button class="small" type="submit">🗑️ {{ t("Wildart „{name}“ löschen", name=sp.name) }}</button>
+<section class="settings-card">
+  <h3>🏷️ {{ t("Etikettensprache") }}</h3>
+  <p class="hint">{{ t("Etiketten und Rechnungen werden in dieser Sprache gedruckt — unabhängig von der Sprache der Oberfläche.") }}</p>
+  <form method="post" action="/settings/label-language" class="inline-form">
+    <select name="label_language" aria-label="{{ t('Etikettensprache') }}">
+      {% for code, language in LANGUAGES.items() %}
+      <option value="{{ code }}" {% if code == config.label_language %}selected{% endif %}>{{ language }}</option>
+      {% endfor %}
+    </select>
+    <button class="small" type="submit">💾 {{ t("Speichern") }}</button>
   </form>
-</details>
-{% endfor %}
+</section>
 
-<form method="post" action="/settings/species" class="species-new">
+<p class="footnote">
+  {{ t("Änderungen werden direkt in die {file} geschrieben.", file="<code>config.yaml</code>" | safe) | safe }}
+  {{ t("Bestehende Etiketten und Bestandseinträge bleiben unverändert.") }}
+</p>
+
+{% else %}
+{# ============================== Wildarten ============================== #}
+
+{# Eine Wildart zur Zeit, gewählt über die Leiste — wie auf der Rezepte-Seite. #}
+<nav class="species-tabs" aria-label="{{ t('Wildart') }}">
+  {% for s in config.species %}
+  <a href="/settings?species={{ s.name | urlencode }}" {% if s.name == sp.name %}class="active" aria-current="page"{% endif %}>{{ s.name }}</a>
+  {% endfor %}
+  <button type="button" class="species-add-toggle" aria-expanded="false" aria-controls="species-new">+ {{ t("Wildart") }}</button>
+</nav>
+
+<form method="post" action="/settings/species" class="species-new settings-card" id="species-new" hidden>
   <input name="name" required placeholder="{{ t('Neue Wildart') }}">
-  <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.9rem; color:#666;">
+  <label>
     {{ t("Teilstücke übernehmen von") }}
     <select name="copy_from">
       <option value="">— {{ t("keine") }} —</option>
-      {% for sp in config.species %}<option>{{ sp.name }}</option>{% endfor %}
+      {% for s in config.species %}<option {% if s.name == sp.name %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
     </select>
   </label>
   <button class="small" type="submit">+ {{ t("Wildart hinzufügen") }}</button>
 </form>
 
-<p style="margin-top:1.5rem; font-size:0.85rem; color:#888;">
-  {{ t("Änderungen werden direkt in die {file} geschrieben.", file="<code>config.yaml</code>" | safe) | safe }}
-  {{ t("Bestehende Etiketten und Bestandseinträge bleiben unverändert.") }}
-</p>
+{% set g = sp.parts_by_kind() %}
+<div class="species-head">
+  <h3>{{ sp.name }}</h3>
+  <details class="species-manage">
+    <summary>✏️ {{ t("Umbenennen oder löschen") }}</summary>
+    <form method="post" action="/settings/species/rename" class="inline-form">
+      <input type="hidden" name="original_name" value="{{ sp.name }}">
+      <input name="name" required value="{{ sp.name }}" aria-label="{{ t('Neuer Name') }}">
+      <button class="small" type="submit">💾 {{ t("Umbenennen") }}</button>
+    </form>
+    <form method="post" action="/settings/species/delete" class="inline-form"
+          onsubmit='return confirm({{ t("Wildart „{name}“ mit allen Teilstücken und Vorgaben löschen?\n\nBestehende Etiketten und Bestand bleiben erhalten.", name=sp.name) | tojson }})'>
+      <input type="hidden" name="name" value="{{ sp.name }}">
+      <button class="small danger" type="submit">🗑️ {{ t("Wildart „{name}“ löschen", name=sp.name) }}</button>
+    </form>
+  </details>
+</div>
+
+{# --- Teilstücke und Zubereitungen ---------------------------------------
+   Jede Zeile ist kompakt und zeigt nur, was gesetzt ist. Ein Klick öffnet
+   den Editor genau dieser Zeile (ein <details>), damit nicht 17 Formulare
+   gleichzeitig offen sind. Zwischen den Listen und innerhalb werden Zeilen
+   am Griff ⠿ gezogen; das Script schickt dann die neue Reihenfolge samt Art
+   an /settings/parts/order. #}
+{% for kind, heading in PART_KINDS.items() %}
+{% set group = g[kind] %}
+<section class="settings-card">
+  <div class="list-head">
+    <h4>{{ '🥩' if kind == 'cut' else '🌭' }} {{ t(heading) }} <span class="count" data-count="{{ kind }}">{{ group | length }}</span></h4>
+    <button type="button" class="small add-toggle" aria-controls="new-{{ kind }}" aria-expanded="false">+ {{ t("Neu") }}</button>
+  </div>
+
+  {# Neues Teilstück / neue Zubereitung — erst auf Klick sichtbar. #}
+  <form method="post" action="/settings/parts" class="part-editor new-part" id="new-{{ kind }}" hidden>
+    <input type="hidden" name="species" value="{{ sp.name }}">
+    <input type="hidden" name="kind" value="{{ kind }}">
+    {% set p = none %}{% set name = '' %}
+    {% include "_part_fields.html" %}
+    <div class="editor-buttons">
+      <button class="print" type="submit">+ {{ t("Hinzufügen") }}</button>
+      <button type="button" class="small add-cancel">{{ t("Abbrechen") }}</button>
+    </div>
+  </form>
+
+  <ul class="part-list" data-species="{{ sp.name }}" data-kind="{{ kind }}">
+    {% for name, p in group.items() %}
+    {% set recipe = sp.find_recipe(p.recipe) %}
+    <li class="part-row" data-name="{{ name }}">
+      <details class="part-item">
+        <summary>
+          <span class="drag-handle" title="{{ t('Ziehen, um zu verschieben') }}" aria-hidden="true">⠿</span>
+          <span class="part-name">{{ name }}</span>
+          <span class="part-facts">
+            {% if recipe %}<span class="badge" title="{{ t('Rezept') }}: {{ recipe.name }}">📖<span class="badge-text"> {{ recipe.name }}</span></span>
+            {% elif p.ingredients %}<span class="badge" title="{{ t('Zutaten') }}">🧂<span class="badge-text"> {{ t("Zutaten") }}</span></span>{% endif %}
+            {% if p.weight_kg is not none %}<span class="fact">{{ p.weight_kg | de(3) }} kg</span>{% endif %}
+            <span class="fact price">{{ (p.price | de) ~ ' €/kg' if p.price is not none else '–' }}</span>
+          </span>
+        </summary>
+        <form method="post" action="/settings/parts" class="part-editor">
+          <input type="hidden" name="species" value="{{ sp.name }}">
+          <input type="hidden" name="original_name" value="{{ name }}">
+          {% include "_part_fields.html" %}
+          <div class="editor-buttons">
+            <button class="print" type="submit">💾 {{ t("Speichern") }}</button>
+            <button type="button" class="small edit-cancel">{{ t("Abbrechen") }}</button>
+            <button class="small danger" type="submit" formaction="/settings/parts/delete" formnovalidate
+                    onclick='return confirm({{ t("„{name}“ bei {species} löschen?", name=name, species=sp.name) | tojson }})'>🗑️ {{ t("Löschen") }}</button>
+          </div>
+        </form>
+      </details>
+    </li>
+    {% endfor %}
+    <li class="drop-hint"{% if group %} hidden{% endif %}>
+      {{ t('Noch keine Teilstücke — hierher ziehen oder oben hinzufügen.') if kind == 'cut' else t('Noch keine Zubereitungen — hierher ziehen oder oben hinzufügen.') }}
+    </li>
+  </ul>
+</section>
+{% endfor %}
+
+{# --- Vorgaben (Sammeldruck) --------------------------------------------- #}
+<section class="settings-card">
+  <div class="list-head">
+    <h4>📋 {{ t("Vorgaben (Sammeldruck)") }} <span class="count">{{ sp.presets | length }}</span></h4>
+    <button type="button" class="small add-toggle" aria-controls="new-preset" aria-expanded="false">+ {{ t("Neu") }}</button>
+  </div>
+  <p class="hint">
+    {%- set example %}<code>{{ t("2x Keule, 1x Rücken") }}</code>{% endset %}
+    {# example is Markup, the species name gets escaped here — so the result may be output as safe #}
+    {{ t("Format: {example} — durch Kommas getrennt, nur Teilstücke von {species}.", example=example, species=sp.name | e) | safe }}
+  </p>
+
+  <form method="post" action="/settings/presets" class="part-editor new-part" id="new-preset" hidden>
+    <input type="hidden" name="species" value="{{ sp.name }}">
+    <label class="field">{{ t("Name") }}
+      <input name="name" required placeholder="{{ t('Name, z. B. {species} komplett', species=sp.name) }}">
+    </label>
+    <label class="field wide">{{ t("Inhalt") }}
+      <textarea name="items_text" required rows="2" placeholder="{{ t('z. B. 2x Keule, 1x Rücken, 6x Hackfleisch') }}"></textarea>
+    </label>
+    <div class="editor-buttons">
+      <button class="print" type="submit">+ {{ t("Hinzufügen") }}</button>
+      <button type="button" class="small add-cancel">{{ t("Abbrechen") }}</button>
+    </div>
+  </form>
+
+  <ul class="part-list presets">
+    {% for preset in sp.presets %}
+    <li>
+      <details class="part-item">
+        <summary>
+          <span class="part-name">{{ preset.name }}</span>
+          <span class="part-facts preset-items">{{ preset | preset_text }}</span>
+        </summary>
+        <form method="post" action="/settings/presets" class="part-editor">
+          <input type="hidden" name="species" value="{{ sp.name }}">
+          <input type="hidden" name="original_name" value="{{ preset.name }}">
+          <label class="field">{{ t("Name") }}
+            <input name="name" required value="{{ preset.name }}">
+          </label>
+          <label class="field wide">{{ t("Inhalt") }}
+            <textarea name="items_text" required rows="2" placeholder="{{ t('z. B. 2x Keule, 1x Rücken, 6x Hackfleisch') }}">{{ preset | preset_text }}</textarea>
+          </label>
+          <div class="editor-buttons">
+            <button class="print" type="submit">💾 {{ t("Speichern") }}</button>
+            <button type="button" class="small edit-cancel">{{ t("Abbrechen") }}</button>
+            <button class="small danger" type="submit" formaction="/settings/presets/delete" formnovalidate
+                    onclick='return confirm({{ t("Vorgabe „{name}“ bei {species} löschen?", name=preset.name, species=sp.name) | tojson }})'>🗑️ {{ t("Löschen") }}</button>
+          </div>
+        </form>
+      </details>
+    </li>
+    {% else %}
+    <li class="drop-hint">{{ t("Noch keine Vorgaben.") }}</li>
+    {% endfor %}
+  </ul>
+</section>
 
 <script>
 // Picking a recipe fills the ingredients field with that recipe's label text
@@ -232,7 +241,7 @@ const RECIPE_TEXT = {{ recipe_texts | tojson }};
 document.addEventListener('change', e => {
   const sel = e.target.closest('select.recipe-link');
   if (!sel) return;
-  const area = sel.closest('td').querySelector('textarea[name=ingredients]');
+  const area = sel.closest('form').querySelector('textarea[name=ingredients]');
   if (sel.value) {
     if (!area.readOnly) area.dataset.own = area.value;
     area.value = (RECIPE_TEXT[sel.dataset.species] || {})[sel.value] || '';
@@ -242,26 +251,59 @@ document.addEventListener('change', e => {
     area.readOnly = false;
   }
 });
+
+// One editor open at a time: opening a row closes the others, "Abbrechen"
+// closes it and throws the edits away (reset), so nothing half-edited lingers.
+document.addEventListener('toggle', e => {
+  const d = e.target;
+  if (!d.matches?.('details.part-item') || !d.open) return;
+  document.querySelectorAll('details.part-item[open]').forEach(o => { if (o !== d) closeEditor(o); });
+  d.querySelector('input:not([type=hidden]), textarea')?.focus();
+}, true);
+
+function closeEditor(details) {
+  details.querySelector('form')?.reset();
+  details.querySelector('select.recipe-link')?.dispatchEvent(new Event('change', { bubbles: true }));
+  details.open = false;
+}
+
+document.addEventListener('click', e => {
+  const cancel = e.target.closest('.edit-cancel');
+  if (cancel) { closeEditor(cancel.closest('details')); return; }
+
+  const toggle = e.target.closest('.add-toggle, .species-add-toggle');
+  if (toggle) {
+    const form = document.getElementById(toggle.getAttribute('aria-controls'));
+    form.hidden = !form.hidden;
+    toggle.setAttribute('aria-expanded', String(!form.hidden));
+    if (!form.hidden) form.querySelector('input:not([type=hidden])')?.focus();
+    return;
+  }
+  const addCancel = e.target.closest('.add-cancel');
+  if (addCancel) {
+    const form = addCancel.closest('form');
+    form.reset(); form.hidden = true;
+    document.querySelector(`[aria-controls="${form.id}"]`)?.setAttribute('aria-expanded', 'false');
+  }
+});
 </script>
 
 <script>
-// Drag and drop between the Teilstücke / Zubereitungen lists of one species.
+// Drag and drop between the Teilstücke / Zubereitungen lists.
 //
 // Pointer events instead of the HTML5 drag API: that one doesn't work with a
 // finger on iOS, and this page is used on the phone. Dragging starts only on
-// the handle (⠿), so scrolling and typing in the row still work normally.
-// Rows only move within their own species; on drop the whole new layout of
-// that species is saved in one request.
+// the handle (⠿), so tapping the row still opens its editor. On drop the whole
+// new layout of the species is saved in one request.
 (function () {
-  const T = {{ {
-    "Speichern fehlgeschlagen": t("Speichern fehlgeschlagen"),
-    "{cuts} Teilstücke · {preps} Zubereitungen · {presets} Vorgaben": t("{cuts} Teilstücke · {preps} Zubereitungen · {presets} Vorgaben"),
-  } | tojson }};
+  const T = {{ { "Speichern fehlgeschlagen": t("Speichern fehlgeschlagen") } | tojson }};
   let drag = null;   // { row, species, fromList, fromNext, placeholder, offsetY }
 
-  function listUnder(x, y, species) {
-    for (const list of document.querySelectorAll(`.part-list[data-species="${CSS.escape(species)}"]`)) {
-      const r = list.closest('table').getBoundingClientRect();
+  const lists = () => document.querySelectorAll('.part-list[data-kind]');
+
+  function listUnder(x, y) {
+    for (const list of lists()) {
+      const r = list.getBoundingClientRect();
       if (x >= r.left && x <= r.right && y >= r.top - 20 && y <= r.bottom + 20) return list;
     }
     return null;
@@ -276,44 +318,47 @@ document.addEventListener('change', e => {
     return list.querySelector('.drop-hint');
   }
 
-  function refreshHints(species) {
-    document.querySelectorAll(`.part-list[data-species="${CSS.escape(species)}"]`).forEach(list => {
-      const hint = list.querySelector('.drop-hint');
-      hint.hidden = list.querySelectorAll('.part-row:not(.dragging)').length > 0
-                 || list.contains(drag?.placeholder);
+  function refresh() {
+    lists().forEach(list => {
+      const n = list.querySelectorAll('.part-row:not(.dragging)').length;
+      list.querySelector('.drop-hint').hidden = n > 0 || list.contains(drag?.placeholder);
+      const count = document.querySelector(`[data-count="${list.dataset.kind}"]`);
+      if (count) count.textContent = n + (drag && list.contains(drag.placeholder) ? 1 : 0);
     });
   }
 
   document.addEventListener('pointerdown', e => {
     const handle = e.target.closest('.drag-handle');
     if (!handle || e.button > 0) return;
+    e.preventDefault();                       // no text selection, no <details> toggle
     const row = handle.closest('.part-row');
     const list = row.closest('.part-list');
-    e.preventDefault();
+    row.querySelector('details').open = false;
     const rect = row.getBoundingClientRect();
-    const placeholder = document.createElement('tr');
+    const placeholder = document.createElement('li');
     placeholder.className = 'drag-placeholder';
-    placeholder.innerHTML = `<td colspan="6" style="height:${rect.height}px"></td>`;
+    placeholder.style.height = rect.height + 'px';
     drag = { row, species: list.dataset.species, fromList: list, fromNext: row.nextElementSibling,
              placeholder, offsetY: e.clientY - rect.top };
     row.after(placeholder);
     row.classList.add('dragging');
-    row.style.width = rect.width + 'px';
-    row.style.top = rect.top + 'px';
-    row.style.left = rect.left + 'px';
+    Object.assign(row.style, { width: rect.width + 'px', top: rect.top + 'px', left: rect.left + 'px' });
     handle.setPointerCapture(e.pointerId);
-    refreshHints(drag.species);
+    refresh();
   });
+
+  // a click on the handle must not open the row
+  document.addEventListener('click', e => { if (e.target.closest('.drag-handle')) e.preventDefault(); }, true);
 
   document.addEventListener('pointermove', e => {
     if (!drag) return;
     drag.row.style.top = (e.clientY - drag.offsetY) + 'px';
-    const list = listUnder(e.clientX, e.clientY, drag.species);
+    const list = listUnder(e.clientX, e.clientY);
     if (list) {
       const before = rowAfter(list, e.clientY);
       if (drag.placeholder.nextElementSibling !== before) list.insertBefore(drag.placeholder, before);
     }
-    refreshHints(drag.species);
+    refresh();
     // keep scrolling when dragging near the edge of the screen
     if (e.clientY < 60) window.scrollBy(0, -12);
     else if (e.clientY > window.innerHeight - 60) window.scrollBy(0, 12);
@@ -324,53 +369,42 @@ document.addEventListener('change', e => {
     drag = null;
     d.row.classList.remove('dragging');
     d.row.style.width = d.row.style.top = d.row.style.left = '';
-    if (cancel) {
-      d.fromList.insertBefore(d.row, d.fromNext);
-    } else {
-      d.placeholder.replaceWith(d.row);
-    }
+    if (cancel) d.fromList.insertBefore(d.row, d.fromNext);
+    else d.placeholder.replaceWith(d.row);
     d.placeholder.remove();
-    refreshHints(d.species);
+    refresh();
     return d;
   }
 
-  function layout(species) {
+  function layout() {
     const parts = [];
-    document.querySelectorAll(`.part-list[data-species="${CSS.escape(species)}"]`).forEach(list => {
-      list.querySelectorAll('.part-row').forEach(row => parts.push({ name: row.dataset.name, kind: list.dataset.kind }));
-    });
+    lists().forEach(list => list.querySelectorAll('.part-row').forEach(row =>
+      parts.push({ name: row.dataset.name, kind: list.dataset.kind })));
     return parts;
   }
 
   async function save(d) {
-    const before = { list: d.fromList, next: d.fromNext };
-    if (d.row.parentElement === before.list && d.row.nextElementSibling === before.next) return; // no change
+    if (d.row.parentElement === d.fromList && d.row.nextElementSibling === d.fromNext) return; // no change
+    const movedKind = d.row.parentElement !== d.fromList;
     d.row.classList.add('saving');
     try {
       const resp = await fetch('/settings/parts/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ species: d.species, parts: layout(d.species) }),
+        body: JSON.stringify({ species: d.species, parts: layout() }),
       });
       const data = await resp.json();
       if (!data.ok) throw new Error(data.error || T["Speichern fehlgeschlagen"]);
-      updateCounts(d.species);
+      // Moving between the lists changes what the editor offers (a recipe
+      // only for Zubereitungen) — reload so the row shows the right fields.
+      if (movedKind) location.reload();
     } catch (err) {
-      // put the row back so the page matches what is saved
-      before.list.insertBefore(d.row, before.next);
-      refreshHints(d.species);
+      d.fromList.insertBefore(d.row, d.fromNext);   // put it back: page must match what is saved
+      refresh();
       alert(err.message);
     } finally {
       d.row.classList.remove('saving');
     }
-  }
-
-  function updateCounts(species) {
-    const block = document.querySelector(`.part-list[data-species="${CSS.escape(species)}"]`).closest('.species-block');
-    const n = kind => block.querySelectorAll(`.part-list[data-kind="${kind}"] .part-row`).length;
-    const meta = block.querySelector('.species-meta');
-    meta.textContent = T["{cuts} Teilstücke · {preps} Zubereitungen · {presets} Vorgaben"]
-      .replace("{cuts}", n('cut')).replace("{preps}", n('prep')).replace("{presets}", meta.dataset.presets);
   }
 
   document.addEventListener('pointerup', () => { if (drag) save(finish(false)); });
@@ -379,25 +413,87 @@ document.addEventListener('change', e => {
 })();
 </script>
 
+{% endif %}
+
 <style>
-  .species-block { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 1rem; margin: 0.8rem 0; }
-  .species-block > summary { cursor: pointer; font-size: 1.05rem; padding: 0.2rem 0; }
-  .species-block[open] > summary { margin-bottom: 0.4rem; }
-  .species-meta { color: #888; font-size: 0.85rem; margin-left: 0.6rem; }
-  .species-block h4 { margin: 1rem 0 0.4rem; }
-  td.row-actions { white-space: nowrap; width: 1%; }
-  td.ingredients-cell select.recipe-link { width: 100%; margin-bottom: 0.3rem; font-size: 0.85rem; padding: 0.3rem 0.5rem; }
-  td.ingredients-cell textarea[readonly] { background: #f7f7f2; color: #555; }
-  table.presets-table td:first-child { width: 28%; }
-  td.row-actions button + button { margin-left: 0.3rem; }
-  .label-language { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
-  .species-new { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.6rem; }
-  .drag-handle { cursor: grab; color: #aaa; font-size: 1.2rem; padding: 0 0.4rem; user-select: none; touch-action: none; }
+  /* [hidden] must win over the display: grid/flex below — the "+ Neu" forms rely on it */
+  [hidden] { display: none !important; }
+
+  /* Underlined tabs. The site nav styles every "nav a" as a pill; these rules
+     undo that for the tabs (and the species pills set their own look below). */
+  nav.settings-tabs { display: flex; gap: 0.3rem; border-bottom: 2px solid var(--line); margin: 0.4rem 0 1rem; flex-wrap: nowrap; }
+  nav.settings-tabs a { padding: 0.5rem 1rem; text-decoration: none; color: var(--muted); font-weight: 500;
+                        background: none; border: none; border-radius: 0; box-shadow: none;
+                        border-bottom: 3px solid transparent; margin-bottom: -2px; }
+  nav.settings-tabs a:hover { background: none; color: var(--ink); }
+  nav.settings-tabs a.active { background: none; color: var(--ink); border-bottom-color: var(--green); }
+
+  nav.species-tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.8rem; }
+  nav.species-tabs a, .species-add-toggle { padding: 0.35rem 0.85rem; border: 1px solid var(--line); border-radius: 999px;
+                    text-decoration: none; color: inherit; font-size: 0.9rem; font-weight: 500; background: #fff; box-shadow: none; }
+  nav.species-tabs a:hover { background: #f4f7f4; }
+  nav.species-tabs a.active { background: var(--green); border-color: var(--green); color: #fff; }
+  .species-add-toggle { color: var(--green); border-style: dashed; cursor: pointer; font: inherit; font-size: 0.9rem; }
+
+  .settings-card { border: 1px solid var(--line); border-radius: 12px; padding: 0.9rem 1rem; margin: 0 0 1rem; background: #fff; }
+  .settings-card h3, .settings-card h4 { margin: 0 0 0.3rem; }
+  .hint { font-size: 0.85rem; color: #888; margin: 0 0 0.7rem; }
+  .footnote { font-size: 0.8rem; color: #999; margin-top: 1.2rem; }
+  .inline-form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+  .species-new { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
+  .species-new label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; color: #666; }
+
+  .species-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; margin: 0.4rem 0 0.8rem; }
+  .species-head h3 { margin: 0; font-size: 1.4rem; }
+  .species-manage > summary { cursor: pointer; font-size: 0.85rem; color: var(--muted); list-style: none; }
+  .species-manage > summary::-webkit-details-marker { display: none; }
+  .species-manage[open] { display: grid; gap: 0.5rem; justify-items: end; }
+  button.danger { color: #a33; border-color: #e3c4c4; }
+
+  .list-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; }
+  .count { display: inline-block; min-width: 1.4rem; padding: 0 0.35rem; border-radius: 999px; background: #f0f0ea;
+           font-size: 0.75rem; font-weight: 600; text-align: center; color: var(--muted); vertical-align: middle; }
+
+  ul.part-list { list-style: none; margin: 0; padding: 0; }
+  ul.part-list > li { border-top: 1px solid var(--line); }
+  ul.part-list > li:first-child { border-top: none; }
+  .part-item > summary { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.2rem; cursor: pointer; list-style: none; }
+  .part-item > summary::-webkit-details-marker { display: none; }
+  .part-item > summary:hover { background: rgba(55,133,55,0.04); }
+  .part-item[open] > summary { font-weight: 600; }
+  .part-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .part-facts { display: flex; gap: 0.6rem; align-items: center; color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
+  .part-facts .price { min-width: 6.5rem; text-align: right; font-variant-numeric: tabular-nums; }
+  .preset-items { white-space: normal; text-align: right; max-width: 60%; }
+  .badge { background: #eef6ee; color: #2a662a; border-radius: 999px; padding: 0.05rem 0.5rem; font-size: 0.75rem; }
+
+  .part-editor { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: 0.6rem;
+                 padding: 0.7rem 0.8rem 0.9rem; margin: 0 0 0.6rem; background: #fafaf7; border-radius: 10px; }
+  .part-editor .field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; color: var(--muted); }
+  .part-editor .field input, .part-editor .field select, .part-editor .field textarea { width: 100%; }
+  .part-editor .field.wide { grid-column: 1 / -1; }
+  .part-editor textarea[readonly] { background: #f0f0ea; color: #555; }
+  .editor-buttons { grid-column: 1 / -1; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+  .editor-buttons .danger { margin-left: auto; }
+  .new-part { border: 1px dashed #9c9; }
+
+  .drag-handle { cursor: grab; color: #bbb; font-size: 1.2rem; padding: 0 0.2rem; user-select: none; touch-action: none; }
   .drag-handle:hover { color: #555; }
-  .part-row.dragging { position: fixed; z-index: 10; background: #fff; box-shadow: 0 6px 18px rgba(0,0,0,0.18); pointer-events: none; display: table; }
+  .part-row.dragging { position: fixed; z-index: 10; background: #fff; box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+                       pointer-events: none; border-radius: 8px; list-style: none; }
   .part-row.saving { opacity: 0.5; }
-  .drag-placeholder td { background: #eef6ee; border: 2px dashed #9c9; }
-  .drop-hint td { color: #999; font-style: italic; font-size: 0.85rem; padding: 0.6rem; }
+  .drag-placeholder { background: #eef6ee; border: 2px dashed #9c9 !important; border-radius: 8px; }
+  .drop-hint { color: #999; font-style: italic; font-size: 0.85rem; padding: 0.7rem 0.2rem; }
+  td.row-actions { white-space: nowrap; width: 1%; }
+  td.row-actions button + button { margin-left: 0.3rem; }
+
+  @media (max-width: 640px) {
+    .part-facts .price { min-width: 0; }
+    .part-facts .fact:not(.price) { display: none; }      /* phone: price only, weight in the editor */
+    .badge-text { display: none; }                          /* phone: badge as icon, so the name keeps its room */
+    .part-name { white-space: normal; }
+    .preset-items { display: none; }
+  }
 </style>
 
 {% endblock %}
