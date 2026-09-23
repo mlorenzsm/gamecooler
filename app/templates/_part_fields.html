@@ -1,0 +1,29 @@
+{# Eingabefelder eines Teilstücks, für "bearbeiten" und "neu".
+   Erwartet: name (leer bei neu), p (PartDefaults oder none), kind, sp. #}
+<label class="field">{{ t("Name") }}
+  <input name="name" required value="{{ name }}"
+         placeholder="{{ t('Neues Teilstück') if kind == 'cut' else t('Neue Zubereitung') }}">
+</label>
+<label class="field">{{ t("Preis/kg (€)") }}
+  <input name="price" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
+         value="{{ p.price | de if p and p.price is not none else '' }}" placeholder="–">
+</label>
+<label class="field">{{ t("Standardgewicht (kg)") }}
+  <input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
+         value="{{ p.weight_kg | de(3) if p and p.weight_kg is not none else '' }}" placeholder="{{ t('optional') }}">
+</label>
+{# Rezepte gibt es nur für Zubereitungen — ein Teilstück hat keins. #}
+{% if kind == 'prep' and sp.recipes %}
+<label class="field">{{ t("Rezept") }}
+  <select name="recipe" class="recipe-link" data-species="{{ sp.name }}">
+    <option value="">— {{ t("eigener Text") }} —</option>
+    {% for r in sp.recipes %}<option {% if p and r.name == p.recipe %}selected{% endif %}>{{ r.name }}</option>{% endfor %}
+  </select>
+</label>
+{% endif %}
+{# Mit Rezept: Text aus dem Rezept, nur zur Ansicht. Ohne: frei eintippen. #}
+<label class="field wide">{{ t("Zutaten (klein auf dem Etikett)") }}
+  <textarea name="ingredients" rows="2" placeholder="{{ t('optional') }}"
+            data-own="{{ p.ingredients or '' if p else '' }}"
+            {% if p and sp.find_recipe(p.recipe) %}readonly{% endif %}>{{ (sp.ingredients_for(p) or '') if p else '' }}</textarea>
+</label>
