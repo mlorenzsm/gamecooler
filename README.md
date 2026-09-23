@@ -79,6 +79,28 @@ AGENT_PRINTER_BACKEND=pyusb
 
 Prüfen mit `curl http://mac.local:8020/health`.
 
+**Dauerhaft als LaunchAgent**, damit der Agent Abmelden, Absturz und Neustart
+übersteht. launchd kennt kein `~`, deshalb werden die Pfade beim Installieren
+eingesetzt:
+
+```sh
+sed -e "s|__REPO__|$PWD|g" -e "s|__LOGDIR__|$HOME/Library/Logs|g" \
+  deploy/gamecooler-agent.plist > ~/Library/LaunchAgents/local.gamecooler.agent.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.gamecooler.agent.plist
+```
+
+Log: `~/Library/Logs/gamecooler-agent.log`. Nach einer Änderung an der Datei
+oder am Code neu starten:
+
+```sh
+launchctl kickstart -k gui/$(id -u)/local.gamecooler.agent
+```
+
+Entfernen: `launchctl bootout gui/$(id -u)/local.gamecooler.agent`.
+
+Ein LaunchAgent läuft nur bei angemeldetem Benutzer — nach einem Neustart erst
+ab der Anmeldung.
+
 ### Zustandsverzeichnis (Container/Deployment)
 
 Standardmäßig liegen `config.yaml` und `data/` im Projektverzeichnis. Mit

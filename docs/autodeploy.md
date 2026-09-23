@@ -113,9 +113,11 @@ hostname          # muss der TEST-Container sein, nicht der Prod-Container
 pct config <id> | grep hostname     # vom Proxmox-Host aus
 ```
 
-Der Fehler ist unauffällig: Prod bekäme den `dev`-Branch und würde ihn beim
-nächsten Lauf ausrollen, weil `/etc/default/gamecooler-autodeploy` dort fehlt
-und das Skript dann auf `dev` zurückfällt.
+Ein falsch eingerichteter Container deployt inzwischen nicht mehr still,
+sondern bricht mit `exit 2` ab: fehlt `GAMECOOLER_HOST`, wird nichts
+ausgerollt. Der falsche Container bleibt damit stehen, statt fremden Code
+auszurollen — prüfbar im Journal. Der `hostname`-Check oben bleibt trotzdem
+der schnellere Weg.
 
 ```sh
 # 1. Repo auf den Branch bringen, dem dieser Container folgen soll.
@@ -196,26 +198,37 @@ Ergebnis und belegt, dass der SHA-Vergleich greift:
 
 ## Prod scharf schalten
 
-Wenn der Test-Container zufriedenstellend läuft:
+Wenn der Test-Container zufriedenstellend läuft. Die Umgebung ist reine
+Konfiguration — das Skript selbst ist in beiden Containern identisch.
+
+**Ist der Bootstrap oben schon gelaufen, genügt das hier:**
 
 ```sh
 printf 'GAMECOOLER_BRANCH=main\nGAMECOOLER_HOST=wildbret.home.arpa\n' \
   > /etc/default/gamecooler-autodeploy
 systemctl enable --now gamecooler-autodeploy.timer
+systemctl start gamecooler-autodeploy.service   # erster Lauf, sofort
 ```
 
-Den ersten Lauf von Hand auslösen, damit das Caddyfile sofort mit dem richtigen
-Namen gerendert wird, statt bis zum nächsten Timer-Schlag zu warten:
+**Lief der Bootstrap noch nie** (der übliche Fall, wenn Prod bis jetzt von Hand
+aktualisiert wurde), fehlen Wrapper und Units — dann ist der **ganze**
+Bootstrap-Abschnitt oben durchzugehen, mit `main` statt `dev` in Schritt 1 und
+Schritt 2. Ohne den Wrapper scheitert der Timer mit `status=203/EXEC`, weil
+`ExecStart` auf `/usr/local/bin/gamecooler-autodeploy` zeigt.
 
-```sh
-systemctl start gamecooler-autodeploy.service
-```
+Der erste Lauf ist **kein No-Op**, wenn Prod auf einem älteren Stand steht: er
+rollt Code, `gamecooler.service` und das Caddyfile aus. Das Caddyfile wird dabei
+neu gerendert — der Name kommt aus `GAMECOOLER_HOST`, nicht mehr aus der Datei.
 
-Das Skript selbst ändert sich nicht — die Umgebung ist reine Konfiguration.
+**Vorher prüfen:**
 
-**Vorher prüfen:** Ist `config.yaml` in Prod auf `dry_run: false` und zeigt
-`backend: agent` auf den Mac? Und hat der Test-Container wirklich ein
-**eigenes** Volume (`pct config <id> | grep mp0`), nicht das geteilte von Prod?
+- Ist `config.yaml` in Prod auf `dry_run: false`, und zeigt `backend: agent`
+  auf den Mac? Der Deploy fasst `config.yaml` nie an, aber die App wird
+  neu gestartet.
+- Hat der Test-Container wirklich ein **eigenes** Volume
+  (`pct config <id> | grep mp0`), nicht das geteilte von Prod?
+- Läuft Prod gerade? Ist die App schon krank, bricht der Lauf vor dem Deploy ab
+  (`App antwortet nicht ...`) — dann erst reparieren.
 
 ## Betrieb
 

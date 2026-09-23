@@ -42,7 +42,7 @@
 
   <table id="rows" class="responsive">
     <tr>
-      <th>Anzahl</th><th>Teilstück</th><th>Gewicht/Stück (kg)</th><th>Preis/kg (€, leer = Standard)</th><th>kein Preis</th><th></th>
+      <th>Anzahl</th><th>Teilstück</th><th>Gewicht/Stück (kg) oder Stückzahl (5x)</th><th>Preis/kg bzw. Festpreis (€, leer = Standard)</th><th>kein Preis</th><th></th>
     </tr>
   </table>
   <p>
@@ -81,8 +81,8 @@ function addRow(item = { part: null, count: 1 }) {
   row.innerHTML = `
     <td data-label="Anzahl"><input name="count" type="number" min="1" value="${item.count}" required style="width:4.5rem"></td>
     <td data-label="Teilstück"><select name="part" required>${partOptions}</select></td>
-    <td data-label="Gewicht/Stück (kg)"><input name="weight_kg" inputmode="decimal" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?" placeholder="0,4" value="${defaultWeight(item.part || firstPart)}" style="width:7rem"></td>
-    <td data-label="Preis/kg (€)"><input name="price_per_kg" inputmode="decimal" enterkeyhint="done" pattern="[0-9]+([.,][0-9]+)?" placeholder="${pricePlaceholder(item.part || firstPart)}" style="width:7rem"></td>
+    <td data-label="Gewicht/Stück (kg) oder 5x"><input name="weight_kg" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]" placeholder="0,4 / 5x" value="${defaultWeight(item.part || firstPart)}" style="width:7rem"></td>
+    <td data-label="Preis/kg bzw. Festpreis (€)"><input name="price_per_kg" inputmode="decimal" enterkeyhint="done" pattern="[0-9]+([.,][0-9]+)?" placeholder="${pricePlaceholder(item.part || firstPart)}" style="width:7rem"></td>
     <td data-label="kein Preis" style="text-align:center;">
       <input type="checkbox" class="no-price" title="Kein Preis auf dem Etikett">
       <input type="hidden" name="no_price" value="">
@@ -109,11 +109,19 @@ function addRow(item = { part: null, count: 1 }) {
 function fmt(n) { return n.toFixed(2).replace('.', ','); }
 function num(s) { return parseFloat((s || '').replace(',', '.')); }
 
+const PIECES = /^\s*(\d+)\s*x\s*$/i;
+function rowPieces(row) {
+  const m = (row.querySelector('input[name=weight_kg]')?.value || '').match(PIECES);
+  return m ? parseInt(m[1]) : null;
+}
+
 function rowPrice(row) {
   const part = row.querySelector('select[name=part]')?.value;
   if (row.querySelector('.no-price')?.checked) return null;
   const entered = num(row.querySelector('input[name=price_per_kg]')?.value);
   if (!isNaN(entered)) return entered;
+  // the configured default is per kg; a counted row has a fixed price instead
+  if (rowPieces(row) != null) return null;
   return PARTS[part]?.price ?? null;  // may be null
 }
 
@@ -133,7 +141,11 @@ function updateSummary() {
     const weight = num(row.querySelector('input[name=weight_kg]')?.value);
     const price = rowPrice(row);
     labels += count * 2;
-    if (isNaN(weight)) unweighed += count;       // no weight -> no price on the label
+    if (rowPieces(row) != null) {                 // counted: fixed price per part
+      if (price == null) unpriced += count;
+      else total += count * price;
+    }
+    else if (isNaN(weight)) unweighed += count;   // no weight -> no price on the label
     else if (price == null) unpriced += count;
     else total += count * weight * price;
   }

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Druck-Agent als LaunchAgent auf dem Mac, an dem der QL-800 hängt.
+
+  __REPO__ und __LOGDIR__ sind Platzhalter: launchd kennt weder ~ noch
+  Umgebungsvariablen in Pfaden, alle Pfade müssen absolut sein. Installation
+  siehe README, Abschnitt "Druck-Agent".
+
+  Direkt die .venv statt "uv run" — derselbe Grund wie in gamecooler.service:
+  der Start braucht uv nicht, und launchd hat ein minimales PATH, in dem
+  /opt/homebrew/bin fehlt.
+
+  Ein LaunchAgent läuft nur, solange der Benutzer angemeldet ist. Nach einem
+  Neustart startet er erst mit der Anmeldung.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>local.gamecooler.agent</string>
+
+	<key>ProgramArguments</key>
+	<array>
+		<string>__REPO__/.venv/bin/uvicorn</string>
+		<string>agent.main:app</string>
+		<string>--host</string>
+		<string>0.0.0.0</string>
+		<string>--port</string>
+		<string>8020</string>
+	</array>
+
+	<key>WorkingDirectory</key>
+	<string>__REPO__</string>
+
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>AGENT_PRINTER_IDENTIFIER</key>
+		<string>usb://0x04f9:0x209b</string>
+		<key>AGENT_PRINTER_BACKEND</key>
+		<string>pyusb</string>
+	</dict>
+
+	<key>RunAtLoad</key>
+	<true/>
+
+	<!-- Nach einem Absturz neu starten. ThrottleInterval verhindert, dass ein
+	     Agent, der sofort wieder stirbt (Port belegt, kaputte .venv), launchd
+	     im Sekundentakt beschäftigt. -->
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+
+	<key>StandardOutPath</key>
+	<string>__LOGDIR__/gamecooler-agent.log</string>
+	<key>StandardErrorPath</key>
+	<string>__LOGDIR__/gamecooler-agent.log</string>
+</dict>
+</plist>

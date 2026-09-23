@@ -6,7 +6,7 @@ from fpdf import FPDF
 logging.getLogger("fontTools").setLevel(logging.WARNING)
 
 from .config import FONTS_DIR, Hunter
-from .models import Sale, format_de
+from .models import Sale, format_amount, format_de
 
 
 def _format_date(iso: str) -> str:
@@ -52,7 +52,7 @@ def render_sale_pdf(sale: Sale, hunter: Hunter | None) -> bytes:
 
     # items table
     widths = (12, 66, 24, 24, 26, 26)
-    headers = ("Pos.", "Artikel", "Gewicht", "€/kg", "Preis", "ID")
+    headers = ("Pos.", "Artikel", "Menge", "€/kg", "Preis", "ID")
     aligns = ("R", "L", "R", "R", "R", "L")
     pdf.set_font("dejavu", "B", 10)
     for w, h, a in zip(widths, headers, aligns):
@@ -63,7 +63,7 @@ def render_sale_pdf(sale: Sale, hunter: Hunter | None) -> bytes:
         cells = (
             str(i),
             f"{item.species} – {item.part}",
-            f"{format_de(item.weight_kg, 3)} kg" if item.weight_kg is not None else "–",
+            format_amount(item),
             format_de(item.price_per_kg),
             f"{format_de(item.total_price)} €",
             item.uuid[:8].upper(),

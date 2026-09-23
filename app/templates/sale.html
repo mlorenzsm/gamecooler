@@ -14,13 +14,13 @@
 
 <table class="responsive sale-items">
   <tr>
-    <th>Wildart</th><th>Teilstück</th><th class="num">kg</th><th class="num">€/kg</th><th class="num">€</th><th>ID</th>
+    <th>Wildart</th><th>Teilstück</th><th class="num">Menge</th><th class="num">€/kg</th><th class="num">€</th><th>ID</th>
   </tr>
   {% for i in sale.items %}
   <tr>
     <td data-label="Wildart">{{ i.species }}</td>
     <td data-label="Teilstück">{{ i.part }}</td>
-    <td class="num" data-label="kg">{{ i.weight_kg | de(3) }}</td>
+    <td class="num" data-label="Menge">{{ i | amount }}</td>
     <td class="num" data-label="€/kg">{{ i.price_per_kg | de }}</td>
     <td class="num" data-label="€">{{ i.total_price | de }}</td>
     <td data-label="ID"><code>{{ i.uuid[:8] }}</code></td>

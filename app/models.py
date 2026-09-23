@@ -1,7 +1,8 @@
+import re
 import uuid
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 
 def parse_german_decimal(v: str | float) -> float:
@@ -16,12 +17,44 @@ def parse_optional_decimal(v: str | float | None) -> float | None:
     return parse_german_decimal(v)
 
 
+PIECES_RE = re.compile(r"^\s*(\d+)\s*x\s*$", re.IGNORECASE)
+
+
+def parse_amount(v: str | float | None) -> tuple[float | None, int | None]:
+    """Read the weight field, which also takes a piece count.
+
+    "4,5" is a weight in kg, "5x" means five pieces. Returns (weight_kg, pieces),
+    at most one of them set.
+    """
+    if isinstance(v, str):
+        m = PIECES_RE.match(v)
+        if m:
+            pieces = int(m.group(1))
+            if pieces < 1:
+                raise ValueError("Stückzahl muss mindestens 1 sein")
+            return None, pieces
+    return parse_optional_decimal(v), None
+
+
 class PartIn(BaseModel):
     hunter: str
     species: str
     part: str
     weight_kg: float | None = None
+    pieces: int | None = None
+    # Per kg for weighed parts. For counted parts it is the fixed price of the
+    # whole part — there is no weight to multiply it with.
     price_per_kg: float | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _pieces_from_weight_field(cls, data):
+        if isinstance(data, dict) and isinstance(data.get("weight_kg"), str):
+            weight, pieces = parse_amount(data["weight_kg"])
+            data = {**data, "weight_kg": weight}
+            if pieces is not None:
+                data["pieces"] = pieces
+        return data
 
     @field_validator("weight_kg", "price_per_kg", mode="before")
     @classmethod
@@ -35,6 +68,7 @@ class PartRecord(BaseModel):
     species: str
     part: str
     weight_kg: float | None = None
+    pieces: int | None = None
     price_per_kg: float | None = None
     total_price: float | None = None
     created_at: str
@@ -45,14 +79,22 @@ class PartRecord(BaseModel):
     @classmethod
     def from_input(cls, part: PartIn, printed: bool) -> "PartRecord":
         weight, price = part.weight_kg, part.price_per_kg
+        if part.pieces is not None:
+            # Counted parts have a fixed price: no per-kg price, no calculation.
+            price_per_kg = None
+            total = round(price, 2) if price is not None else None
+        else:
+            price_per_kg = round(price, 2) if price is not None else None
+            total = round(weight * price, 2) if weight is not None and price is not None else None
         return cls(
             uuid=str(uuid.uuid4()),
             hunter=part.hunter,
             species=part.species,
             part=part.part,
             weight_kg=round(weight, 3) if weight is not None else None,
-            price_per_kg=round(price, 2) if price is not None else None,
-            total_price=round(weight * price, 2) if weight is not None and price is not None else None,
+            pieces=part.pieces,
+            price_per_kg=price_per_kg,
+            total_price=total,
             created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             printed=printed,
         )
@@ -64,11 +106,21 @@ def format_de(value: float | None, decimals: int = 2) -> str:
     return f"{value:.{decimals}f}".replace(".", ",")
 
 
+def format_amount(item) -> str:
+    """Weight or piece count of a part or sale item, as shown to people."""
+    if item.pieces is not None:
+        return f"{item.pieces} Stk."
+    if item.weight_kg is not None:
+        return f"{format_de(item.weight_kg, 3)} kg"
+    return "–"
+
+
 class SaleItem(BaseModel):
     uuid: str
     species: str
     part: str
     weight_kg: float | None = None
+    pieces: int | None = None
     price_per_kg: float | None = None
     total_price: float
 
