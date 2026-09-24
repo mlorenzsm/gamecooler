@@ -41,55 +41,6 @@
   {% include "_recipe_form.html" %}
 </details>
 
-<style>
-  .species-tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.8rem 0 0.4rem; }
-  .species-tabs a { padding: 0.35rem 0.8rem; border: 1px solid #ddd; border-radius: 999px; text-decoration: none; color: inherit; font-size: 0.9rem; }
-  .species-tabs a.active { background: var(--green, #378537); border-color: var(--green, #378537); color: #fff; }
-  .species-tabs .count { display: inline-block; min-width: 1.2rem; padding: 0 0.3rem; margin-left: 0.2rem; border-radius: 999px; background: rgba(0,0,0,0.08); font-size: 0.75rem; text-align: center; }
-  .species-tabs a.active .count { background: rgba(255,255,255,0.25); }
-  .recipe-block { border: 1px solid #ddd; border-radius: 8px; padding: 0.6rem 1rem; margin: 0.8rem 0; }
-  .recipe-block > summary { cursor: pointer; font-size: 1.05rem; padding: 0.2rem 0; }
-  .recipe-block[open] > summary { margin-bottom: 0.6rem; }
-  .recipe-meta { color: #888; font-size: 0.85rem; margin-left: 0.6rem; }
-  .recipe-items td { padding: 0.3rem 0.4rem; }
-  .recipe-items th { white-space: nowrap; }
-  /* Phone: one ingredient per two lines instead of a sideways-scrolling table —
-     name on its own line, amount / unit / delete below it. */
-  @media (max-width: 640px) {
-    .recipe-items thead { display: none; }
-    .recipe-items tbody tr { display: grid; grid-template-columns: 1fr auto auto; gap: 0.4rem; padding: 0.5rem 0; border-bottom: 1px solid #eee; }
-    .recipe-items tbody td { padding: 0; border: none; }
-    .recipe-items tbody td:first-child { grid-column: 1 / -1; }
-    .recipe-items tbody td input[name=item_amount] { width: 100% !important; }
-    .recipe-items td.row-actions { width: auto; }
-  }
-  .recipe-items td.row-actions { white-space: nowrap; width: 1%; }
-  .label-preview { background: #f7f7f2; border-radius: 8px; padding: 0.6rem 0.8rem; font-size: 0.85rem; margin: 0.6rem 0; }
-  .scale-box { border: 1px solid #cfe3cf; background: #f6fbf6; border-radius: 8px; padding: 0.7rem 0.9rem; margin: 0.8rem 0; }
-  .scale-hint { color: #888; font-size: 0.8rem; margin-left: 0.5rem; }
-  .scale-controls { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin: 0.5rem 0; font-size: 0.9rem; }
-  .scale-controls label { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
-  .scale-controls select { padding: 0.4rem 0.5rem; }
-  .scale-or { color: #888; }
-  .scale-result { font-size: 0.9rem; }
-  .scale-result td, .scale-result th { padding: 0.3rem 0.5rem; }
-  .scale-result tfoot td { border-top: 2px solid #cfe3cf; border-bottom: none; }
-  .scale-result td.num, .scale-result th.num { white-space: nowrap; }
-  .scale-base-inline { display: none; }
-  /* Phone: drop the "Rezept" column so "Abwiegen" — the number that matters at
-     the scale — always fits; the recipe amount moves under the name. */
-  @media (max-width: 640px) {
-    .scale-box { padding: 0.6rem; }
-    .scale-result td, .scale-result th { padding: 0.3rem 0.3rem; }
-    .scale-result th { letter-spacing: 0; }
-    .scale-result .scale-base-col, .scale-result th:nth-child(2), .scale-result .scale-total-base { display: none; }
-    .scale-base-inline { display: block; color: #888; font-size: 0.75rem; }
-  }
-  .recipe-copy { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px dashed #ddd; font-size: 0.9rem; }
-  .recipe-copy select { padding: 0.35rem 0.5rem; }
-  .copy-hint { color: #888; font-size: 0.8rem; }
-  .recipe-buttons { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.8rem; }
-</style>
 
 <template id="recipe-item-template">
   <tr>
