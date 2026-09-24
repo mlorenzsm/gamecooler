@@ -154,6 +154,20 @@ Check that nothing is missing:
 .venv/bin/python tests/test_i18n.py
 ```
 
+## Design
+
+All styling lives in `app/static/app.css`: colour roles defined once for light
+and once for dark mode (which follows the phone's setting), one type and
+spacing scale, and shared components. Icons come from `app/static/icons.svg`
+and are used in templates as `{{ icon('name') }}`.
+
+Third-party assets bundled in `app/static/`, all self-hosted so the app needs
+no internet connection:
+
+- Fonts **Geist**, **Geist Mono** and **Bricolage Grotesque** — SIL Open Font
+  License 1.1, see `app/static/fonts/LICENSE-*.txt`.
+- Icons from **Lucide** — ISC License, notice at the top of `icons.svg`.
+
 ## Accounting
 
 - `data/registry.json` — all registered cuts

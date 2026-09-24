@@ -1,3 +1,4 @@
+import hashlib
 import io
 import logging
 import re
@@ -9,6 +10,7 @@ from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup, escape
 from pydantic import ValidationError
 
 from . import registry, sales
@@ -34,8 +36,21 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Gamecooler")
 app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static")
 templates = Jinja2Templates(directory=Path(__file__).resolve().parent / "templates")
+
+# Appended to static asset URLs (?v=…) so a deploy never leaves a phone on the
+# old stylesheet: a hash of the content, so it changes exactly when they do.
+_STATIC = Path(__file__).resolve().parent / "static"
+ASSET_VERSION = hashlib.sha256(
+    b"".join((_STATIC / f).read_bytes() for f in ("app.css", "icons.svg"))
+).hexdigest()[:10]
+templates.env.globals["asset_version"] = ASSET_VERSION
 templates.env.filters["de"] = format_de
 templates.env.filters["amount"] = format_amount
+
+
+def _msg_url(path: str, msg: str, error: object = None) -> str:
+    """Redirect target with a message; an error shows red instead of green."""
+    return f"{path}?{'kind=error&' if error else ''}msg={quote(msg)}"
 
 
 def print_safely(images: list, printer, dry_run: bool) -> str | None:
@@ -102,6 +117,19 @@ templates.env.globals["t"] = t
 templates.env.globals["get_lang"] = get_lang
 templates.env.globals["LANGUAGES"] = LANGUAGES
 templates.env.globals["decimal_separator"] = decimal_separator
+
+
+def icon(name: str, label: str = "") -> Markup:
+    """Inline reference to a Lucide icon in static/icons.svg.
+
+    Decorative by default (aria-hidden); pass a label when the icon stands
+    alone and carries meaning.
+    """
+    attrs = f'role="img" aria-label="{escape(label)}"' if label else 'aria-hidden="true"'
+    return Markup(f'<svg class="icon" {attrs}><use href="/static/icons.svg?v={ASSET_VERSION}#{escape(name)}"/></svg>')
+
+
+templates.env.globals["icon"] = icon
 templates.env.filters["date"] = date_filter
 # {"cut": "Teilstücke", ...} with the headings in the UI language
 templates.env.filters["map_kinds"] = lambda kinds: {k: t(v) for k, v in kinds.items()}
@@ -149,7 +177,7 @@ def invalid_input(request: Request, exc: ValidationError):
     if exc.title != "PartIn":
         raise exc
     return RedirectResponse(
-        url="/?msg=" + quote(t("Ungültige Eingabe — Gewicht als 1,25 oder Stückzahl als 5x")),
+        url="/?kind=error&msg=" + quote(t("Ungültige Eingabe — Gewicht als 1,25 oder Stückzahl als 5x")),
         status_code=303,
     )
 
@@ -275,7 +303,7 @@ async def bulk_print(request: Request):
             records.append(PartRecord.from_input(part_in, printed=False))
 
     if not records:
-        return RedirectResponse(url="/bulk?msg=" + quote(t("Keine gültigen Zeilen")), status_code=303)
+        return RedirectResponse(url="/bulk?kind=error&msg=" + quote(t("Keine gültigen Zeilen")), status_code=303)
 
     hunter_config = find_hunter(hunter)
     images = []
@@ -298,7 +326,7 @@ async def bulk_print(request: Request):
         msg = t("{n} Teilstücke gespeichert (Testmodus, nicht gedruckt)", n=n)
     else:
         msg = t("{n} Teilstücke ({labels} Etiketten) gedruckt & gespeichert", n=n, labels=2 * n)
-    return RedirectResponse(url="/?msg=" + quote(msg), status_code=303)
+    return RedirectResponse(url=_msg_url("/", msg, error), status_code=303)
 
 
 @app.post("/parts")
@@ -330,7 +358,7 @@ def create_part(
         msg = t("Gespeichert (Testmodus, nicht gedruckt)")
     else:
         msg = t("Gedruckt & gespeichert")
-    return RedirectResponse(url="/?msg=" + quote(msg), status_code=303)
+    return RedirectResponse(url=_msg_url("/", msg, error), status_code=303)
 
 
 @app.post("/parts/{part_uuid}/reprint")
@@ -349,7 +377,7 @@ def reprint(part_uuid: str, printer: str = Form("")):
         msg = t("Testmodus: nicht gedruckt")
     else:
         msg = t("Erneut gedruckt")
-    return RedirectResponse(url="/?msg=" + quote(msg), status_code=303)
+    return RedirectResponse(url=_msg_url("/", msg, error), status_code=303)
 
 
 @app.get("/scan")

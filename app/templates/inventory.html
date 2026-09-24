@@ -1,19 +1,19 @@
 {% extends "base.html" %}
 {% block content %}
 
-{% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+{% include "_msg.html" %}
 
-<h2>🧊 {{ t("Bestand") }}</h2>
+<h2>{{ icon('package') }}{{ t("Bestand") }}</h2>
 <p id="summary-line">
   {# The values are numbers, so the translated sentence is safe to emit as markup. #}
   {{ t("{count} Teilstücke, {weight}, Warenwert {value}",
        count='<b id="sum-count">' ~ inventory_count ~ '</b>',
        weight='<b id="sum-weight">' ~ (inventory_weight | de(3)) ~ ' kg</b>',
        value='<b id="sum-value">' ~ (inventory_value | de) ~ ' €</b>') | safe }}
-  <span id="sum-hint" style="color:#888; font-size:0.85rem;">{{ inventory_hint }}</span>
+  <span class="hint" id="sum-hint">{{ inventory_hint }}</span>
 </p>
 
-<div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-bottom:1rem;">
+<div class="filters mb-4">
   <select id="f-species">
     <option value="">{{ t("Alle Wildarten") }}</option>
     {% for s in config.species %}<option>{{ s.name }}</option>{% endfor %}
@@ -31,17 +31,17 @@
     <option value="consumed">{{ t("Entnommen") }}</option>
     <option value="">{{ t("Alle") }}</option>
   </select>
-  <input id="f-search" type="search" placeholder="{{ t("Suche…") }}" style="flex:1; min-width:10rem;">
+  <input id="f-search" type="search" placeholder="{{ t("Suche…") }}">
 </div>
 
 <form method="post" action="/parts/consume-many" id="consume-form">
-  <p id="consume-bar" style="display:none; gap:0.6rem; flex-wrap:wrap;">
-    <button type="submit" class="print" style="padding:0.5rem 1rem;"
+  <p id="consume-bar" class="toolbar" hidden>
+    <button type="submit" class="print"
             onclick="return confirm(T['{n} Teilstücke entnehmen?'].replace('{n}', countSelected()))">
-      🧊 {{ t("{n} Teilstücke entnehmen", n='<span id="consume-count"></span>') | safe }}
+      {{ icon('package') }}{{ t("{n} Teilstücke entnehmen", n='<span id="consume-count"></span>') | safe }}
     </button>
-    <button type="submit" formaction="/sell" class="print" style="padding:0.5rem 1rem;">
-      💶 {{ t("{n} Teilstücke verkaufen", n='<span id="sell-count"></span>') | safe }}
+    <button type="submit" formaction="/sell" class="print">
+      {{ icon('shopping-bag') }}{{ t("{n} Teilstücke verkaufen", n='<span id="sell-count"></span>') | safe }}
     </button>
   </p>
 </form>
@@ -53,7 +53,7 @@
     <th class="num">{{ t("Menge") }}</th><th class="num">€/kg</th><th class="num">€</th><th>ID</th><th>{{ t("Status") }}</th><th></th>
   </tr>
   {% for r in records %}
-  <tr class="part-row" {% if r.consumed_at %}style="opacity: 0.5;"{% endif %}
+  <tr class="part-row{% if r.consumed_at %} is-consumed{% endif %}"
       data-species="{{ r.species }}" data-part="{{ r.part }}"
       data-status="{{ 'consumed' if r.consumed_at else 'stock' }}"
       data-unpriced="{{ 1 if r.total_price is none else 0 }}"
@@ -61,24 +61,26 @@
     data-price="{{ r.total_price if r.total_price is not none else 0 }}"
     data-unweighed="{{ 1 if r.weight_kg is none and r.pieces is none else 0 }}"
       data-search="{{ (r.species ~ ' ' ~ r.part ~ ' ' ~ r.hunter ~ ' ' ~ r.uuid ~ ' ' ~ r.created_at[:10] ~ ' ' ~ (r.created_at | date)) | lower }}">
-    <td data-label="">
+    {# c-* classes place the cells in the phone layout (app.css). Not the
+       data-label: that is translated, so it can't be a selector. #}
+    <td class="c-pick" data-label="">
       {% if not r.consumed_at %}
       <input type="checkbox" class="pick" name="uuid" value="{{ r.uuid }}" form="consume-form">
       {% endif %}
     </td>
-    <td data-label="{{ t("Datum") }}">{{ r.created_at | date }}</td>
-    <td data-label="{{ t("Wildart") }}">{{ r.species }}</td>
-    <td data-label="{{ t("Teilstück") }}">{{ r.part }}</td>
+    <td class="c-date" data-label="{{ t("Datum") }}">{{ r.created_at | date }}</td>
+    <td class="c-species" data-label="{{ t("Wildart") }}">{{ r.species }}</td>
+    <td class="c-part" data-label="{{ t("Teilstück") }}">{{ r.part }}</td>
     {# Erzwingt auf dem Telefon den Umbruch nach der Titelzeile. Am Desktop
        ausgeblendet, damit die Spalten unverändert bleiben. #}
     <td class="row-break" aria-hidden="true"></td>
-    <td data-label="{{ t("Jäger") }}">{{ r.hunter }}</td>
-    <td class="num" data-label="{{ t("Menge") }}">{{ r | amount }}</td>
-    <td class="num" data-label="€/kg">{{ r.price_per_kg | de }}</td>
-    <td class="num" data-label="€">{{ r.total_price | de }}</td>
-    <td data-label="ID"><code>{{ r.uuid[:8] }}</code></td>
-    <td data-label="{{ t("Status") }}">{% if r.consumed_at %}{{ t("entnommen {date}", date=r.consumed_at | date) }}{% else %}{{ t("im Bestand") }}{% endif %}</td>
-    <td data-label="">
+    <td class="c-hunter" data-label="{{ t("Jäger") }}">{{ r.hunter }}</td>
+    <td class="num c-amount{% if r.weight_kg is none and r.pieces is none %} is-empty{% endif %}" data-label="{{ t("Menge") }}">{{ r | amount }}</td>
+    <td class="num c-per-kg{% if r.price_per_kg is none %} is-empty{% endif %}" data-label="€/kg">{{ r.price_per_kg | de }}</td>
+    <td class="num c-price{% if r.total_price is none %} is-empty{% endif %}" data-label="€">{{ r.total_price | de }}</td>
+    <td class="c-id" data-label="ID"><code>{{ r.uuid[:8] }}</code></td>
+    <td class="c-status" data-label="{{ t("Status") }}">{% if r.consumed_at %}{{ t("entnommen {date}", date=r.consumed_at | date) }}{% else %}{{ t("im Bestand") }}{% endif %}</td>
+    <td class="c-actions" data-label="">
       <form method="post" action="/parts/{{ r.uuid }}/reprint"
             onsubmit='return confirm({{ (t("2 Etiketten nachdrucken?") ~ "\n\n" ~ r.species ~ " – " ~ r.part ~ ", " ~ (r | amount)) | tojson }})'>
         <button class="small" type="submit">{{ t("Nachdrucken") }}</button>
@@ -149,7 +151,7 @@ function applyFilter() {
 
 function updateBar() {
   const n = countSelected();
-  document.getElementById('consume-bar').style.display = n === 0 ? 'none' : 'flex';
+  document.getElementById('consume-bar').hidden = n === 0;
   document.getElementById('consume-count').textContent = n;
   document.getElementById('sell-count').textContent = n;
   const picks = visiblePicks();

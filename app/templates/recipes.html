@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
 
-{% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+{% include "_msg.html" %}
 
-<h2>📖 {{ t("Rezepte") }}</h2>
-<p style="font-size:0.85rem; color:#888; margin-top:0;">
+<h2>{{ icon('book-open') }}{{ t("Rezepte") }}</h2>
+<p class="hint">
   {{ t("Jede Wildart hat ihre eigenen Rezepte. In den Einstellungen lässt sich ein Rezept mit einer Zubereitung derselben Wildart verknüpfen; die Zutaten auf dem Etikett kommen dann aus dem Rezept — nach Gewicht sortiert, die schwerste Zutat zuerst, ohne Mengenangaben.") }}
 </p>
 
@@ -32,7 +32,7 @@
 </details>
 {% endfor %}
 
-{% if not sp.recipes %}<p style="color:#888;">{{ t("Noch keine Rezepte für {species}.", species=sp.name) }}</p>{% endif %}
+{% if not sp.recipes %}<p class="hint">{{ t("Noch keine Rezepte für {species}.", species=sp.name) }}</p>{% endif %}
 <details class="recipe-block" {% if not sp.recipes or open_recipe == '__new__' %}open{% endif %}>
   <summary><b>+ {{ t("Neues Rezept für {species}", species=sp.name) }}</b></summary>
   {% set r = none %}
@@ -93,15 +93,15 @@
 
 <template id="recipe-item-template">
   <tr>
-    <td><input name="item_name" placeholder="{{ t('Zutat, z. B. Wildschweinfleisch') }}" style="width:100%; min-width:10rem"></td>
-    <td><input name="item_amount" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="{{ t('Menge') }}"
-               style="width:6rem; text-align:right;"></td>
+    <td><input class="input-cell" name="item_name" placeholder="{{ t('Zutat, z. B. Wildschweinfleisch') }}"></td>
+    <td><input class="input-num" name="item_amount" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="{{ t('Menge') }}"
+              ></td>
     <td>
       <select name="item_unit">
         {% for u in units %}<option value="{{ u }}">{{ t(u) if u == 'Stk.' else u }}</option>{% endfor %}
       </select>
     </td>
-    <td class="row-actions"><button type="button" class="small remove-item" title="{{ t('Zutat entfernen') }}" aria-label="{{ t('Zutat entfernen') }}">🗑️</button></td>
+    <td class="row-actions"><button type="button" class="small remove-item" title="{{ t('Zutat entfernen') }}" aria-label="{{ t('Zutat entfernen') }}">{{ icon('trash-2') }}</button></td>
   </tr>
 </template>
 

@@ -1,28 +1,28 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h2>📷 {{ t("Scannen") }}</h2>
+<h2>{{ icon('scan-line') }}{{ t("Scannen") }}</h2>
 
-<div style="display:flex; gap:0.6rem; margin-bottom:1rem;">
-  <label style="display:flex; align-items:center; gap:0.4rem;">
-    <input type="radio" name="mode" value="consume" checked> 🧊 {{ t("Entnahme") }}
+<div class="toolbar mb-4">
+  <label class="inline-check">
+    <input type="radio" name="mode" value="consume" checked> {{ icon('package') }}{{ t("Entnahme") }}
   </label>
-  <label style="display:flex; align-items:center; gap:0.4rem;">
-    <input type="radio" name="mode" value="sell"> 💶 {{ t("Verkauf") }}
+  <label class="inline-check">
+    <input type="radio" name="mode" value="sell"> {{ icon('shopping-bag') }}{{ t("Verkauf") }}
   </label>
 </div>
 <p id="mode-hint">{{ t("QR-Etikett vor die Kamera halten — das Teilstück wird aus dem Bestand ausgetragen.") }}</p>
 
 <div id="reader" class="scanner"></div>
 
-<div id="result" style="margin-top: 1rem;"></div>
+<div class="mt-4" id="result"></div>
 
-<form method="post" action="/sell" id="basket-form" style="display:none; margin-top:1rem;">
-  <h3>💶 {{ t("Warenkorb") }}</h3>
+<form method="post" action="/sell" id="basket-form" class="mt-4" hidden>
+  <h3>{{ icon('shopping-bag') }}{{ t("Warenkorb") }}</h3>
   <ul id="basket"></ul>
   <p><b id="basket-summary"></b></p>
-  <button type="submit" class="print" style="padding:0.6rem 1.2rem;">
-    💶 {{ t("{n} Teilstücke verkaufen", n='<span id="basket-count"></span>') | safe }}
+  <button type="submit" class="print">
+    {{ icon('shopping-bag') }}{{ t("{n} Teilstücke verkaufen", n='<span id="basket-count"></span>') | safe }}
   </button>
 </form>
 
@@ -71,12 +71,14 @@ function amount(p) {
 }
 function mode() { return document.querySelector('input[name=mode]:checked').value; }
 
+// kind: 'msg' (success), 'dry-run' (warning) or 'error' — styles in app.css
+const ICONS = {{ {'msg': icon('circle-check'), 'dry-run': icon('alert-triangle'), 'error': icon('circle-x')} | tojson }};
 function show(html, kind) {
-  resultEl.innerHTML = `<div class="${kind}" style="padding:0.8rem 1rem; border-radius:6px;">${html}</div>`;
+  resultEl.innerHTML = `<div class="${kind}" role="${kind === 'error' ? 'alert' : 'status'}">${ICONS[kind] || ''}<span>${html}</span></div>`;
 }
 
 function updateBasket() {
-  basketForm.style.display = basket.size ? 'block' : 'none';
+  basketForm.hidden = !basket.size;
   document.getElementById('basket-count').textContent = basket.size;
   let total = 0, unweighed = 0, unpriced = 0;
   for (const p of basket.values()) {
@@ -98,7 +100,7 @@ function addToBasket(p) {
   const priceText = p.total_price == null ? esc(T['ohne Preis']) : `${fmt(p.total_price)} €`;
   li.innerHTML = `${p.species} – ${p.part}, ${amount(p)}, ${priceText} ` +
     `<input type="hidden" name="uuid" value="${p.uuid}" form="basket-form"> ` +
-    `<button type="button" class="small" title="${esc(T['Aus dem Warenkorb entfernen'])}" aria-label="${esc(T['Aus dem Warenkorb entfernen'])}">🗑️</button>`;
+    `<button type="button" class="small icon-only" title="${esc(T['Aus dem Warenkorb entfernen'])}" aria-label="${esc(T['Aus dem Warenkorb entfernen'])}">{{ icon('trash-2') }}</button>`;
   li.querySelector('button').addEventListener('click', () => {
     basket.delete(p.uuid);
     li.remove();
@@ -116,7 +118,7 @@ async function onScan(text) {
 
   const uuid = text.trim().toLowerCase();
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid)) {
-    show(esc(T['Kein gültiger Etiketten-Code']), 'dry-run');
+    show(esc(T['Kein gültiger Etiketten-Code']), 'error');
     return;
   }
 
@@ -124,16 +126,16 @@ async function onScan(text) {
     if (mode() === 'sell') {
       const resp = await fetch(`/parts/${encodeURIComponent(uuid)}.json`);
       const data = await resp.json();
-      if (!data.ok) { show(`❌ ${data.error}`, 'dry-run'); return; }
+      if (!data.ok) { show(esc(data.error), 'error'); return; }
       const p = data.part;
       const desc = `${p.species} – ${p.part}, ${amount(p)} (${p.uuid.slice(0, 8).toUpperCase()})`;
       if (p.consumed_at) {
-        show(`⚠️ ${esc(T['Bereits entnommen am {date}:'].replace('{date}', p.consumed_at.slice(0, 10)))}<br><b>${desc}</b>`, 'dry-run');
+        show(`${esc(T['Bereits entnommen am {date}:'].replace('{date}', p.consumed_at.slice(0, 10)))}<br><b>${desc}</b>`, 'dry-run');
       } else if (addToBasket(p)) {
-        show(`🛒 ${esc(T['Im Warenkorb:'])}<br><b>${desc}</b>`, 'msg');
+        show(`${esc(T['Im Warenkorb:'])}<br><b>${desc}</b>`, 'msg');
         if (navigator.vibrate) navigator.vibrate(100);
       } else {
-        show(`⚠️ ${esc(T['Schon im Warenkorb:'])}<br><b>${desc}</b>`, 'dry-run');
+        show(`${esc(T['Schon im Warenkorb:'])}<br><b>${desc}</b>`, 'dry-run');
       }
       return;
     }
@@ -141,22 +143,22 @@ async function onScan(text) {
     const resp = await fetch(`/parts/${encodeURIComponent(uuid)}/consume`, { method: 'POST' });
     const data = await resp.json();
     if (!data.ok) {
-      show(`❌ ${data.error}`, 'dry-run');
+      show(esc(data.error), 'error');
       return;
     }
     const p = data.part;
     const desc = `${p.species} – ${p.part}, ${amount(p)} (${p.uuid.slice(0, 8).toUpperCase()})`;
     if (data.already_consumed) {
-      show(`⚠️ ${esc(T['Bereits entnommen am {date}:'].replace('{date}', p.consumed_at.slice(0, 10)))}<br><b>${desc}</b>`, 'dry-run');
+      show(`${esc(T['Bereits entnommen am {date}:'].replace('{date}', p.consumed_at.slice(0, 10)))}<br><b>${desc}</b>`, 'dry-run');
     } else {
-      show(`✅ ${esc(T['Entnommen:'])}<br><b>${desc}</b>`, 'msg');
+      show(`${esc(T['Entnommen:'])}<br><b>${desc}</b>`, 'msg');
       const li = document.createElement('li');
       li.textContent = desc;
       logEl.prepend(li);
       if (navigator.vibrate) navigator.vibrate(100);
     }
   } catch (e) {
-    show(esc(T['Fehler — Verbindung prüfen']), 'dry-run');
+    show(esc(T['Fehler — Verbindung prüfen']), 'error');
   }
 }
 
@@ -171,7 +173,7 @@ const scanConfig = { fps: 10, qrbox: { width: 250, height: 250 } };
 
 async function startScanner() {
   if (!window.isSecureContext) {
-    show(esc(T['Kamera erfordert HTTPS oder localhost — Seite über http://localhost:8010/scan öffnen.']), 'dry-run');
+    show(esc(T['Kamera erfordert HTTPS oder localhost — Seite über http://localhost:8010/scan öffnen.']), 'error');
     return;
   }
   try {
@@ -183,7 +185,7 @@ async function startScanner() {
     await scanner.start((back || cameras[0]).id, scanConfig, onScan, () => {});
   } catch (err) {
     show(esc(T['Kamera konnte nicht gestartet werden: {error}'].replace('{error}', () => err)) + '<br>' +
-         esc(T['Kamerazugriff für den Browser erlauben (macOS: Systemeinstellungen → Datenschutz & Sicherheit → Kamera).']), 'dry-run');
+         esc(T['Kamerazugriff für den Browser erlauben (macOS: Systemeinstellungen → Datenschutz & Sicherheit → Kamera).']), 'error');
   }
 }
 

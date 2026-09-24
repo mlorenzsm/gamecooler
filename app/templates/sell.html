@@ -1,29 +1,29 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h2>💶 {{ t("Verkauf") }}</h2>
+<h2>{{ icon('shopping-bag') }}{{ t("Verkauf") }}</h2>
 
 <form method="post" action="/sell/confirm" id="sell-form"
       onsubmit="return confirmSale()">
 
-  <div class="part-form" style="display:grid; grid-template-columns:1fr 1fr; gap:0.8rem; margin-bottom:1rem;">
-    <label style="display:flex; flex-direction:column; gap:0.3rem;">{{ t("Verkäufer (Jäger)") }}
+  <div class="part-form form-grid">
+    <label class="field">{{ t("Verkäufer (Jäger)") }}
       <select name="hunter" required>
         {% for h in config.hunters %}<option>{{ h.name }}</option>{% endfor %}
       </select>
     </label>
     <span></span>
-    <label style="display:flex; flex-direction:column; gap:0.3rem;">{{ t("Käufer") }}
+    <label class="field">{{ t("Käufer") }}
       <input name="buyer_name" required placeholder="{{ t("Max Mustermann") }}">
     </label>
-    <label style="display:flex; flex-direction:column; gap:0.3rem;">{{ t("Adresse") }}
+    <label class="field">{{ t("Adresse") }}
       <textarea name="buyer_address" id="buyer-address" required rows="3" placeholder="{{ t("Straße Nr.\nPLZ Ort") }}"></textarea>
     </label>
-    <label style="display:flex; align-items:center; gap:0.5rem; grid-column:1 / -1;">
+    <label class="inline-check span-all">
       <input type="checkbox" id="same-address" checked>
       {{ t("Lieferadresse = Käuferadresse") }}
     </label>
-    <label id="delivery-label" style="display:none; flex-direction:column; gap:0.3rem; grid-column:1 / -1;">{{ t("Lieferadresse") }}
+    <label id="delivery-label" class="field span-all" hidden>{{ t("Lieferadresse") }}
       <textarea name="delivery_address" id="delivery-address" rows="3" placeholder="{{ t("Straße Nr.\nPLZ Ort") }}"></textarea>
     </label>
   </div>
@@ -40,22 +40,22 @@
       <td class="num" data-label="€/kg">{{ r.price_per_kg | de }}</td>
       <td class="num" data-label="{{ t("Preis (€)") }}">
         <input type="hidden" name="uuid" value="{{ r.uuid }}">
-        <input name="item_price" class="item-price num" inputmode="decimal"
+        <input name="item_price" class="item-price num input-num" inputmode="decimal"
                pattern="[0-9]+([.,][0-9]+)?" value="{{ r.total_price | de if r.total_price is not none else '' }}"
-               placeholder="{{ t("0,00") }}" style="width:6rem; text-align:right;">
+               placeholder="{{ t("0,00") }}">
       </td>
       <td data-label="ID"><code>{{ r.uuid[:8] }}</code></td>
     </tr>
     {% endfor %}
     <tr class="total-row">
-      <td colspan="4" style="text-align:right;"><b>{{ t("Gesamt") }}</b></td>
+      <td class="right" colspan="4"><b>{{ t("Gesamt") }}</b></td>
       <td class="num"><b id="total">{{ total | de }} €</b></td>
       <td></td>
     </tr>
   </table>
 
-  <button class="print" type="submit" style="width:100%; padding:0.8rem; font-weight:bold; margin-top:1rem;">
-    💶 {{ t("Verkauf abschließen") }}
+  <button class="print full mt-4" type="submit">
+    {{ icon('shopping-bag') }}{{ t("Verkauf abschließen") }}
   </button>
 </form>
 
@@ -85,7 +85,7 @@ const same = document.getElementById('same-address');
 const deliveryLabel = document.getElementById('delivery-label');
 const delivery = document.getElementById('delivery-address');
 same.addEventListener('change', () => {
-  deliveryLabel.style.display = same.checked ? 'none' : 'flex';
+  deliveryLabel.hidden = same.checked;
   if (same.checked) delivery.value = '';
   delivery.required = !same.checked;
 });

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 
-{% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+{% include "_msg.html" %}
 {% if config.dry_run %}<div class="dry-run">{{ t("Testmodus aktiv (dry_run) – es wird nicht gedruckt.") }}</div>{% endif %}
 
 <form class="part-form" method="post" action="/parts" id="part-form" onsubmit="return confirmPrint()">
@@ -20,10 +20,10 @@
 
     </select>
   </label>
-  <label>{{ t("Gewicht (kg) oder Stückzahl") }} <span style="font-weight:400; color:#888;">({{ t("z. B. 1,25 oder 5x · leer = keine Angabe auf dem Etikett") }})</span>
+  <label>{{ t("Gewicht (kg) oder Stückzahl") }} <span class="hint">({{ t("z. B. 1,25 oder 5x · leer = keine Angabe auf dem Etikett") }})</span>
     <input name="weight_kg" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]" placeholder="{{ t("1,25 oder 5x") }}" id="weight-input">
   </label>
-  <label><span id="price-label">{{ t("Preis/kg (€)") }}</span> <span style="font-weight:400; color:#888;">({{ t("leer = kein Preis auf dem Etikett") }})</span>
+  <label><span id="price-label">{{ t("Preis/kg (€)") }}</span> <span class="hint">({{ t("leer = kein Preis auf dem Etikett") }})</span>
     <input name="price_per_kg" inputmode="decimal" enterkeyhint="done" pattern="[0-9]+([.,][0-9]+)?" placeholder="{{ t("12,50") }}" id="price-input">
   </label>
   {% if config.printers | length > 1 %}
