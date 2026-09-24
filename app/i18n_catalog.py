@@ -149,6 +149,8 @@ EN = {
     "QR-Etikett vor die Kamera halten — das Teilstück wird aus dem Bestand ausgetragen.": "Hold the QR label in front of the camera — the cut is removed from stock.",
     "QR-Etiketten scannen und in den Warenkorb legen — dann Verkauf abschließen.": "Scan QR labels to add them to the basket — then complete the sale.",
     "Warenkorb": "Basket",
+    "Modus": "Mode",
+    "Taschenlampe": "Flashlight",
     "Zuletzt entnommen": "Recently taken out",
     "{n} Teilstücke, {total} €": "{n} cuts, {total} €",
     "Aus dem Warenkorb entfernen": "Remove from basket",

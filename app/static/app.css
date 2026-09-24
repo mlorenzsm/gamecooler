@@ -253,8 +253,7 @@
   @media (min-width: 900px) { .filters { grid-template-columns: 1fr 1.4fr 1fr 2fr; } .filters input[type="search"] { grid-column: auto; } }
 
   /* camera: html5-qrcode sets the video to 100% of its container */
-  .scanner { max-width: 500px; margin: 0 auto; }
-  .scanner video { border-radius: var(--r-lg); }
+  .scanner video { display: block; }
 
   /* inventory: helper cell that forces the line break in the phone layout;
      on desktop it takes no part in the table so it doesn't shift columns */
@@ -467,4 +466,42 @@ nav.tabbar { view-transition-name: tabbar; }       /* the bar stays put while th
   @media (max-width: 640px) {
     .selection-bar { bottom: calc(84px + env(safe-area-inset-bottom)); }
   }
+}
+
+/* Scan: a square viewfinder with the camera filling it, corner marks where
+   the label goes, a torch button, and the answer to each scan as a card. */
+@layer components {
+  .segmented label { display: flex; align-items: center; justify-content: center; gap: var(--s-1); min-height: 36px; padding: 0 var(--s-3);
+                     border-radius: calc(var(--r-md) - 2px); color: var(--muted); font-size: var(--text-sm); font-weight: 500; cursor: pointer; }
+  .segmented label:has(input:checked) { background: var(--seg-on); color: var(--ink); font-weight: 600;
+                                        box-shadow: 0 1px 2px rgb(0 0 0 / 0.1), 0 0 0 0.5px rgb(0 0 0 / 0.04); }
+  .segmented label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .viewfinder { position: relative; aspect-ratio: 1; max-width: min(100%, 26rem); margin: 0 auto;
+                border-radius: var(--r-lg); overflow: hidden; background: #0B0E0B; }
+  .viewfinder .scanner, .viewfinder .scanner > div { width: 100%; height: 100%; }
+  /* cover, not contain: the camera's 4:3 frame fills the square */
+  .viewfinder video { width: 100% !important; height: 100% !important; object-fit: cover; }
+  /* html5-qrcode draws its own shaded box; the corner marks replace it */
+  .viewfinder #qr-shaded-region { display: none; }
+  .viewfinder::after {
+    content: ""; position: absolute; inset: 22%; pointer-events: none;
+    --c: rgb(255 255 255 / 0.9); --l: 28px; --w: 3px;
+    background:
+      linear-gradient(var(--c), var(--c)) top left / var(--l) var(--w), linear-gradient(var(--c), var(--c)) top left / var(--w) var(--l),
+      linear-gradient(var(--c), var(--c)) top right / var(--l) var(--w), linear-gradient(var(--c), var(--c)) top right / var(--w) var(--l),
+      linear-gradient(var(--c), var(--c)) bottom left / var(--l) var(--w), linear-gradient(var(--c), var(--c)) bottom left / var(--w) var(--l),
+      linear-gradient(var(--c), var(--c)) bottom right / var(--l) var(--w), linear-gradient(var(--c), var(--c)) bottom right / var(--w) var(--l);
+    background-repeat: no-repeat; border-radius: 6px;
+  }
+  .torch { position: absolute; z-index: 2; right: var(--s-3); bottom: var(--s-3); border-radius: var(--r-pill);
+           background: rgb(0 0 0 / 0.45); border-color: transparent; color: #FFFFFF;
+           -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+  .torch[aria-pressed="true"] { background: #FFFFFF; color: #0B0E0B; }
+  .viewfinder + .list-foot { margin-top: var(--s-2); }
+  .scan-result:empty { display: none; }
+  .scan-result > div { font-size: var(--text-lg); padding: var(--s-4); box-shadow: var(--shadow-float); }
+  .scan-result .icon { width: 1.6rem; height: 1.6rem; flex: none; }
+  ul.list-group { list-style: none; padding: 0; }
+  ul.list-group .list-row { padding-block: var(--s-2); }
 }
