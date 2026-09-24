@@ -85,14 +85,10 @@ EN = {
     "Testmodus aktiv (dry_run) – es wird nicht gedruckt.": "Test mode active (dry_run) – nothing is printed.",
     "Jäger": "Hunter",
     "Teilstück": "Cut",
-    "Gewicht (kg) oder Stückzahl": "Weight (kg) or piece count",
-    "z. B. 1,25 oder 5x · leer = keine Angabe auf dem Etikett": "e.g. 1.25 or 5x · empty = not shown on the label",
     "1,25 oder 5x": "1.25 or 5x",
     "Preis/kg (€)": "Price/kg (€)",
-    "leer = kein Preis auf dem Etikett": "empty = no price on the label",
     "12,50": "12.50",
     "Drucker": "Printer",
-    "2 Etiketten drucken & registrieren": "Print 2 labels & register",
     "Info-Etikett": "Info label",
     "QR-Etikett": "QR label",
     "Festpreis (€)": "Fixed price (€)",
@@ -136,7 +132,9 @@ EN = {
     "Entnommen": "Taken out",
     "Alle": "All",
     "Suche…": "Search…",
-    "{n} Teilstücke entnehmen": "Take out {n} cuts",
+    "{n} ausgewählt": "{n} selected",
+    "Entnehmen": "Take out",
+    "Verkaufen": "Sell",
     "{n} Teilstücke entnehmen?": "Take out {n} cuts?",
     "{n} Teilstücke verkaufen": "Sell {n} cuts",
     "Alle auswählen": "Select all",
@@ -287,4 +285,9 @@ EN = {
     "Drucken": "Print",
     "Navigation": "Navigation",
     "Einzeln": "Single",
+
+    # --- Print page (step 3) ----------------------------------------------------
+    "2 Etiketten drucken": "Print 2 labels",
+    "Gewicht in kg, oder „5x“ für eine Stückzahl mit Festpreis. Leer lassen, damit es nicht aufs Etikett kommt.":
+        "Weight in kg, or “5x” for a piece count with a fixed price. Leave empty to keep it off the label.",
 }

@@ -286,31 +286,40 @@
        Hooked on classes (c-*), NOT on data-label: the labels are translated,
        so a selector like [data-label="Wildart"] silently stopped matching in
        English and broke the layout. */
-    table.inventory tr { display: flex; flex-wrap: wrap; align-items: center; gap: 0.15rem var(--s-2); padding: var(--s-3) var(--s-4); }
-    table.inventory td { padding: 0; border: none; white-space: nowrap; font-size: var(--text-sm); color: var(--muted); }
+    /* One row per cut, like a list in Mail:
+         [✓] Rücken                   24,80 €  [🖨]
+             Reh · 12.09. · Manuel…   1,250 kg
+       A grid rather than wrapping flex: a flex line breaks wherever it runs
+       out of room, which pushed the hunter onto a third line. Here every cell
+       has a fixed slot and only the hunter gives way (ellipsis). */
+    table.inventory tr { display: grid; align-items: center; column-gap: var(--s-2); row-gap: 0.1rem;
+                         grid-template-columns: 1.75rem auto auto minmax(0, 1fr) auto 36px; padding: var(--s-2) var(--s-3); }
+    table.inventory td { padding: 0; border: none; white-space: nowrap; font-size: var(--text-sm); color: var(--muted); display: block; }
     table.inventory td::before { content: none; }
 
-    table.inventory td.c-pick { order: 0; margin-right: var(--s-1); }
-    /* title line: the cut alone, so a long name wraps as one sentence */
-    table.inventory td.c-part { order: 1; flex: 1; min-width: 0; white-space: normal; font-size: var(--text-md); font-weight: 600; color: var(--ink); }
-    table.inventory td.row-break { display: block; order: 3; flex-basis: 100%; height: 0; padding: 0; }
+    table.inventory td.c-pick { grid-area: 1 / 1 / 3 / 2; }
+    table.inventory td.c-part { grid-area: 1 / 2 / 2 / 5; white-space: normal; font-size: var(--text-md); font-weight: 600; color: var(--ink); }
+    table.inventory td.c-price { grid-area: 1 / 5; font-size: var(--text-md); font-weight: 600; color: var(--ink); }
+    table.inventory td.c-price::after { content: " €"; }   /* the column header that says € is hidden here */
+    table.inventory td.c-actions { grid-area: 1 / 6 / 3 / 7; }
+    table.inventory td.c-species { grid-area: 2 / 2; }
+    table.inventory td.c-date { grid-area: 2 / 3; }
+    table.inventory td.c-hunter { grid-area: 2 / 4; overflow: hidden; text-overflow: ellipsis; }
+    table.inventory td.c-amount { grid-area: 2 / 5; }
+    table.inventory td.c-status { grid-area: 3 / 2 / 4 / 6; margin-top: var(--s-1); }
+    /* "· " goes on the FOLLOWING cells so the line doesn't start with one */
+    table.inventory td.c-date::before, table.inventory td.c-hunter::before { content: "· "; }
 
-    /* detail line: date first without a label; "· " goes on the FOLLOWING
-       cells so the line doesn't start with a separator */
-    table.inventory td.c-species { order: 4; }
-    table.inventory td.c-date { order: 5; }
-    table.inventory td.c-hunter { order: 6; }
-    table.inventory td.c-amount { order: 7; }
-    table.inventory td.c-per-kg { order: 8; }
-    table.inventory td.c-price { order: 9; }
-    table.inventory td.c-id { order: 10; }
-    table.inventory td.c-status { order: 11; }
-    table.inventory td.c-date::before, table.inventory td.c-hunter::before, table.inventory td.c-amount::before, table.inventory td.c-per-kg::before,
-    table.inventory td.c-price::before, table.inventory td.c-id::before, table.inventory td.c-status::before { content: "· "; }
+    /* not needed at a glance on the phone: the ID is still searchable, €/kg is
+       in the total, and "in stock" is the default filter — only "taken out"
+       says something */
+    table.inventory td.c-id, table.inventory td.c-per-kg, table.inventory td.row-break { display: none; }
+    table.inventory tr:not(.is-consumed) td.c-status { display: none; }
     /* empty values ("–") add nothing on the phone */
     table.inventory td.is-empty { display: none; }
-    table.inventory td.c-actions { order: 12; flex-basis: 100%; margin-top: var(--s-2); }
     table.inventory td.c-actions form { display: inline; }
+    table.inventory td.c-actions button { width: 36px; padding: 0; }
+    table.inventory .btn-label { display: none; }
 
     /* totals row: no card frame, right-aligned as on desktop */
     table.responsive tr.total-row { border: none; background: transparent; padding: var(--s-2) var(--s-1); }
@@ -388,3 +397,74 @@
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 160ms; }
 nav.tabbar { view-transition-name: tabbar; }       /* the bar stays put while the page changes */
 @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+
+/* --- Step 3: screens ------------------------------------------------------ */
+@layer components {
+  /* iOS-style grouped list: one surface, rows split by hairlines, the label on
+     the left and the control filling the rest. Controls lose their own border
+     inside a row — the group is the frame. */
+  .list-group { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; margin-bottom: var(--s-3); }
+  .list-row { display: flex; align-items: center; gap: var(--s-3); min-height: var(--tap); padding: 0 var(--s-4);
+              border-top: 1px solid var(--line); font-size: var(--text-md); font-weight: 400; color: var(--ink); }
+  .list-row:first-child { border-top: none; }
+  .list-label { flex: none; width: 7.5rem; color: var(--muted); font-size: var(--text-sm); }
+  .list-row > select, .list-row > input, .list-row > textarea {
+    flex: 1; min-width: 0; border: none; background: transparent; padding: 0.7rem 0; box-shadow: none; border-radius: 0;
+  }
+  .list-row > select:focus, .list-row > input:focus { box-shadow: none; }
+  .list-row:focus-within { background: var(--hover); }
+  .list-row > input { text-align: right; }
+  .list-unit { flex: none; color: var(--faint); min-width: 2.2rem; text-align: left; }
+  .list-foot { font-size: var(--text-sm); color: var(--faint); margin: 0 var(--s-4) var(--s-4); }
+
+  /* Print: preview on top (phone), side by side (desktop) */
+  /* minmax(0, 1fr) and min-width: 0 — without them the grid grows to the
+     preview images' natural 991 px width and pushes the form off screen */
+  .print-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s-4); }
+  .print-layout > * { min-width: 0; }
+  .print-layout .preview-imgs { margin: 0; display: grid; gap: var(--s-2); }
+  .print-layout .preview-imgs img { max-width: 100%; }
+  /* phone: the two labels side by side in a swipe row, so the preview costs
+     one label's height instead of two */
+  @media (max-width: 899px) {
+    .print-layout .preview-imgs { grid-auto-flow: column; grid-auto-columns: 88%; overflow-x: auto;
+      scroll-snap-type: x mandatory; scrollbar-width: none; padding-bottom: var(--s-1);
+      margin-inline: calc(-1 * var(--s-4)); padding-inline: var(--s-4); scroll-padding-inline: var(--s-4); }
+    .print-layout .preview-imgs::-webkit-scrollbar { display: none; }
+    .print-layout .preview-imgs img { scroll-snap-align: start; box-shadow: 0 2px 8px rgb(0 0 0 / 0.1); }
+  }
+  @media (min-width: 900px) {
+    .print-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: start; gap: var(--s-6); }
+    .print-layout .preview-imgs { position: sticky; top: var(--s-4); order: 2; }
+  }
+
+  /* bottom action bar: the one thing to do on a page, at the thumb */
+  .action-bar button.print { width: 100%; min-height: 52px; font-size: var(--text-md); }
+  .action-bar .total { margin-left: auto; opacity: 0.85; font-weight: 500; }
+  .action-bar .total:empty { display: none; }
+  @media (max-width: 640px) {
+    .action-bar { position: sticky; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 20; margin-top: var(--s-3); }
+    .action-bar button.print { box-shadow: var(--shadow-float); }
+  }
+}
+
+/* Stock: selection bar. Appears once a row is ticked and floats at the thumb —
+   above the tab bar on the phone, bottom centre on desktop. */
+@layer components {
+  .selection-bar {
+    position: fixed; z-index: 40; left: 0; right: 0; margin-inline: auto;
+    width: min(34rem, calc(100% - 2 * var(--s-3)));
+    bottom: calc(var(--s-4) + env(safe-area-inset-bottom));
+    display: flex; align-items: center; gap: var(--s-2);
+    padding: var(--s-2) var(--s-2) var(--s-2) var(--s-4);
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+    box-shadow: var(--shadow-float);
+  }
+  .selection-bar .sel-count { flex: 1; font-weight: 600; }
+  .selection-bar button { min-height: 40px; }
+  .selection-bar button.print { grid-column: auto; }
+  table.inventory { margin-bottom: 5rem; }   /* room to scroll past the bar */
+  @media (max-width: 640px) {
+    .selection-bar { bottom: calc(84px + env(safe-area-inset-bottom)); }
+  }
+}

@@ -35,15 +35,19 @@
 </div>
 
 <form method="post" action="/parts/consume-many" id="consume-form">
-  <p id="consume-bar" class="toolbar" hidden>
-    <button type="submit" class="print"
+  {# Selection bar: appears when rows are ticked, sits above the tab bar on
+     the phone. The ids and the formaction are what the page script and the
+     server expect — keep them. #}
+  <div id="consume-bar" class="selection-bar" hidden>
+    <span class="sel-count num">{{ t("{n} ausgewählt", n='<span id="consume-count"></span>') | safe }}<span id="sell-count" hidden></span></span>
+    <button type="submit" class="small sel-quiet"
             onclick="return confirm(T['{n} Teilstücke entnehmen?'].replace('{n}', countSelected()))">
-      {{ icon('package') }}{{ t("{n} Teilstücke entnehmen", n='<span id="consume-count"></span>') | safe }}
+      {{ icon('package') }}{{ t("Entnehmen") }}
     </button>
-    <button type="submit" formaction="/sell" class="print">
-      {{ icon('shopping-bag') }}{{ t("{n} Teilstücke verkaufen", n='<span id="sell-count"></span>') | safe }}
+    <button type="submit" formaction="/sell" class="small print">
+      {{ icon('shopping-bag') }}{{ t("Verkaufen") }}
     </button>
-  </p>
+  </div>
 </form>
 
 <table class="responsive inventory">
@@ -79,11 +83,11 @@
     <td class="num c-per-kg{% if r.price_per_kg is none %} is-empty{% endif %}" data-label="€/kg">{{ r.price_per_kg | de }}</td>
     <td class="num c-price{% if r.total_price is none %} is-empty{% endif %}" data-label="€">{{ r.total_price | de }}</td>
     <td class="c-id" data-label="ID"><code>{{ r.uuid[:8] }}</code></td>
-    <td class="c-status" data-label="{{ t("Status") }}">{% if r.consumed_at %}{{ t("entnommen {date}", date=r.consumed_at | date) }}{% else %}{{ t("im Bestand") }}{% endif %}</td>
+    <td class="c-status" data-label="{{ t("Status") }}">{% if r.consumed_at %}<span class="badge">{{ t("entnommen {date}", date=r.consumed_at | date) }}</span>{% else %}<span class="badge frost">{{ icon('snowflake') }}{{ t("im Bestand") }}</span>{% endif %}</td>
     <td class="c-actions" data-label="">
       <form method="post" action="/parts/{{ r.uuid }}/reprint"
             onsubmit='return confirm({{ (t("2 Etiketten nachdrucken?") ~ "\n\n" ~ r.species ~ " – " ~ r.part ~ ", " ~ (r | amount)) | tojson }})'>
-        <button class="small" type="submit">{{ t("Nachdrucken") }}</button>
+        <button class="small" type="submit" title="{{ t("Nachdrucken") }}" aria-label="{{ t("Nachdrucken") }}">{{ icon('printer') }}<span class="btn-label">{{ t("Nachdrucken") }}</span></button>
       </form>
     </td>
   </tr>
