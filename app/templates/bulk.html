@@ -2,9 +2,9 @@
 {% block content %}
 
 {% include "_msg.html" %}
+<h2 class="page-title">{{ t("Drucken") }}</h2>
+{% include "_print_switch.html" %}
 {% if config.dry_run %}<div class="dry-run">{{ t("Testmodus aktiv (dry_run) – es wird nicht gedruckt.") }}</div>{% endif %}
-
-<h2>{{ icon('printer') }}{{ t("Sammeldruck") }}</h2>
 
 {# Die Vorgaben gehören zur Wildart; die Liste wird per Script gefüllt. #}
 <div class="preset-bar" id="preset-bar">

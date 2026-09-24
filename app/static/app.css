@@ -66,6 +66,7 @@
     --shadow-float: 0 8px 24px rgb(0 0 0 / 0.12), 0 1px 3px rgb(0 0 0 / 0.06);
 
     --tap: 44px;              /* Apple's minimum tap target */
+    --seg-on: #FFFFFF;        /* selected segment, lifted off its track */
   }
 
   @media (prefers-color-scheme: dark) {
@@ -85,6 +86,7 @@
       --danger: #F0877E; --danger-soft: #3A1D1A;
       --accent-hover: color-mix(in oklab, var(--accent) 85%, white);
       --shadow-float: 0 8px 24px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.3);
+      --seg-on: #3A4437;
     }
   }
 }
@@ -186,7 +188,7 @@
   .lang-switch { display: flex; gap: 2px; background: var(--surface-2); border-radius: var(--r-pill); padding: 2px; }
   .lang-switch a { font: 600 var(--text-xs)/1 var(--font-ui); letter-spacing: 0.05em; padding: 0.4rem 0.65rem; border-radius: var(--r-pill);
                    color: var(--muted); text-decoration: none; }
-  .lang-switch a.active { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+  .lang-switch a.active { background: var(--seg-on); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
 
   /* The page itself: no card around everything — content sits on the ground,
      and only real groups (lists, forms) get a surface. */
@@ -261,12 +263,7 @@
 
 @layer components {
   @media (max-width: 640px) {
-    header.site { justify-content: space-between; padding-bottom: var(--s-3); }
-    /* phone: icons only; the label stays for screen readers and the active state */
-    nav.site-nav { order: 3; width: 100%; justify-content: space-between; }
-    nav.site-nav a { padding: 0 var(--s-2); flex: 1; justify-content: center; }
-    nav.site-nav a .icon { width: 1.4em; height: 1.4em; }
-    nav.site-nav a .nav-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    header.site { padding-bottom: var(--s-2); }
 
     /* Tables become cards. Pure CSS: the cells stay in the DOM and carry their
        own label via data-label, so there is no second copy of the markup. */
@@ -341,3 +338,53 @@
   .input-num-sm { width: 5rem; }
   .inline-check { display: flex; align-items: center; gap: var(--s-2); color: var(--ink); font-weight: 500; }
 }
+
+/* --- Step 2: navigation --------------------------------------------------- */
+@layer components {
+  /* Single / bulk print switch — an iOS-style segmented control */
+  .segmented { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 2px;
+               background: var(--surface-2); border-radius: var(--r-md); margin-bottom: var(--s-4); max-width: 26rem; }
+  .segmented a { display: flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 var(--s-3);
+                 border-radius: calc(var(--r-md) - 2px); color: var(--muted); font-size: var(--text-sm); font-weight: 500; text-decoration: none; }
+  .segmented a.active { background: var(--seg-on); color: var(--ink); font-weight: 600;
+                        box-shadow: 0 1px 2px rgb(0 0 0 / 0.1), 0 0 0 0.5px rgb(0 0 0 / 0.04); }
+
+  .page-title { margin-bottom: var(--s-3); }
+
+  /* Phone: the tab bar floats above the content at the bottom, inset from the
+     edges, as on iOS 26. Glass (blur) is used here only — Apple reserves it for
+     the navigation layer. Labels stay visible: Apple asks for them. */
+  @media (max-width: 640px) {
+    nav.tabbar {
+      position: fixed; z-index: 50;
+      left: max(var(--s-3), env(safe-area-inset-left)); right: max(var(--s-3), env(safe-area-inset-right));
+      bottom: calc(var(--s-2) + env(safe-area-inset-bottom));
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 0;
+      padding: var(--s-1);
+      border-radius: 24px;
+      background: color-mix(in oklab, var(--surface) 80%, transparent);
+      -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5);
+      border: 1px solid color-mix(in oklab, var(--line) 80%, transparent);
+      box-shadow: var(--shadow-float);
+    }
+    nav.tabbar a { flex-direction: column; gap: 2px; min-height: 52px; padding: 0; justify-content: center;
+                   border-radius: 20px; font-size: 0.68rem; font-weight: 500; color: var(--faint); }
+    nav.tabbar a .icon { width: 1.45rem; height: 1.45rem; }
+    nav.tabbar a.active { background: transparent; color: var(--accent); }
+    nav.tabbar a:hover { background: var(--hover); }
+    nav.tabbar a .nav-label { position: static; width: auto; height: auto; overflow: visible; clip-path: none; white-space: nowrap; }
+
+    /* content must be able to scroll clear of the bar */
+    body { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
+    /* sticky buttons sit above the bar instead of under it */
+    button.sticky-print { bottom: calc(84px + env(safe-area-inset-bottom)); }
+    .segmented { max-width: none; }
+  }
+}
+
+/* Page transitions between pages (Safari 18.2+, Chrome 126+): a short cross-
+   fade instead of a white flash. Browsers without support just load the page. */
+@view-transition { navigation: auto; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 160ms; }
+nav.tabbar { view-transition-name: tabbar; }       /* the bar stays put while the page changes */
+@media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }

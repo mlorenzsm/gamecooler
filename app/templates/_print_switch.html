@@ -1,0 +1,6 @@
+{# Single / bulk print share the Print tab; this switches between them.
+   Plain links, so each stays its own page with its own URL. #}
+<nav class="segmented" aria-label="{{ t('Drucken') }}">
+  <a href="/" {% if active == 'index' %}class="active" aria-current="page"{% endif %}>{{ t("Einzeln") }}</a>
+  <a href="/bulk" {% if active == 'bulk' %}class="active" aria-current="page"{% endif %}>{{ t("Sammeldruck") }}</a>
+</nav>

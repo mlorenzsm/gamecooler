@@ -3,7 +3,7 @@
 
 <div class="msg">{{ icon('circle-check') }}{{ t("Verkauf Nr. {number} abgeschlossen", number=sale.number) }}</div>
 
-<h2>{{ icon('shopping-bag') }}{{ t("Verkauf Nr. {number}", number=sale.number) }}</h2>
+<h2 class="page-title">{{ t("Verkauf Nr. {number}", number=sale.number) }}</h2>
 <p class="pre-line"><b>{{ sale.buyer_name }}</b>
 {{ sale.buyer_address }}</p>
 {% if sale.delivery_address != sale.buyer_address %}

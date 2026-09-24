@@ -2,6 +2,8 @@
 {% block content %}
 
 {% include "_msg.html" %}
+<h2 class="page-title">{{ t("Drucken") }}</h2>
+{% include "_print_switch.html" %}
 {% if config.dry_run %}<div class="dry-run">{{ t("Testmodus aktiv (dry_run) – es wird nicht gedruckt.") }}</div>{% endif %}
 
 <form class="part-form" method="post" action="/parts" id="part-form" onsubmit="return confirmPrint()">

@@ -215,7 +215,6 @@ EN = {
     "Speichern fehlgeschlagen": "Saving failed",
 
     # --- base.html: navigation and language switch ---------------------------
-    "Einzeldruck": "Single print",
     "Sprache": "Language",
 
     # --- Server messages (main.py) -------------------------------------------
@@ -283,4 +282,9 @@ EN = {
     "Zutaten (klein auf dem Etikett)": "Ingredients (small print on the label)",
     "Unverändert": "Unchanged",
     "Wildart „{old}“ heißt jetzt „{name}“": "Species “{old}” is now called “{name}”",
+
+    # --- Navigation (tab bar) --------------------------------------------------
+    "Drucken": "Print",
+    "Navigation": "Navigation",
+    "Einzeln": "Single",
 }

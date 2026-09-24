@@ -47,18 +47,22 @@
 <body>
   <header class="site">
     <h1>{{ icon('snowflake') }} Gamecooler</h1>
-    <nav class="site-nav">
-      {# aria-label: on the phone only the icon is visible #}
+    {# Five tabs. Single and bulk print share the Print tab (a segmented
+       control on those pages switches between them); the sale pages belong
+       to Stock. aria-current marks the tab, so screen readers hear it too.
+       On the phone this bar floats at the bottom, on desktop it sits here. #}
+    {# nav_tab, not tab: settings.html already uses tab for its own sub-tabs #}
+    {% set nav_tab = {'index': 'print', 'bulk': 'print', 'scan': 'scan', 'inventory': 'stock',
+                  'recipes': 'recipes', 'settings': 'settings'}.get(active, active) %}
+    <nav class="site-nav tabbar" aria-label="{{ t('Navigation') }}">
       {% for href, key, name, text in [
-          ('/', 'index', 'tag', t('Einzeldruck')),
-          ('/bulk', 'bulk', 'printer', t('Sammeldruck')),
-          ('/scan', 'scan', 'scan-line', t('Entnahme')),
-          ('/inventory', 'inventory', 'package', t('Bestand')),
+          ('/', 'print', 'tag', t('Drucken')),
+          ('/scan', 'scan', 'scan-line', t('Scannen')),
+          ('/inventory', 'stock', 'package', t('Bestand')),
           ('/recipes', 'recipes', 'book-open', t('Rezepte')),
           ('/settings', 'settings', 'settings-2', t('Einstellungen')),
         ] %}
-      <a href="{{ href }}" {% if active == key %}class="active" aria-current="page"{% endif %}
-         aria-label="{{ text }}" title="{{ text }}">{{ icon(name) }}<span class="nav-label">{{ text }}</span></a>
+      <a href="{{ href }}" {% if nav_tab == key %}class="active" aria-current="page"{% endif %}>{{ icon(name) }}<span class="nav-label">{{ text }}</span></a>
       {% endfor %}
     </nav>
     {# Sprachwahl. Merkt sich die Wahl per Cookie; ohne Wahl gilt die

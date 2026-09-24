@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h2>{{ icon('shopping-bag') }}{{ t("Verkauf") }}</h2>
+<h2 class="page-title">{{ t("Verkauf") }}</h2>
 
 <form method="post" action="/sell/confirm" id="sell-form"
       onsubmit="return confirmSale()">
