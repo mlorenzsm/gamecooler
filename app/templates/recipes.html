@@ -32,7 +32,13 @@
 </details>
 {% endfor %}
 
-{% if not sp.recipes %}<p class="hint">{{ t("Noch keine Rezepte für {species}.", species=sp.name) }}</p>{% endif %}
+{% if not sp.recipes %}
+<div class="empty-state">
+  {{ icon('book-open') }}
+  <h3>{{ t("Noch keine Rezepte für {species}.", species=sp.name) }}</h3>
+  <p>{{ t("Ein Rezept liefert die Zutaten fürs Etikett und rechnet die Mengen für jede Charge hoch.") }}</p>
+</div>
+{% endif %}
 <details class="recipe-block" {% if not sp.recipes or open_recipe == '__new__' %}open{% endif %}>
   <summary><b>+ {{ t("Neues Rezept für {species}", species=sp.name) }}</b></summary>
   {% set r = none %}

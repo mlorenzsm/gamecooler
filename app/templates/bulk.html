@@ -7,7 +7,7 @@
 {% if config.dry_run %}<div class="dry-run">{{ t("Testmodus aktiv (dry_run) – es wird nicht gedruckt.") }}</div>{% endif %}
 
 {# Die Vorgaben gehören zur Wildart; die Liste wird per Script gefüllt. #}
-<form method="post" action="/bulk" id="bulk-form" onsubmit="return confirmBulkPrint()">
+<form method="post" action="/bulk" id="bulk-form" data-confirm-fn="bulkQuestion" data-confirm-ok="{{ t("Drucken") }}">
   <div class="list-group">
     <label class="list-row"><span class="list-label">{{ t("Jäger") }}</span>
       <select name="hunter" required>
@@ -150,11 +150,11 @@ function rowPrice(row) {
   return currentParts()[part]?.price ?? null;  // may be null
 }
 
-function confirmBulkPrint() {
+function bulkQuestion() {
   renumberNoPrice();
   const summary = document.getElementById('summary').textContent;
-  if (!summary) return confirm(T['Drucken?']);
-  return confirm(`${T['Wirklich drucken?']}\n\n${summary}`);
+  if (!summary) return T['Drucken?'];
+  return `${T['Wirklich drucken?']}\n\n${summary}`;
 }
 
 function updateSummary() {
@@ -211,12 +211,12 @@ function fillPresets() {
 // Switching the species means different parts: rows filled for the old one
 // would point at parts the new one may not have, so start over.
 let lastSpecies = speciesSelect.value;
-speciesSelect.addEventListener('change', () => {
+speciesSelect.addEventListener('change', async () => {
   const rows = document.querySelectorAll('#rows tr:not(:first-child)');
   const touched = [...rows].some(r => r.querySelector('input[name=weight_kg]').value
                                    || r.querySelector('input[name=price_per_kg]').value
                                    || r.querySelector('input[name=count]').value !== '1');
-  if (rows.length && touched && !confirm(T['Wildart wechseln? Die Zeilen werden für die neue Wildart neu angelegt.'])) {
+  if (rows.length && touched && !await ask(T['Wildart wechseln? Die Zeilen werden für die neue Wildart neu angelegt.'])) {
     speciesSelect.value = lastSpecies;
     return;
   }
@@ -230,16 +230,16 @@ fillPresets();
 addRow();
 
 if (presetApply) {
-  presetApply.addEventListener('click', () => {
+  presetApply.addEventListener('click', async () => {
     const name = presetSelect.value;
     if (!name) {
-      if (confirm(T['Alle Zeilen löschen?'])) {
+      if (await ask(T['Alle Zeilen löschen?'], { danger: true })) {
         document.querySelectorAll('#rows tr:not(:first-child)').forEach(tr => tr.remove());
         updateSummary();
       }
       return;
     }
-    if (!confirm(T['Vorgabe „{name}“ übernehmen?'].replace('{name}', () => name))) return;
+    if (!await ask(T['Vorgabe „{name}“ übernehmen?'].replace('{name}', () => name))) return;
     document.querySelectorAll('#rows tr:not(:first-child)').forEach(tr => tr.remove());
     currentPresets()[name].forEach(item => addRow({ part: item.part, count: item.count }));
   });

@@ -15,7 +15,7 @@
   <img id="preview-qr" alt="{{ t("QR-Etikett") }}">
 </div>
 
-<form class="print-form" method="post" action="/parts" id="part-form" onsubmit="return confirmPrint()">
+<form class="print-form" method="post" action="/parts" id="part-form" data-confirm-fn="printQuestion" data-confirm-ok="{{ t("Drucken") }}">
   <div class="list-group">
     <label class="list-row"><span class="list-label">{{ t("Jäger") }}</span>
       <select name="hunter" required>
@@ -114,7 +114,7 @@ weightInput.addEventListener('input', updatePriceLabel);
 priceInput.addEventListener('input', updatePriceLabel);
 updatePriceLabel();
 
-function confirmPrint() {
+function printQuestion() {
   const form = document.getElementById('part-form');
   const d = new FormData(form);
   const weight = d.get('weight_kg');
@@ -123,7 +123,7 @@ function confirmPrint() {
   const pieces = (weight || '').match(PIECES);
   if (pieces) details = `${T['{n} Stk.'].replace('{n}', pieces[1])} ` + (price ? T['zu {price} € Festpreis'].replace('{price}', price) : T['ohne Preis']);
   else if (weight) details = `${weight} kg ` + (price ? T['zu {price} €/kg'].replace('{price}', price) : T['ohne Preis']);
-  return confirm(`${T['2 Etiketten drucken?']}\n\n${d.get('species')} – ${d.get('part')}, ${details}`);
+  return `${T['2 Etiketten drucken?']}\n\n${d.get('species')} – ${d.get('part')}, ${details}`;
 }
 
 function showPreview() {

@@ -78,6 +78,65 @@
   <main class="card">
   {% block content %}{% endblock %}
   </main>
+
+  {# One confirmation dialog for the whole app, instead of the browser's
+     confirm(): that one can't be styled, shows the page's address as its
+     title on iOS, and ignores dark mode. See ask() below. #}
+  <dialog id="confirm-dialog" class="confirm-dialog" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h3 id="confirm-title"></h3>
+      <p id="confirm-detail" class="pre-line"></p>
+      <div class="confirm-buttons">
+        <button value="cancel" formnovalidate>{{ t("Abbrechen") }}</button>
+        <button value="ok" id="confirm-ok" class="print"></button>
+      </div>
+    </form>
+  </dialog>
+  <script>
+  // ask(message, {ok, danger}) -> Promise<boolean>. The first paragraph of
+  // the message is the question, the rest (after a blank line) the details.
+  const CONFIRM_OK = {{ t("Bestätigen") | tojson }};
+  function ask(message, { ok = CONFIRM_OK, danger = false } = {}) {
+    const dialog = document.getElementById('confirm-dialog');
+    if (!dialog.showModal) return Promise.resolve(window.confirm(message));  // very old browsers
+    const [title, ...rest] = String(message).split('\n\n');
+    document.getElementById('confirm-title').textContent = title;
+    const detail = document.getElementById('confirm-detail');
+    detail.textContent = rest.join('\n\n');
+    detail.hidden = !rest.length;
+    const okButton = document.getElementById('confirm-ok');
+    okButton.textContent = ok;
+    okButton.className = danger ? 'danger-solid' : 'print';
+    dialog.returnValue = '';
+    dialog.showModal();
+    okButton.focus();
+    return new Promise(resolve =>
+      dialog.addEventListener('close', () => resolve(dialog.returnValue === 'ok'), { once: true }));
+  }
+
+  // Forms and submit buttons ask first when they carry
+  //   data-confirm="message"       a fixed question, or
+  //   data-confirm-fn="name"       a global function returning it (or null
+  //                                for "no question") — for questions built
+  //                                from what was entered,
+  // plus data-confirm-ok="label" and data-confirm-danger for the button.
+  // The button's attributes win over the form's. Runs in the capture phase,
+  // so it sees the submit before anything else does.
+  document.addEventListener('submit', e => {
+    const form = e.target, btn = e.submitter;
+    if (form.method === 'dialog') return;
+    if (form.dataset.confirmed) { delete form.dataset.confirmed; return; }
+    const src = btn && (btn.dataset.confirm != null || btn.dataset.confirmFn) ? btn : form;
+    const message = src.dataset.confirmFn ? window[src.dataset.confirmFn](btn) : src.dataset.confirm;
+    if (!message) return;
+    e.preventDefault();
+    ask(message, { ok: src.dataset.confirmOk || CONFIRM_OK, danger: 'confirmDanger' in src.dataset }).then(yes => {
+      if (!yes) return;
+      form.dataset.confirmed = '1';
+      form.requestSubmit(btn || undefined);   // keeps the button's formaction
+    });
+  }, true);
+  </script>
     <script>
     // Nur zur Installierbarkeit. Ohne Cache — siehe app/static/sw.js.
     // Nur über HTTPS registrieren: auf http:// würde der Browser den Worker

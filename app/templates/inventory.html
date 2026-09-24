@@ -40,8 +40,7 @@
      server expect — keep them. #}
   <div id="consume-bar" class="selection-bar" hidden>
     <span class="sel-count num">{{ t("{n} ausgewählt", n='<span id="consume-count"></span>') | safe }}<span id="sell-count" hidden></span></span>
-    <button type="submit" class="small sel-quiet"
-            onclick="return confirm(T['{n} Teilstücke entnehmen?'].replace('{n}', countSelected()))">
+    <button type="submit" class="small sel-quiet" data-confirm-fn="consumeQuestion" data-confirm-ok="{{ t("Entnehmen") }}">
       {{ icon('package') }}{{ t("Entnehmen") }}
     </button>
     <button type="submit" formaction="/sell" class="small print">
@@ -86,14 +85,27 @@
     <td class="c-status" data-label="{{ t("Status") }}">{% if r.consumed_at %}<span class="badge">{{ t("entnommen {date}", date=r.consumed_at | date) }}</span>{% else %}<span class="badge frost">{{ icon('snowflake') }}{{ t("im Bestand") }}</span>{% endif %}</td>
     <td class="c-actions" data-label="">
       <form method="post" action="/parts/{{ r.uuid }}/reprint"
-            onsubmit='return confirm({{ (t("2 Etiketten nachdrucken?") ~ "\n\n" ~ r.species ~ " – " ~ r.part ~ ", " ~ (r | amount)) | tojson }})'>
+            data-confirm="{{ t("2 Etiketten nachdrucken?") ~ "\n\n" ~ r.species ~ " – " ~ r.part ~ ", " ~ (r | amount) }}" data-confirm-ok="{{ t("Nachdrucken") }}">
         <button class="small" type="submit" title="{{ t("Nachdrucken") }}" aria-label="{{ t("Nachdrucken") }}">{{ icon('printer') }}<span class="btn-label">{{ t("Nachdrucken") }}</span></button>
       </form>
     </td>
   </tr>
   {% endfor %}
 </table>
-<p id="no-match" hidden>{{ t("Keine Treffer.") }}</p>
+{% if not records %}
+<div class="empty-state">
+  {{ icon('snowflake') }}
+  <h3>{{ t("Die Truhe ist leer") }}</h3>
+  <p>{{ t("Jedes gedruckte Etikett landet hier im Bestand.") }}</p>
+  <a class="btn-primary" href="/">{{ icon('printer') }}{{ t("Etikett drucken") }}</a>
+</div>
+{% endif %}
+{# shown by the filter script when nothing matches #}
+<div id="no-match" class="empty-state" hidden>
+  {{ icon('search') }}
+  <h3>{{ t("Keine Treffer.") }}</h3>
+  <p>{{ t("Filter oder Suche ändern — entnommene Teilstücke zeigt „Alle“.") }}</p>
+</div>
 
 <script>
 const T = {{ {
@@ -116,6 +128,9 @@ function visiblePicks() {
 
 function countSelected() {
   return document.querySelectorAll('.pick:checked').length;
+}
+function consumeQuestion() {
+  return T['{n} Teilstücke entnehmen?'].replace('{n}', countSelected());
 }
 
 function applyFilter() {
@@ -145,7 +160,7 @@ function applyFilter() {
   const notes = [];
   if (unweighed) notes.push(T['{n} ohne Gewicht'].replace('{n}', unweighed));
   if (unpriced) notes.push(T['{n} ohne Preis'].replace('{n}', unpriced));
-  document.getElementById('no-match').hidden = shown > 0;
+  document.getElementById('no-match').hidden = shown > 0 || !rows.length;
   document.getElementById('sum-count').textContent = count;
   document.getElementById('sum-weight').textContent = fmt(weight, 3) + ' kg';
   document.getElementById('sum-value').textContent = fmt(value) + ' €';

@@ -37,7 +37,7 @@
     <div class="list-row list-actions">
       <button class="small" type="submit" formaction="/settings/hunters/delete" formnovalidate
               title="{{ t('Löschen') }}" aria-label="{{ t('Löschen') }}"
-              onclick='return confirm({{ t("Jäger „{name}“ löschen?", name=h.name) | tojson }})'>{{ icon('trash-2') }}</button>
+              data-confirm="{{ t("Jäger „{name}“ löschen?", name=h.name) }}" data-confirm-danger data-confirm-ok="{{ t('Löschen') }}">{{ icon('trash-2') }}</button>
       <button class="small" type="submit">{{ icon('save') }}{{ t("Speichern") }}</button>
     </div>
   </form>
@@ -102,7 +102,7 @@
       <button class="small" type="submit">{{ icon('save') }}{{ t("Umbenennen") }}</button>
     </form>
     <form method="post" action="/settings/species/delete" class="inline-form"
-          onsubmit='return confirm({{ t("Wildart „{name}“ mit allen Teilstücken und Vorgaben löschen?\n\nBestehende Etiketten und Bestand bleiben erhalten.", name=sp.name) | tojson }})'>
+          data-confirm="{{ t("Wildart „{name}“ mit allen Teilstücken und Vorgaben löschen?\n\nBestehende Etiketten und Bestand bleiben erhalten.", name=sp.name) }}" data-confirm-danger data-confirm-ok="{{ t('Löschen') }}">
       <input type="hidden" name="name" value="{{ sp.name }}">
       <button class="small danger" type="submit">{{ icon('trash-2') }}{{ t("Wildart „{name}“ löschen", name=sp.name) }}</button>
     </form>
@@ -158,7 +158,7 @@
             <button class="print" type="submit">{{ icon('save') }}{{ t("Speichern") }}</button>
             <button type="button" class="small edit-cancel">{{ t("Abbrechen") }}</button>
             <button class="small danger" type="submit" formaction="/settings/parts/delete" formnovalidate
-                    onclick='return confirm({{ t("„{name}“ bei {species} löschen?", name=name, species=sp.name) | tojson }})'>{{ icon('trash-2') }}{{ t("Löschen") }}</button>
+                    data-confirm="{{ t("„{name}“ bei {species} löschen?", name=name, species=sp.name) }}" data-confirm-danger data-confirm-ok="{{ t('Löschen') }}">{{ icon('trash-2') }}{{ t("Löschen") }}</button>
           </div>
         </form>
       </details>
@@ -218,7 +218,7 @@
             <button class="print" type="submit">{{ icon('save') }}{{ t("Speichern") }}</button>
             <button type="button" class="small edit-cancel">{{ t("Abbrechen") }}</button>
             <button class="small danger" type="submit" formaction="/settings/presets/delete" formnovalidate
-                    onclick='return confirm({{ t("Vorgabe „{name}“ bei {species} löschen?", name=preset.name, species=sp.name) | tojson }})'>{{ icon('trash-2') }}{{ t("Löschen") }}</button>
+                    data-confirm="{{ t("Vorgabe „{name}“ bei {species} löschen?", name=preset.name, species=sp.name) }}" data-confirm-danger data-confirm-ok="{{ t('Löschen') }}">{{ icon('trash-2') }}{{ t("Löschen") }}</button>
           </div>
         </form>
       </details>
