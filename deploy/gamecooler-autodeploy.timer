@@ -1,21 +1,21 @@
 [Unit]
-Description=Gamecooler Autodeploy alle 5 Minuten prüfen
+Description=Gamecooler Autodeploy check every 5 minutes
 Documentation=file:/opt/gamecooler/docs/autodeploy.md
 
 [Timer]
-# Zwei Minuten nach dem Boot: der erste Lauf soll nicht mit dem Hochfahren
-# konkurrieren, aber auch nicht bis zum ersten Intervall warten.
+# Two minutes after boot: the first run shouldn't compete with startup, but
+# shouldn't wait for the first interval either.
 OnBootSec=2min
 
-# Danach alle 5 Minuten. Der Lauf selbst ist billig, wenn es nichts zu tun
-# gibt: ein "git ls-remote" ohne Objektübertragung.
+# Every 5 minutes after that. The run itself is cheap when there's nothing to
+# do: a single "git ls-remote" with no object transfer.
 OnUnitActiveSec=5min
 
-# Streuung, damit nicht alle Container gleichzeitig bei GitHub anfragen.
+# Jitter, so that not all containers query GitHub at the same time.
 RandomizedDelaySec=30
 
-# Persistent bleibt aus (systemd-Default): verpasste Läufe werden nicht
-# nachgeholt, der nächste reguläre Lauf erledigt dasselbe.
+# Persistent stays off (systemd default): missed runs are not caught up, the
+# next regular run does the same job.
 
 [Install]
 WantedBy=timers.target

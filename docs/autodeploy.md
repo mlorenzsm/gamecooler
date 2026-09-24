@@ -1,172 +1,171 @@
 # Autodeploy
 
-Ein Push auf `dev` aktualisiert den Test-Container innerhalb von fünf Minuten.
-Dieselbe Mechanik bedient später Prod über `main` — der Unterschied ist eine
-einzige Konfigurationszeile.
+A push to `dev` updates the test container within five minutes. The same
+mechanism will later serve prod via `main` — the difference is a single
+configuration line.
 
-| Branch | Umgebung | Hostname |
+| Branch | Environment | Hostname |
 |---|---|---|
-| `dev` | Test-LXC | `gamecooler-test.home.arpa` |
-| `main` | Prod-LXC | `wildbret.home.arpa` |
+| `dev` | Test LXC | `gamecooler-test.home.arpa` |
+| `main` | Prod LXC | `wildbret.home.arpa` |
 
-## Warum pull-basiert
+## Why pull-based
 
-Die Container stehen in einem Heimnetz (`192.168.0.x`). GitHub-Actions-Runner
-laufen in der Cloud und haben keine Route dorthin. Naheliegende Alternativen
-scheiden aus:
+The containers live on a home network (`192.168.0.x`). GitHub Actions runners
+run in the cloud and have no route there. The obvious alternatives are ruled
+out:
 
-- **Self-hosted Runner im LAN.** Würde Push-Deploys mit echtem CI ermöglichen,
-  aber das Repo ist **öffentlich** — wer einen PR-Workflow durchbekommt, führt
-  Code im Heimnetz aus. Zu viel Angriffsfläche für ein Hobbyprojekt.
-- **Eingehender Zugriff (VPN, Portfreigabe).** Ein Loch in die Heimnetz-
-  Firewall für einen Etikettendrucker ist kein guter Tausch.
+- **Self-hosted runner on the LAN.** Would allow push deploys with real CI,
+  but the repo is **public** — anyone who gets a PR workflow through runs
+  code on the home network. Too much attack surface for a hobby project.
+- **Inbound access (VPN, port forwarding).** A hole in the home network
+  firewall for a label printer isn't a good trade.
 
-Deshalb dreht sich die Richtung um: ein systemd-Timer **im Container** fragt
-alle fünf Minuten bei GitHub nach. Kein eingehender Zugriff, keine Secrets auf
-GitHub, kein fremder Code im LAN.
+So the direction is reversed: a systemd timer **in the container** polls
+GitHub every five minutes. No inbound access, no secrets on GitHub, no
+foreign code on the LAN.
 
-## Wie ein Lauf abläuft
+## How a run works
 
-Der Timer startet `gamecooler-autodeploy.service`, das
-`/usr/local/bin/gamecooler-autodeploy` aufruft. Das Skript:
+The timer starts `gamecooler-autodeploy.service`, which calls
+`/usr/local/bin/gamecooler-autodeploy`. The script:
 
-1. Liest `GAMECOOLER_BRANCH` und `GAMECOOLER_HOST` aus
-   `/etc/default/gamecooler-autodeploy`. Fehlt einer der beiden: `exit 2`.
-2. Prüft, ob die App **jetzt** gesund ist. Wenn nicht: Abbruch ohne Deploy.
-3. Prüft, ob diese Instanz unter ihrem **eigenen Namen** erreichbar ist. Wenn
-   nicht: Caddyfile neu rendern, Caddy neu laden, erneut prüfen. Bleibt es
-   unerreichbar: Abbruch mit `exit 1` — ohne Rollback und ohne Merker.
-4. Holt den SHA von `origin/<branch>` per `git ls-remote` — das überträgt
-   keine Objekte und ist der billigste Weg festzustellen, dass nichts zu tun
-   ist. Ist der SHA gleich dem lokalen HEAD: fertig.
-5. Ist der SHA als fehlerhaft markiert: überspringen (siehe Rollback).
+1. Reads `GAMECOOLER_BRANCH` and `GAMECOOLER_HOST` from
+   `/etc/default/gamecooler-autodeploy`. If either is missing: `exit 2`.
+2. Checks whether the app is healthy **right now**. If not: abort without deploying.
+3. Checks whether this instance is reachable under its **own name**. If
+   not: re-render the Caddyfile, reload Caddy, check again. If it stays
+   unreachable: abort with `exit 1` — without rollback and without a marker.
+4. Gets the SHA of `origin/<branch>` via `git ls-remote` — this transfers
+   no objects and is the cheapest way to find out there's nothing to do.
+   If the SHA equals the local HEAD: done.
+5. If the SHA is marked as bad: skip (see Rollback).
 6. `git fetch` + `checkout`, `uv sync --locked --no-dev`.
-7. Caddyfile rendern (Platzhalter `__HOST__` → `GAMECOOLER_HOST`) nach
+7. Render the Caddyfile (placeholder `__HOST__` → `GAMECOOLER_HOST`) into
    `/etc/caddy/`, `caddy validate`, `systemctl reload caddy`.
-8. `gamecooler.service` nach `/etc/systemd/system/`, `daemon-reload`,
+8. `gamecooler.service` into `/etc/systemd/system/`, `daemon-reload`,
    `systemctl restart gamecooler`.
-9. Health-Check (10 Versuche, 1s Abstand). Schlägt er fehl: zurückrollen.
+9. Health check (10 attempts, 1s apart). If it fails: roll back.
 
-### Warum der Health-Check *vor* dem Deploy läuft
+### Why the health check runs *before* the deploy
 
-Ist die App bereits kaputt, würde der Health-Check nach dem Update
-fehlschlagen, das Skript auf den vorherigen Commit zurückrollen — also auf
-einen Stand, der genauso kaputt ist — und der eigentliche Fehler wäre verdeckt.
-Ein Deploy auf eine kranke Instanz macht die Diagnose schwerer, nicht leichter.
+If the app is already broken, the health check after the update would fail,
+the script would roll back to the previous commit — i.e. to a state that is
+just as broken — and the actual fault would be masked. Deploying onto a sick
+instance makes diagnosis harder, not easier.
 
-### Warum zwei getrennte Health-Checks
+### Why two separate health checks
 
-Schritt 2 und 3 prüfen verschiedene Dinge, und nur einer von beiden ist ein
-Grund zurückzurollen:
+Steps 2 and 3 check different things, and only one of them is a reason to
+roll back:
 
-| Prüfung | Fragt | Bei Fehlschlag |
+| Check | Asks | On failure |
 |---|---|---|
-| App (`http://127.0.0.1:8010/`) | Läuft der Code? | Rollback |
-| Site (`https://<HOST>/`) | Ist die Instanz unter ihrem Namen erreichbar? | Caddyfile neu rendern |
+| App (`http://127.0.0.1:8010/`) | Is the code running? | Rollback |
+| Site (`https://<HOST>/`) | Is the instance reachable under its name? | Re-render the Caddyfile |
 
-Der zweite kam später dazu, nachdem ein Container wochenlang auf dem richtigen
-Commit stand und trotzdem unter seinem eigenen Namen nicht erreichbar war: das
-Caddyfile trug noch den Namen der Vorgänger-Installation. Der App-Health-Check
-sieht Caddy nie und meldete brav Erfolg.
+The second one was added later, after a container sat on the right commit for
+weeks and was still unreachable under its own name: the Caddyfile still
+carried the name of the previous installation. The app health check never
+sees Caddy and dutifully reported success.
 
-Ein Fehlschlag der Site-Prüfung führt bewusst **nicht** in den Rollback: der
-Rollback rendert dasselbe Caddyfile mit demselben Namen und liefe im Kreis.
-Und er schreibt **keinen** Merker — der Commit ist in Ordnung, die
-Konfiguration ist es nicht; ein Merker würde einen guten Commit sperren.
+A failed site check deliberately does **not** lead to a rollback: the
+rollback renders the same Caddyfile with the same name and would go in
+circles. And it writes **no** marker — the commit is fine, the configuration
+isn't; a marker would block a good commit.
 
-Die Prüfung läuft auf **jedem** Weg, auch im „nichts zu tun"- und im
-übersprungenen Zweig. Stünde sie nur im Deploy-Pfad, bliebe genau der Container
-stumm, der den Timer nie beschäftigt.
+The check runs on **every** path, including the "nothing to do" branch and
+the skipped branch. If it were only in the deploy path, exactly the container
+that never keeps the timer busy would stay silent.
 
-### Rollback und der Fehlermerker
+### Rollback and the bad-commit marker
 
-Schlägt der Health-Check nach dem Update fehl, wird auf den vorherigen Commit
-zurückgerollt und der neue SHA in `/var/lib/gamecooler/.autodeploy-bad`
-vermerkt.
+If the health check fails after the update, the script rolls back to the
+previous commit and records the new SHA in
+`/var/lib/gamecooler/.autodeploy-bad`.
 
-Ohne diesen Merker liefe der Timer in eine Endlosschleife: deployen,
-scheitern, zurückrollen, fünf Minuten später dasselbe. Der Merker wird
-gelöscht, sobald ein **anderer** SHA auftaucht — ein Fix auf dem Branch löst
-ihn also von selbst auf.
+Without this marker the timer would run into an endless loop: deploy, fail,
+roll back, the same thing five minutes later. The marker is deleted as soon
+as a **different** SHA appears — so a fix on the branch clears it
+automatically.
 
-### Warum der Wrapper existiert
+### Why the wrapper exists
 
-`deploy/autodeploy.sh` liegt im Repo und wird von sich selbst überschrieben
-(Schritt 5). bash liest Skripte häppchenweise über Datei-Offsets; ändert sich
-die Datei währenddessen, kann die Ausführung mitten im Befehl abbrechen.
+`deploy/autodeploy.sh` lives in the repo and gets overwritten by itself
+(step 6). bash reads scripts piecemeal via file offsets; if the file changes
+in the meantime, execution can break off mid-command.
 
-Deshalb zeigt der Timer nicht auf das Repo-Skript, sondern auf
-`/usr/local/bin/gamecooler-autodeploy`, das es zuerst nach
-`/run/gamecooler-autodeploy.sh` kopiert und diese Kopie ausführt. Die Kopie
-wird beim Deploy nicht angefasst.
+That's why the timer doesn't point at the repo script but at
+`/usr/local/bin/gamecooler-autodeploy`, which first copies it to
+`/run/gamecooler-autodeploy.sh` and runs that copy. The copy isn't touched
+by the deploy.
 
 ## Bootstrap
 
-Einmalig im Container, als root. Der Container muss bereits nach
-`docs/deploy.md` eingerichtet sein.
+Once, inside the container, as root. The container must already be set up
+according to `docs/deploy.md`.
 
-**Zuerst prüfen, im richtigen Container zu sein.** Die Hostnamen liegen eine
-Transposition auseinander, und `pct enter 200` statt `107` ist schnell getippt:
+**First check that you're in the right container.** The hostnames are one
+transposition apart, and `pct enter 200` instead of `107` is quickly typed:
 
 ```sh
-hostname          # muss der TEST-Container sein, nicht der Prod-Container
-pct config <id> | grep hostname     # vom Proxmox-Host aus
+hostname          # must be the TEST container, not the prod container
+pct config <id> | grep hostname     # from the Proxmox host
 ```
 
-Ein falsch eingerichteter Container deployt inzwischen nicht mehr still,
-sondern bricht mit `exit 2` ab: fehlt `GAMECOOLER_HOST`, wird nichts
-ausgerollt. Der falsche Container bleibt damit stehen, statt fremden Code
-auszurollen — prüfbar im Journal. Der `hostname`-Check oben bleibt trotzdem
-der schnellere Weg.
+A misconfigured container no longer deploys silently; it aborts with
+`exit 2`: if `GAMECOOLER_HOST` is missing, nothing is rolled out. The wrong
+container thus stays put instead of rolling out foreign code — verifiable in
+the journal. The `hostname` check above is still the faster route.
 
 ```sh
-# 1. Repo auf den Branch bringen, dem dieser Container folgen soll.
+# 1. Bring the repo onto the branch this container should follow.
 #
-#    Das MUSS vor Schritt 5 passieren: die Unit-Dateien kommen aus dem Repo,
-#    ein Container auf dem alten Stand hat sie noch nicht. Als root in einem
-#    Repo, das gamecooler gehört, braucht git die Ausnahme unten — sonst
-#    bricht es mit "detected dubious ownership" ab.
+#    This MUST happen before step 5: the unit files come from the repo,
+#    a container on the old state doesn't have them yet. As root in a
+#    repo owned by gamecooler, git needs the exception below — otherwise
+#    it aborts with "detected dubious ownership".
 cd /opt/gamecooler
 git config --global --add safe.directory /opt/gamecooler
 git fetch --depth=1 origin dev && git checkout -B dev FETCH_HEAD
-ls deploy/gamecooler-autodeploy.service        # muss existieren
+ls deploy/gamecooler-autodeploy.service        # must exist
 
-# 2. Branch und Name dieser Umgebung. Beide Werte sind Pflicht — fehlt einer,
-#    bricht das Skript mit exit 2 ab, statt etwas Falsches auszurollen.
+# 2. Branch and name of this environment. Both values are required — if one
+#    is missing, the script aborts with exit 2 instead of rolling out the wrong thing.
 printf 'GAMECOOLER_BRANCH=dev\nGAMECOOLER_HOST=gamecooler-test.home.arpa\n' \
   > /etc/default/gamecooler-autodeploy
 
-# 3. Wrapper installieren.
+# 3. Install the wrapper.
 printf '#!/bin/sh\ninstall -m755 /opt/gamecooler/deploy/autodeploy.sh /run/gamecooler-autodeploy.sh\nexec /run/gamecooler-autodeploy.sh "$@"\n' \
   > /usr/local/bin/gamecooler-autodeploy
 chmod 755 /usr/local/bin/gamecooler-autodeploy
 
-# 4. Timer installieren und starten.
+# 4. Install and start the timer.
 cp /opt/gamecooler/deploy/gamecooler-autodeploy.service /etc/systemd/system/
 cp /opt/gamecooler/deploy/gamecooler-autodeploy.timer   /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now gamecooler-autodeploy.timer
 
-# 5. Ersten Lauf von Hand auslösen — der rendert das Caddyfile mit dem Namen
-#    aus Schritt 2 und lädt Caddy neu. Ohne das stünde in /etc/caddy/Caddyfile
-#    noch der Name der Vorgänger-Installation.
+# 5. Trigger the first run by hand — it renders the Caddyfile with the name
+#    from step 2 and reloads Caddy. Without it, /etc/caddy/Caddyfile would
+#    still contain the name of the previous installation.
 systemctl start gamecooler-autodeploy.service
 ```
 
-**Der Name kommt nicht mehr aus Caddys Umgebung.** Frühere Fassungen setzten
-`GAMECOOLER_HOST` in `/etc/default/caddy` und verließen sich darauf, dass Caddy
-die Datei liest. Das tut sie nicht: die Unit des Debian-Pakets hat kein
-`EnvironmentFile`, und `--environ` gibt die Umgebung nur aus. Ein
-`{$GAMECOOLER_HOST:default}` im Caddyfile fällt damit **immer** auf den Default
-zurück — der Test-Container lauschte unter `wildbret.home.arpa` und bekam unter
-`gamecooler-test.home.arpa` kein Zertifikat (`tlsv1 alert internal error`).
+**The name no longer comes from Caddy's environment.** Earlier versions set
+`GAMECOOLER_HOST` in `/etc/default/caddy` and relied on Caddy reading the
+file. It doesn't: the Debian package's unit has no `EnvironmentFile`, and
+`--environ` only prints the environment. A `{$GAMECOOLER_HOST:default}` in
+the Caddyfile therefore **always** falls back to the default — the test
+container listened on `wildbret.home.arpa` and got no certificate for
+`gamecooler-test.home.arpa` (`tlsv1 alert internal error`).
 
-Jetzt setzt `autodeploy.sh` den Namen selbst in `deploy/Caddyfile` ein
-(Platzhalter `__HOST__`) und installiert das Ergebnis. Deshalb gibt es
-`/etc/default/caddy` nicht mehr — **eine** Konfigurationsdatei pro Container.
+Now `autodeploy.sh` inserts the name into `deploy/Caddyfile` itself
+(placeholder `__HOST__`) and installs the result. That's why
+`/etc/default/caddy` no longer exists — **one** configuration file per container.
 
-Prüfen, dass der Name angekommen ist — **nach** Schritt 5, denn erst der Deploy
-rendert das Caddyfile:
+Check that the name has arrived — **after** step 5, because only the deploy
+renders the Caddyfile:
 
 ```sh
 grep -n 'home.arpa' /etc/caddy/Caddyfile | head -2   # -> gamecooler-test…
@@ -174,99 +173,99 @@ curl -sI https://gamecooler-test.home.arpa/ | head -1     # -> HTTP/2 405
 curl -s  https://gamecooler-test.home.arpa/ -o /dev/null -w '%{http_code}\n'  # -> 200
 ```
 
-**Gegenprobe, dass der Container *nicht* unter dem Prod-Namen lauscht** — das
-war der Fehler, und er ist von innen unsichtbar:
+**Cross-check that the container is *not* listening under the prod name** —
+that was the bug, and it's invisible from inside:
 
 ```sh
 curl -sk --resolve wildbret.home.arpa:443:127.0.0.1 \
   -o /dev/null -w 'prod=%{http_code}\n' https://wildbret.home.arpa/
-# -> 000. Kommt hier 200, bedient dieser Container den falschen Namen.
+# -> 000. If you get 200 here, this container is serving the wrong name.
 ```
 
-`405` auf `curl -I` ist erwartet: FastAPI registriert kein HEAD, `-I` sendet
-aber HEAD. Der `-s`-Aufruf darunter ist der eigentliche Test.
+`405` on `curl -I` is expected: FastAPI doesn't register HEAD, but `-I`
+sends HEAD. The `-s` call below it is the real test.
 
-**Aus dem Container heraus schlägt dieser `curl` fehl** (leere Ausgabe, kein
-Fehler): der Name löst über Pi-hole auf die eigene Adresse auf, und die
-Container-Firewall leitet das nicht zurück. Von außen, vom Laptop oder Handy,
-funktioniert es. Der Deploy ist davon nicht betroffen — sein Health-Check geht
-gegen `http://127.0.0.1:8010/`, nicht gegen den HTTPS-Namen.
+**From inside the container this `curl` fails** (empty output, no error):
+the name resolves via Pi-hole to the container's own address, and the
+container firewall doesn't route that back. From outside, from the laptop or
+phone, it works. The deploy isn't affected — its health check goes against
+`http://127.0.0.1:8010/`, not against the HTTPS name.
 
-Der erste Lauf sollte `nichts zu tun` melden, wenn Schritt 1 ausgeführt wurde —
-das Repo steht dann schon auf dem aktuellen Commit. Genau das ist das erwartete
-Ergebnis und belegt, dass der SHA-Vergleich greift:
+The first run should report `nothing to do` if step 1 was carried out —
+the repo is then already on the current commit. That's exactly the expected
+result and proves the SHA comparison works.
 
-## Prod scharf schalten
+## Enabling prod
 
-Wenn der Test-Container zufriedenstellend läuft. Die Umgebung ist reine
-Konfiguration — das Skript selbst ist in beiden Containern identisch.
+Once the test container runs satisfactorily. The environment is pure
+configuration — the script itself is identical in both containers.
 
-**Ist der Bootstrap oben schon gelaufen, genügt das hier:**
+**If the bootstrap above has already run, this is enough:**
 
 ```sh
 printf 'GAMECOOLER_BRANCH=main\nGAMECOOLER_HOST=wildbret.home.arpa\n' \
   > /etc/default/gamecooler-autodeploy
 systemctl enable --now gamecooler-autodeploy.timer
-systemctl start gamecooler-autodeploy.service   # erster Lauf, sofort
+systemctl start gamecooler-autodeploy.service   # first run, right away
 ```
 
-**Lief der Bootstrap noch nie** (der übliche Fall, wenn Prod bis jetzt von Hand
-aktualisiert wurde), fehlen Wrapper und Units — dann ist der **ganze**
-Bootstrap-Abschnitt oben durchzugehen, mit `main` statt `dev` in Schritt 1 und
-Schritt 2. Ohne den Wrapper scheitert der Timer mit `status=203/EXEC`, weil
-`ExecStart` auf `/usr/local/bin/gamecooler-autodeploy` zeigt.
+**If the bootstrap has never run** (the usual case if prod has so far been
+updated by hand), the wrapper and units are missing — then go through the
+**whole** bootstrap section above, with `main` instead of `dev` in step 1 and
+step 2. Without the wrapper the timer fails with `status=203/EXEC`, because
+`ExecStart` points to `/usr/local/bin/gamecooler-autodeploy`.
 
-Der erste Lauf ist **kein No-Op**, wenn Prod auf einem älteren Stand steht: er
-rollt Code, `gamecooler.service` und das Caddyfile aus. Das Caddyfile wird dabei
-neu gerendert — der Name kommt aus `GAMECOOLER_HOST`, nicht mehr aus der Datei.
+The first run is **not a no-op** if prod is on an older state: it rolls out
+code, `gamecooler.service` and the Caddyfile. The Caddyfile is re-rendered in
+the process — the name comes from `GAMECOOLER_HOST`, no longer from the file.
 
-**Vorher prüfen:**
+**Check beforehand:**
 
-- Ist `config.yaml` in Prod auf `dry_run: false`, und zeigt `backend: agent`
-  auf den Mac? Der Deploy fasst `config.yaml` nie an, aber die App wird
-  neu gestartet.
-- Hat der Test-Container wirklich ein **eigenes** Volume
-  (`pct config <id> | grep mp0`), nicht das geteilte von Prod?
-- Läuft Prod gerade? Ist die App schon krank, bricht der Lauf vor dem Deploy ab
-  (`App antwortet nicht ...`) — dann erst reparieren.
+- Is `config.yaml` in prod set to `dry_run: false`, and does `backend: agent`
+  point to the Mac? The deploy never touches `config.yaml`, but the app is
+  restarted.
+- Does the test container really have its **own** volume
+  (`pct config <id> | grep mp0`), not prod's shared one?
+- Is prod running right now? If the app is already sick, the run aborts
+  before the deploy (`app not answering ...`) — fix that first.
 
-## Betrieb
+## Operations
 
 ```sh
-# Sofort deployen, ohne auf den Timer zu warten
+# Deploy immediately, without waiting for the timer
 systemctl start gamecooler-autodeploy.service
 journalctl -u gamecooler-autodeploy -n 40 --no-pager
 
-# Nächster geplanter Lauf
+# Next scheduled run
 systemctl list-timers gamecooler-autodeploy.timer
 
-# Timer pausieren (z.B. während man selbst am Container arbeitet)
+# Pause the timer (e.g. while working on the container yourself)
 systemctl stop gamecooler-autodeploy.timer
 ```
 
-Ein Lauf, der nichts zu tun hat, kostet ein `git ls-remote` und beendet sich
-in unter einer Sekunde.
+A run with nothing to do costs one `git ls-remote` and finishes in under a
+second.
 
-## Fehlerbilder
+## Failure patterns
 
-| Meldung im Journal | Bedeutung |
+| Journal message | Meaning |
 |---|---|
-| `nichts zu tun — dev ist auf <sha>` | Normal, kein Deploy nötig |
-| `App antwortet nicht auf ... — kein Deploy` | Die App war **vor** dem Deploy schon krank. Ursache suchen, nicht deployen. |
-| `Commit <sha> ist als fehlerhaft markiert` | Der Rollback hat gegriffen. Fix auf den Branch pushen; der Merker löst sich von selbst auf. |
-| `Caddyfile ungültig — nicht geladen` | Syntaxfehler im Repo-Caddyfile. Caddy läuft mit der alten Konfiguration weiter. |
-| `GAMECOOLER_HOST fehlt in ...` / `exit 2` | Der Name dieser Umgebung ist nicht gesetzt. Absicht: ohne ihn würde ein falscher Name installiert. |
-| `Caddyfile enthält noch __HOST__` | Der Platzhalter wurde nicht ersetzt — Tippfehler im Caddyfile. Es wurde **nichts** installiert. |
-| `Caddyfile gerendert für <host>` | Normal, kein Fehler: zeigt, welchen Namen der Lauf installiert hat. |
-| `Health-Check fehlgeschlagen nach <sha> — Rollback` | Der neue Commit startet nicht. Läuft wieder auf dem alten Stand. |
-| `auch der Rollback ist nicht gesund` | Ernster Fall: beide Stände krank. Von Hand eingreifen. |
-| `uv sync fehlgeschlagen` | Meist ein `uv.lock`, das nicht zum Commit passt (`--locked` bricht dann ab). Lokal `uv lock` laufen lassen und nachpushen. |
-| `fatal: $HOME not set` / `status=128` | systemd setzt `HOME` nicht (kein `User=` in der Unit). Das Skript setzt es selbst auf `/root` — taucht die Meldung trotzdem auf, ist die Unit aus einem alten Commit installiert. |
-| `fatal: detected dubious ownership` | `/opt/gamecooler` gehört `gamecooler`, das Skript läuft als root. Das Skript setzt `safe.directory` selbst; bei einem Handaufruf in einem anderen Repo fehlt die Ausnahme. |
-| `konnte .../.autodeploy-bad nicht schreiben` | Der Schutz gegen die Endlosschleife ist weg — der Timer rollt denselben Commit immer wieder aus und zurück. Timer sofort stoppen. |
+| `nothing to do — dev is at <sha>` | Normal, no deploy needed |
+| `app not answering on ... — no deploy` | The app was already sick **before** the deploy. Find the cause, don't deploy. |
+| `commit <sha> is marked as bad` | The rollback kicked in. Push a fix to the branch; the marker clears itself. |
+| `Caddyfile invalid` | Syntax error in the repo Caddyfile. `caddy validate` rejected it, so Caddy was not reloaded and keeps running with the old configuration. |
+| `GAMECOOLER_HOST missing in ...` / `exit 2` | This environment's name isn't set. Intentional: without it, a wrong name would be installed. |
+| `Caddyfile still contains __HOST__` | The placeholder wasn't replaced — typo in the Caddyfile. **Nothing** was installed. |
+| `OK — running <sha>, reachable as <host>` | Normal, not an error: the deploy succeeded, and the line shows which name Caddy now serves. |
+| `deploy of <sha> failed — rolling back to <sha>` | The new commit didn't start (or a deploy step failed). The script rolls back; `rollback succeeded — running <sha> again` confirms it runs on the old state again. |
+| `the rollback is not healthy either` | Serious case: both states sick. Intervene by hand. |
+| `uv sync failed` | Usually a `uv.lock` that doesn't match the commit (`--locked` then aborts). Run `uv lock` locally and push again. |
+| `fatal: $HOME not set` / `status=128` | systemd doesn't set `HOME` (no `User=` in the unit). The script sets it to `/root` itself — if the message still appears, the unit was installed from an old commit. |
+| `fatal: detected dubious ownership` | `/opt/gamecooler` is owned by `gamecooler`, the script runs as root. The script sets `safe.directory` itself; when run by hand in a different repo, the exception is missing. |
+| `could not write .../.autodeploy-bad` | The protection against the endless loop is gone — the timer rolls the same commit out and back again and again. Stop the timer immediately. |
 
-**Den Merker von Hand löschen**, wenn ein Commit zwar fehlerhaft war, aber in
-Ordnung ist (z.B. der Fehler lag außerhalb des Repos):
+**Delete the marker by hand** if a commit failed but is actually fine
+(e.g. the fault was outside the repo):
 
 ```sh
 rm /var/lib/gamecooler/.autodeploy-bad

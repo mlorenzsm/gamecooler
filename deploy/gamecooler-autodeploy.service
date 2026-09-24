@@ -1,5 +1,5 @@
 [Unit]
-Description=Gamecooler Autodeploy (holt den neuesten Stand des konfigurierten Branches)
+Description=Gamecooler Autodeploy (fetches the latest state of the configured branch)
 Documentation=file:/opt/gamecooler/docs/autodeploy.md
 After=network-online.target
 Wants=network-online.target
@@ -7,19 +7,19 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 
-# Der Wrapper, NICHT /opt/gamecooler/deploy/autodeploy.sh direkt: das Skript
-# überschreibt sich beim Deploy selbst, und bash liest Skripte über
-# Datei-Offsets — eine Änderung mitten im Lauf kann die Ausführung zerreissen.
-# Der Wrapper kopiert es vorher nach /run. Siehe Kommentar im Skriptkopf.
+# The wrapper, NOT /opt/gamecooler/deploy/autodeploy.sh directly: the script
+# overwrites itself during deploy, and bash reads scripts by file offset — a
+# change mid-run can tear the execution apart. The wrapper copies it to /run
+# first. See the comment at the top of the script.
 ExecStart=/usr/local/bin/gamecooler-autodeploy
 
-# Der Deploy braucht root: git checkout in /opt, uv sync, Dateien nach /etc,
-# systemctl. Deshalb kein User= und keine Sandbox hier — die Isolation sitzt
-# im gamecooler.service, der die App selbst einsperrt.
+# The deploy needs root: git checkout in /opt, uv sync, files to /etc,
+# systemctl. Hence no User= and no sandbox here — the isolation lives in
+# gamecooler.service, which locks down the app itself.
 #
-# Etwas Luft nach oben, weil uv sync je nach Netzlaufzeit dauern kann.
+# Some headroom, because uv sync can take a while depending on network latency.
 TimeoutStartSec=300
 
-# Kein Restart=: das ist ein Timer-Job, kein Dauerdienst. Ein Fehlschlag wird
-# beim nächsten Timer-Lauf ohnehin erneut versucht (bzw. der Commit ist dann
-# als fehlerhaft markiert und wird übersprungen).
+# No Restart=: this is a timer job, not a long-running service. A failure is
+# retried on the next timer run anyway (or the commit is then marked as bad
+# and skipped).

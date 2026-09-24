@@ -1,9 +1,9 @@
-# Vorlage für config.yaml. Kopieren und anpassen:
+# Template for config.yaml. Copy and adjust:
 #
 #   cp config.yaml.example config.yaml
 #
-# config.yaml selbst ist nicht versioniert — dort stehen die echten Jäger mit
-# Adresse und Telefonnummer. Diese Datei enthält nur Platzhalter.
+# config.yaml itself is not under version control — it holds the real hunters
+# with address and phone number. This file contains only placeholders.
 
 hunters:
 - name: Max Mustermann
@@ -11,19 +11,19 @@ hunters:
   phone: 0123 456789
   email: max@example.com
 
-# Wildarten mit ihren eigenen Teilstücken und Vorgaben. Beim Drucken stehen nur
-# die Teilstücke der gewählten Wildart zur Auswahl; derselbe Name kann je Wildart
-# einen anderen Preis haben.
+# Species, each with its own cuts and presets. When printing, only the cuts of
+# the selected species are offered; the same name can have a different price
+# per species.
 #
-# Pro Teilstück (alles optional, leer = {}):
-#   price:       Preis pro kg — oder Festpreis, wenn beim Erfassen "5x" steht
-#   weight_kg:   Standardgewicht, wird im Formular vorbelegt
-#   kind:        cut (Teilstück, Standard) oder prep (Zubereitung)
-#   ingredients: Zutaten, klein unten auf dem Info-Etikett
-#   recipe:      Name eines Rezepts dieser Wildart — ersetzt "ingredients"
+# Per cut (all optional, empty = {}):
+#   price:       price per kg — or a fixed price if "5x" is entered
+#   weight_kg:   default weight, pre-filled in the form
+#   kind:        cut (cut, default) or prep (preparation)
+#   ingredients: ingredients, in small print at the bottom of the info label
+#   recipe:      name of a recipe of this species — replaces "ingredients"
 #
-# Vorgaben für den Sammeldruck belegen die Zeilen vor und dürfen nur
-# Teilstücke derselben Wildart verwenden.
+# Presets for bulk print pre-fill the rows and may only use cuts of the same
+# species.
 species:
 - name: Reh
   parts:
@@ -70,8 +70,8 @@ species:
       kind: prep
       recipe: Salsiccia
   presets: []
-  # Rezepte gehören zur Wildart. Eine Zubereitung mit "recipe:" bekommt die
-  # Zutaten fürs Etikett aus dem Rezept, nach Gewicht sortiert.
+  # Recipes belong to the species. A preparation with "recipe:" gets the
+  # ingredients for its label from the recipe, sorted by weight.
   recipes:
   - name: Salsiccia
     items:
@@ -97,8 +97,8 @@ species:
     Keule: {}
   presets: []
 
-# backend: pyusb | linux_kernel | network | agent   (siehe README)
-# identifier: usb://0x04f9:0x209b  ist die QL-800-Kennung, auf jedem Gerät gleich
+# backend: pyusb | linux_kernel | network | agent   (see README)
+# identifier: usb://0x04f9:0x209b  is the QL-800 ID, the same on every device
 printers:
 - name: Mac
   model: QL-800
@@ -107,12 +107,12 @@ printers:
   identifier: usb://0x04f9:0x209b
 default_printer: Mac
 
-# Haltbarkeit auf dem Etikett, in Monaten.
+# Shelf life printed on the label, in months.
 best_before_months: 12
 
-# true = nur registrieren, nicht drucken. Zum Ausprobieren zunächst true lassen.
+# true = only record, don't print. Leave it at true while trying things out.
 dry_run: true
 
-# Sprache der gedruckten Etiketten und der Rechnung: de oder en. Unabhängig von
-# der Sprache der Weboberfläche, die jeder Browser selbst wählt.
+# Language of the printed labels and the invoice: de or en. Independent of
+# the web UI language, which each browser picks for itself.
 label_language: de
