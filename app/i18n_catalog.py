@@ -112,7 +112,6 @@ EN = {
     "Preis/kg bzw. Festpreis (€)": "Price/kg or fixed price (€)",
     "Kein Preis auf dem Etikett": "No price on the label",
     "Zeile entfernen": "Remove row",
-    "entfernen": "remove",
     "Drucken?": "Print?",
     "Wirklich drucken?": "Really print?",
     "{n} ohne Gewicht": "{n} without weight",

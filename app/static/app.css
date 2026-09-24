@@ -642,3 +642,27 @@ nav.tabbar { view-transition-name: tabbar; }       /* the bar stays put while th
                  border-top: 1px dashed var(--line); font-size: var(--text-sm); }
   .recipe-buttons { display: flex; gap: var(--s-2); flex-wrap: wrap; align-items: center; margin-top: var(--s-3); }
 }
+
+/* Bulk: one card per row on the phone —
+     [ 3 ] [ Keule            ▾ ] [🗑]
+     [ 0,4 kg ] [ 16,00 € ] [✓ no price]
+   The desktop table keeps its columns. */
+@layer components {
+  #preset-bar > select { flex: 1; }
+  .add-row { margin: var(--s-2) 0 var(--s-3); }
+  .bulk-rows .noprice-label { display: none; }
+  @media (max-width: 640px) {
+    table.bulk-rows tr { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) minmax(0, 1fr) auto; gap: var(--s-2); align-items: center; }
+    table.bulk-rows td { display: block; padding: 0; }
+    table.bulk-rows td::before { content: none; }
+    table.bulk-rows td input:not([type=checkbox]), table.bulk-rows td select { width: 100%; }
+    table.bulk-rows td.c-count { grid-area: 1 / 1; }
+    table.bulk-rows td.c-part { grid-area: 1 / 2 / 2 / 4; }
+    table.bulk-rows td.c-del { grid-area: 1 / 4; }
+    table.bulk-rows td.c-weight { grid-area: 2 / 1 / 3 / 3; }
+    table.bulk-rows td.c-price { grid-area: 2 / 3; }
+    table.bulk-rows td.c-noprice { grid-area: 2 / 4; }
+    table.bulk-rows .noprice-label { display: inline; font-size: var(--text-xs); color: var(--muted); white-space: nowrap; }
+    table.bulk-rows .c-noprice .inline-check { flex-direction: column; gap: 2px; }
+  }
+}
