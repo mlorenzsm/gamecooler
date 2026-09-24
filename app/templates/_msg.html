@@ -1,0 +1,6 @@
+{# Page message from a redirect (?msg=…). ?kind=error shows it red — before,
+   a failed print looked like a success. #}
+{% set kind = request.query_params.get('kind') %}
+{% if msg %}<div class="{{ 'error' if kind == 'error' else 'msg' }}" role="{{ 'alert' if kind == 'error' else 'status' }}">
+  {{ icon('circle-x' if kind == 'error' else 'circle-check') }}<span>{{ msg }}</span>
+</div>{% endif %}

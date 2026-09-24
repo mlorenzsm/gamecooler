@@ -1,22 +1,22 @@
 {% extends "base.html" %}
 {% block content %}
 
-{% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+{% include "_msg.html" %}
 
-<h2>⚙️ {{ t("Einstellungen") }}</h2>
+<h2>{{ icon('settings-2') }}{{ t("Einstellungen") }}</h2>
 
 {# Zwei Reiter. "Allgemein" ändert sich selten (Jäger, Etikettensprache),
    "Wildarten" ist der Alltag — deshalb eigene Seiten statt einer langen. #}
 <nav class="settings-tabs" aria-label="{{ t('Einstellungen') }}">
-  <a href="/settings?tab=species" {% if tab == 'species' %}class="active" aria-current="page"{% endif %}>🦌 {{ t("Wildarten") }}</a>
-  <a href="/settings?tab=general" {% if tab == 'general' %}class="active" aria-current="page"{% endif %}>🧑‍🌾 {{ t("Allgemein") }}</a>
+  <a href="/settings?tab=species" {% if tab == 'species' %}class="active" aria-current="page"{% endif %}>{{ icon('snowflake') }}{{ t("Wildarten") }}</a>
+  <a href="/settings?tab=general" {% if tab == 'general' %}class="active" aria-current="page"{% endif %}>{{ icon('info') }}{{ t("Allgemein") }}</a>
 </nav>
 
 {% if tab == 'general' %}
 {# ============================== Allgemein ============================== #}
 
 <section class="settings-card">
-  <h3>🧑‍🌾 {{ t("Jäger") }}</h3>
+  <h3>{{ icon('info') }}{{ t("Jäger") }}</h3>
   <p class="hint">{{ t("Name, Adresse und Telefon stehen auf jedem Info-Etikett.") }}</p>
   {% for h in config.hunters %}
   <form method="post" action="/settings/hunters" id="hunter-{{ loop.index }}"></form>
@@ -30,24 +30,24 @@
     <tr>
       <td>
         <input type="hidden" name="original_name" value="{{ h.name }}" form="{{ f }}">
-        <input name="name" required value="{{ h.name }}" form="{{ f }}" style="width:100%; min-width:7rem">
+        <input class="input-cell" name="name" required value="{{ h.name }}" form="{{ f }}">
       </td>
-      <td><input name="address" required value="{{ h.address }}" form="{{ f }}" style="width:100%; min-width:9rem"></td>
-      <td><input name="phone" value="{{ h.phone }}" form="{{ f }}" style="width:100%; min-width:7rem"></td>
-      <td><input name="email" value="{{ h.email }}" form="{{ f }}" style="width:100%; min-width:8rem"></td>
+      <td><input class="input-cell" name="address" required value="{{ h.address }}" form="{{ f }}"></td>
+      <td><input class="input-cell" name="phone" value="{{ h.phone }}" form="{{ f }}"></td>
+      <td><input class="input-cell" name="email" value="{{ h.email }}" form="{{ f }}"></td>
       <td class="row-actions">
-        <button class="small" type="submit" form="{{ f }}" title="{{ t('Speichern') }}" aria-label="{{ t('Speichern') }}">💾</button>
+        <button class="small" type="submit" form="{{ f }}" title="{{ t('Speichern') }}" aria-label="{{ t('Speichern') }}">{{ icon('save') }}</button>
         <button class="small" type="submit" form="{{ f }}" formaction="/settings/hunters/delete" formnovalidate
                 title="{{ t('Löschen') }}" aria-label="{{ t('Löschen') }}"
-                onclick='return confirm({{ t("Jäger „{name}“ löschen?", name=h.name) | tojson }})'>🗑️</button>
+                onclick='return confirm({{ t("Jäger „{name}“ löschen?", name=h.name) | tojson }})'>{{ icon('trash-2') }}</button>
       </td>
     </tr>
     {% endfor %}
     <tr>
-      <td><input name="name" required placeholder="{{ t('Neuer Jäger') }}" form="hunter-new" style="width:100%; min-width:7rem"></td>
-      <td><input name="address" required placeholder="{{ t('Straße Nr., PLZ Ort') }}" form="hunter-new" style="width:100%; min-width:9rem"></td>
-      <td><input name="phone" placeholder="{{ t('Telefon') }}" form="hunter-new" style="width:100%; min-width:7rem"></td>
-      <td><input name="email" placeholder="{{ t('E-Mail') }}" form="hunter-new" style="width:100%; min-width:8rem"></td>
+      <td><input class="input-cell" name="name" required placeholder="{{ t('Neuer Jäger') }}" form="hunter-new"></td>
+      <td><input class="input-cell" name="address" required placeholder="{{ t('Straße Nr., PLZ Ort') }}" form="hunter-new"></td>
+      <td><input class="input-cell" name="phone" placeholder="{{ t('Telefon') }}" form="hunter-new"></td>
+      <td><input class="input-cell" name="email" placeholder="{{ t('E-Mail') }}" form="hunter-new"></td>
       <td class="row-actions"><button class="small" type="submit" form="hunter-new">+ {{ t("Hinzufügen") }}</button></td>
     </tr>
   </table>
@@ -55,7 +55,7 @@
 </section>
 
 <section class="settings-card">
-  <h3>🏷️ {{ t("Etikettensprache") }}</h3>
+  <h3>{{ icon('languages') }}{{ t("Etikettensprache") }}</h3>
   <p class="hint">{{ t("Etiketten und Rechnungen werden in dieser Sprache gedruckt — unabhängig von der Sprache der Oberfläche.") }}</p>
   <form method="post" action="/settings/label-language" class="inline-form">
     <select name="label_language" aria-label="{{ t('Etikettensprache') }}">
@@ -63,7 +63,7 @@
       <option value="{{ code }}" {% if code == config.label_language %}selected{% endif %}>{{ language }}</option>
       {% endfor %}
     </select>
-    <button class="small" type="submit">💾 {{ t("Speichern") }}</button>
+    <button class="small" type="submit">{{ icon('save') }}{{ t("Speichern") }}</button>
   </form>
 </section>
 
@@ -99,16 +99,16 @@
 <div class="species-head">
   <h3>{{ sp.name }}</h3>
   <details class="species-manage">
-    <summary>✏️ {{ t("Umbenennen oder löschen") }}</summary>
+    <summary>{{ icon('pencil') }}{{ t("Umbenennen oder löschen") }}</summary>
     <form method="post" action="/settings/species/rename" class="inline-form">
       <input type="hidden" name="original_name" value="{{ sp.name }}">
       <input name="name" required value="{{ sp.name }}" aria-label="{{ t('Neuer Name') }}">
-      <button class="small" type="submit">💾 {{ t("Umbenennen") }}</button>
+      <button class="small" type="submit">{{ icon('save') }}{{ t("Umbenennen") }}</button>
     </form>
     <form method="post" action="/settings/species/delete" class="inline-form"
           onsubmit='return confirm({{ t("Wildart „{name}“ mit allen Teilstücken und Vorgaben löschen?\n\nBestehende Etiketten und Bestand bleiben erhalten.", name=sp.name) | tojson }})'>
       <input type="hidden" name="name" value="{{ sp.name }}">
-      <button class="small danger" type="submit">🗑️ {{ t("Wildart „{name}“ löschen", name=sp.name) }}</button>
+      <button class="small danger" type="submit">{{ icon('trash-2') }}{{ t("Wildart „{name}“ löschen", name=sp.name) }}</button>
     </form>
   </details>
 </div>
@@ -123,7 +123,7 @@
 {% set group = g[kind] %}
 <section class="settings-card">
   <div class="list-head">
-    <h4>{{ '🥩' if kind == 'cut' else '🌭' }} {{ t(heading) }} <span class="count" data-count="{{ kind }}">{{ group | length }}</span></h4>
+    <h4>{{ icon('package' if kind == 'cut' else 'book-open') }} {{ t(heading) }} <span class="count" data-count="{{ kind }}">{{ group | length }}</span></h4>
     <button type="button" class="small add-toggle" aria-controls="new-{{ kind }}" aria-expanded="false">+ {{ t("Neu") }}</button>
   </div>
 
@@ -148,8 +148,8 @@
           <span class="drag-handle" title="{{ t('Ziehen, um zu verschieben') }}" aria-hidden="true">⠿</span>
           <span class="part-name">{{ name }}</span>
           <span class="part-facts">
-            {% if recipe %}<span class="badge" title="{{ t('Rezept') }}: {{ recipe.name }}">📖<span class="badge-text"> {{ recipe.name }}</span></span>
-            {% elif p.ingredients %}<span class="badge" title="{{ t('Zutaten') }}">🧂<span class="badge-text"> {{ t("Zutaten") }}</span></span>{% endif %}
+            {% if recipe %}<span class="badge" title="{{ t('Rezept') }}: {{ recipe.name }}">{{ icon('book-open') }}<span class="badge-text"> {{ recipe.name }}</span></span>
+            {% elif p.ingredients %}<span class="badge" title="{{ t('Zutaten') }}">{{ icon('info') }}<span class="badge-text"> {{ t("Zutaten") }}</span></span>{% endif %}
             {% if p.weight_kg is not none %}<span class="fact">{{ p.weight_kg | de(3) }} kg</span>{% endif %}
             <span class="fact price">{{ (p.price | de) ~ ' €/kg' if p.price is not none else '–' }}</span>
           </span>
@@ -159,10 +159,10 @@
           <input type="hidden" name="original_name" value="{{ name }}">
           {% include "_part_fields.html" %}
           <div class="editor-buttons">
-            <button class="print" type="submit">💾 {{ t("Speichern") }}</button>
+            <button class="print" type="submit">{{ icon('save') }}{{ t("Speichern") }}</button>
             <button type="button" class="small edit-cancel">{{ t("Abbrechen") }}</button>
             <button class="small danger" type="submit" formaction="/settings/parts/delete" formnovalidate
-                    onclick='return confirm({{ t("„{name}“ bei {species} löschen?", name=name, species=sp.name) | tojson }})'>🗑️ {{ t("Löschen") }}</button>
+                    onclick='return confirm({{ t("„{name}“ bei {species} löschen?", name=name, species=sp.name) | tojson }})'>{{ icon('trash-2') }}{{ t("Löschen") }}</button>
           </div>
         </form>
       </details>
@@ -178,7 +178,7 @@
 {# --- Vorgaben (Sammeldruck) --------------------------------------------- #}
 <section class="settings-card">
   <div class="list-head">
-    <h4>📋 {{ t("Vorgaben (Sammeldruck)") }} <span class="count">{{ sp.presets | length }}</span></h4>
+    <h4>{{ icon('copy') }}{{ t("Vorgaben (Sammeldruck)") }} <span class="count">{{ sp.presets | length }}</span></h4>
     <button type="button" class="small add-toggle" aria-controls="new-preset" aria-expanded="false">+ {{ t("Neu") }}</button>
   </div>
   <p class="hint">
@@ -219,10 +219,10 @@
             <textarea name="items_text" required rows="2" placeholder="{{ t('z. B. 2x Keule, 1x Rücken, 6x Hackfleisch') }}">{{ preset | preset_text }}</textarea>
           </label>
           <div class="editor-buttons">
-            <button class="print" type="submit">💾 {{ t("Speichern") }}</button>
+            <button class="print" type="submit">{{ icon('save') }}{{ t("Speichern") }}</button>
             <button type="button" class="small edit-cancel">{{ t("Abbrechen") }}</button>
             <button class="small danger" type="submit" formaction="/settings/presets/delete" formnovalidate
-                    onclick='return confirm({{ t("Vorgabe „{name}“ bei {species} löschen?", name=preset.name, species=sp.name) | tojson }})'>🗑️ {{ t("Löschen") }}</button>
+                    onclick='return confirm({{ t("Vorgabe „{name}“ bei {species} löschen?", name=preset.name, species=sp.name) | tojson }})'>{{ icon('trash-2') }}{{ t("Löschen") }}</button>
           </div>
         </form>
       </details>

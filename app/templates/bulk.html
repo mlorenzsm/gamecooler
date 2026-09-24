@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
 
-{% if msg %}<div class="msg">{{ msg }}</div>{% endif %}
+{% include "_msg.html" %}
 {% if config.dry_run %}<div class="dry-run">{{ t("Testmodus aktiv (dry_run) – es wird nicht gedruckt.") }}</div>{% endif %}
 
-<h2>🖨️ {{ t("Sammeldruck") }}</h2>
+<h2>{{ icon('printer') }}{{ t("Sammeldruck") }}</h2>
 
 {# Die Vorgaben gehören zur Wildart; die Liste wird per Script gefüllt. #}
 <div class="preset-bar" id="preset-bar">
@@ -14,19 +14,19 @@
 </div>
 
 <form method="post" action="/bulk" id="bulk-form" onsubmit="return confirmBulkPrint()">
-  <div class="part-form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin-bottom: 1rem;">
-    <label style="display:flex; flex-direction:column; gap:0.3rem;">{{ t("Jäger") }}
+  <div class="part-form form-grid">
+    <label class="field">{{ t("Jäger") }}
       <select name="hunter" required>
         {% for h in config.hunters %}<option>{{ h.name }}</option>{% endfor %}
       </select>
     </label>
-    <label style="display:flex; flex-direction:column; gap:0.3rem;">{{ t("Wildart") }}
+    <label class="field">{{ t("Wildart") }}
       <select name="species" required id="species-select">
         {% for s in config.species %}<option>{{ s.name }}</option>{% endfor %}
       </select>
     </label>
     {% if config.printers | length > 1 %}
-    <label style="display:flex; flex-direction:column; gap:0.3rem;">{{ t("Drucker") }}
+    <label class="field">{{ t("Drucker") }}
       <select name="printer">
         {% for p in config.printers %}
         <option value="{{ p.name }}" {% if p.name == config.default_printer %}selected{% endif %}>{{ p.name }}</option>
@@ -100,15 +100,15 @@ function addRow(item = { part: null, count: 1 }) {
   // Telefon (siehe table.responsive in base.html) — dort ist die Kopfzeile
   // ausgeblendet, also muss jede Zelle ihren eigenen Titel mitbringen.
   row.innerHTML = `
-    <td data-label="${T['Anzahl']}"><input name="count" type="number" min="1" value="${item.count}" required style="width:4.5rem"></td>
+    <td data-label="${T['Anzahl']}"><input name="count" type="number" min="1" value="${item.count}" required class="input-num input-num-sm"></td>
     <td data-label="${T['Teilstück']}"><select name="part" required></select></td>
-    <td data-label="${T['Gewicht/Stück (kg) oder 5x']}"><input name="weight_kg" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]" placeholder="${T['0,4 / 5x']}" value="${defaultWeight(item.part || firstPart)}" style="width:7rem"></td>
-    <td data-label="${T['Preis/kg bzw. Festpreis (€)']}"><input name="price_per_kg" inputmode="decimal" enterkeyhint="done" pattern="[0-9]+([.,][0-9]+)?" placeholder="${escapeHtml(pricePlaceholder(item.part || firstPart))}" style="width:7rem"></td>
-    <td data-label="${T['kein Preis']}" style="text-align:center;">
+    <td data-label="${T['Gewicht/Stück (kg) oder 5x']}"><input name="weight_kg" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]" placeholder="${T['0,4 / 5x']}" value="${defaultWeight(item.part || firstPart)}" class="input-num"></td>
+    <td data-label="${T['Preis/kg bzw. Festpreis (€)']}"><input name="price_per_kg" inputmode="decimal" enterkeyhint="done" pattern="[0-9]+([.,][0-9]+)?" placeholder="${escapeHtml(pricePlaceholder(item.part || firstPart))}" class="input-num"></td>
+    <td class="center" data-label="${T['kein Preis']}">
       <input type="checkbox" class="no-price" title="${T['Kein Preis auf dem Etikett']}">
       <input type="hidden" name="no_price" value="">
     </td>
-    <td data-label=""><button type="button" class="small" title="${T['Zeile entfernen']}" aria-label="${T['Zeile entfernen']}" onclick="this.closest('tr').remove(); updateSummary()">🗑️ ${T['entfernen']}</button></td>
+    <td data-label=""><button type="button" class="small" title="${T['Zeile entfernen']}" aria-label="${T['Zeile entfernen']}" onclick="this.closest('tr').remove(); updateSummary()">{{ icon('trash-2') }}${T['entfernen']}</button></td>
   `;
   const partSelect = row.querySelector('select[name=part]');
   fillPartSelect(partSelect, PARTS, unknown);
@@ -200,7 +200,7 @@ const presetSelect = document.getElementById('preset-select');
 const presetApply = document.getElementById('preset-apply');
 function fillPresets() {
   const names = Object.keys(currentPresets());
-  document.getElementById('preset-bar').style.display = names.length ? '' : 'none';
+  document.getElementById('preset-bar').hidden = !names.length;
   presetSelect.innerHTML = `<option value="">${escapeHtml(T['— Auswahl leeren —'])}</option>` +
     names.map(n => `<option>${escapeHtml(n)}</option>`).join('');
 }
