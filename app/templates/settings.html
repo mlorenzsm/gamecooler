@@ -63,6 +63,27 @@
   </form>
 </section>
 
+{% if paperless_on %}
+{# Only shown when PAPERLESS_URL and PAPERLESS_TOKEN are set (docs/paperless.md).
+   The token itself is never shown. #}
+<section class="settings-card">
+  <h3>{{ icon('file-text') }}Paperless</h3>
+  <p class="hint">{{ t("Jede Rechnung wird nach dem Verkauf automatisch in Paperless abgelegt.") }}</p>
+  <div class="list-group">
+    <div class="list-row"><span class="list-label">{{ t("Adresse") }}</span><span class="grow">{{ paperless_url }}</span></div>
+    <div class="list-row"><span class="list-label">{{ t("Dokumenttyp") }}</span><span class="grow">{{ config.paperless.document_type }}</span></div>
+    <div class="list-row"><span class="list-label">{{ t("Tags") }}</span><span class="grow">
+      {% for tag in config.paperless.tags %}<span class="badge">{{ tag }}</span> {% endfor %}</span></div>
+    <div class="list-row"><span class="list-label">{{ t("Korrespondent") }}</span><span class="grow">
+      {{ t("Käufer") if config.paperless.buyer_as_correspondent else "–" }}</span></div>
+    <form method="post" action="/settings/paperless/test" class="list-row list-actions">
+      <button class="small" type="submit">{{ t("Verbindung testen") }}</button>
+    </form>
+  </div>
+  <p class="hint mt-4">{{ t("Adresse und Token kommen aus der Umgebung des Dienstes, Dokumenttyp und Tags aus der {file}.", file="<code>config.yaml</code>" | safe) | safe }}</p>
+</section>
+{% endif %}
+
 <p class="footnote">
   {{ t("Änderungen werden direkt in die {file} geschrieben.", file="<code>config.yaml</code>" | safe) | safe }}
   {{ t("Bestehende Etiketten und Bestandseinträge bleiben unverändert.") }}

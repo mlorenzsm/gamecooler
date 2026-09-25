@@ -183,6 +183,19 @@ class Species(BaseModel):
         }
 
 
+class PaperlessSettings(BaseModel):
+    """What an uploaded invoice is filed as in Paperless-ngx. Names, not IDs:
+    they are looked up (and created if missing) on upload.
+
+    The URL and token are NOT here — they come from the environment
+    (PAPERLESS_URL, PAPERLESS_TOKEN; see docs/paperless.md), because this file
+    is written by the settings page and the token must not end up in it."""
+
+    document_type: str = "Rechnung"
+    tags: list[str] = ["Wildbret"]
+    buyer_as_correspondent: bool = True
+
+
 class Config(BaseModel):
     hunters: list[Hunter]
     species: list[Species]
@@ -194,6 +207,7 @@ class Config(BaseModel):
     # web UI's language, which follows each browser: whoever clicks print, the
     # pack goes to the same buyers.
     label_language: str = "de"
+    paperless: PaperlessSettings = PaperlessSettings()
 
     @field_validator("label_language", mode="before")
     @classmethod
@@ -355,6 +369,9 @@ def save_config(config: Config) -> None:
         "dry_run": config.dry_run,
         "label_language": config.label_language,
     }
+    # only written once someone changed it, so existing files stay as they are
+    if config.paperless != PaperlessSettings():
+        data["paperless"] = config.paperless.model_dump()
     tmp_path = CONFIG_PATH.with_suffix(".yaml.tmp")
     with open(tmp_path, "w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)

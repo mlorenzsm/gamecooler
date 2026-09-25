@@ -135,6 +135,16 @@ class SaleItem(BaseModel):
     total_price: float
 
 
+class PaperlessState(BaseModel):
+    """Where this sale's invoice stands in Paperless-ngx (app/paperless.py)."""
+
+    status: str = "pending"             # pending | uploaded | failed
+    task_id: str | None = None          # Paperless consumption task
+    document_id: int | None = None
+    error: str | None = None
+    updated_at: str = ""
+
+
 class Sale(BaseModel):
     sale_id: str
     number: int
@@ -145,6 +155,8 @@ class Sale(BaseModel):
     items: list[SaleItem]
     total: float
     created_at: str
+    # None = never sent (older sales, or Paperless not configured)
+    paperless: PaperlessState | None = None
 
     @classmethod
     def create(

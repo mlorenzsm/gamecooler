@@ -735,3 +735,7 @@ nav.tabbar { view-transition-name: tabbar; }       /* the bar stays put while th
                     border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--ink); text-decoration: none; font-weight: 500; }
   a.btn-secondary:hover { background: var(--surface-2); }
 }
+
+/* Paperless row on the receipt: the error can be long (a URL, a reason) */
+.paperless-error { display: block; overflow-wrap: anywhere; margin-top: var(--s-1); }
+.paperless-send { margin-top: var(--s-2); }

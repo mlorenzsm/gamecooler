@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
 
+{% if msg %}{% include "_msg.html" %}{% else %}
 <div class="msg">{{ icon('circle-check') }}{{ t("Verkauf Nr. {number} abgeschlossen", number=sale.number) }}</div>
+{% endif %}
 
 <h2 class="page-title">{{ t("Verkauf Nr. {number}", number=sale.number) }}</h2>
 
@@ -14,6 +16,32 @@
     <span class="pre-line grow">{{ sale.delivery_address }}</span></div>
   {% endif %}
   <div class="list-row"><span class="list-label">{{ t("Datum") }}</span><span class="grow">{{ sale.created_at | date }}</span></div>
+  {% if paperless_on %}
+  {# Where the invoice stands in Paperless. Uploads run in the background,
+     so a fresh sale usually shows "being uploaded" first — reload to see. #}
+  {% set p = sale.paperless %}
+  <div class="list-row is-multiline"><span class="list-label">Paperless</span>
+    <span class="grow">
+      {% if p and p.status == 'uploaded' %}
+        <span class="badge ok">{{ icon('check') }}{{ t("Abgelegt") }}</span>
+        {% if paperless_link %}<a href="{{ paperless_link }}" target="_blank" rel="noopener">{{ t("Öffnen") }}</a>{% endif %}
+      {% elif p and p.status == 'pending' %}
+        <span class="badge frost">{{ t("Wird hochgeladen …") }}</span>
+        <a href="/sales/{{ sale.sale_id }}">{{ t("Neu laden") }}</a>
+      {% elif p and p.status == 'failed' %}
+        <span class="badge bad">{{ icon('circle-x') }}{{ t("Fehlgeschlagen") }}</span>
+        <span class="hint paperless-error">{{ p.error }}</span>
+      {% else %}
+        <span class="muted">{{ t("Noch nicht gesendet") }}</span>
+      {% endif %}
+      {% if not p or p.status == 'failed' %}
+      <form method="post" action="/sales/{{ sale.sale_id }}/paperless" class="paperless-send">
+        <button class="small" type="submit">{{ icon('file-text') }}{{ t("Erneut senden") if p else t("Senden") }}</button>
+      </form>
+      {% endif %}
+    </span>
+  </div>
+  {% endif %}
 </div>
 
 <ul class="list-group sale-list">

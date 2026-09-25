@@ -91,6 +91,10 @@ def render_sale_pdf(sale: Sale, hunter: Hunter | None, lang: str = "de") -> byte
         footer_text=f"{t('Rechnung / Lieferschein', lang)} {t('Nr.', lang)} {sale.number} · {date}",
         page_text=t("Seite {page} von {pages}", lang, page="{page}", pages="{nb}"),
     )
+    # Same sale, same bytes: the creation date is the sale's, not "now". A
+    # re-upload is then an exact duplicate, which Paperless recognises by
+    # checksum and refuses — a second guard against double documents.
+    pdf.set_creation_date(datetime.fromisoformat(sale.created_at))
     pdf.add_page()
 
     # fold and hole-punch marks on the left edge

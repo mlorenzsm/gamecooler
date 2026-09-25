@@ -20,6 +20,11 @@ WorkingDirectory=/opt/gamecooler
 # PATH. This is also the venv python — the shebang in .venv/bin/uvicorn points
 # to the same path, so nothing gets resolved twice.
 Environment=GAMECOOLER_STATE_DIR=/var/lib/gamecooler
+# Paperless upload (docs/paperless.md): PAPERLESS_URL and PAPERLESS_TOKEN.
+# The "-" makes the file optional — without it the upload is simply off.
+# A file rather than Environment= lines because the token must not live in a
+# unit that sits in the repo.
+EnvironmentFile=-/etc/gamecooler/paperless.env
 ExecStart=/opt/gamecooler/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8010
 
 Restart=on-failure
