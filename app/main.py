@@ -362,111 +362,64 @@ def create_part(
 
 
 def _amount_text(record: PartRecord) -> str:
-    """The weight field as the form shows it: "1,250", "5x" or empty."""
+    """The amount as typed into the Stock row: "1,250", "5x" or empty."""
     if record.pieces is not None:
         return f"{record.pieces}x"
     return format_de(record.weight_kg, 3) if record.weight_kg is not None else ""
 
 
 def _price_text(record: PartRecord) -> str:
-    """The price field: per kg for weighed parts, the fixed price for counted ones."""
+    """The price as typed: per kg for weighed parts, fixed for counted ones."""
     price = record.total_price if record.pieces is not None else record.price_per_kg
     return format_de(price, 2) if price is not None else ""
 
 
-@app.get("/parts/{part_uuid}/edit")
-def edit_part_page(request: Request, part_uuid: str, msg: str = ""):
-    record = registry.get(part_uuid)
-    if record is None:
-        raise HTTPException(status_code=404, detail=t("Teilstück nicht gefunden"))
-    return templates.TemplateResponse(
-        request,
-        "edit_part.html",
-        {"config": config, "msg": msg, "active": "inventory", "r": record,
-         "amount": _amount_text(record), "price": _price_text(record)},
-    )
+def _row_json(record: PartRecord) -> dict:
+    """What the Stock row shows after an edit, formatted for the UI language."""
+    return {
+        "ok": True,
+        "amount": format_amount(record),
+        "amount_input": _amount_text(record),
+        "price_input": _price_text(record),
+        "price_per_kg": format_de(record.price_per_kg),
+        "total_price": format_de(record.total_price),
+        "weight_kg": record.weight_kg or 0,
+        "total": record.total_price or 0,
+        "pieces": record.pieces is not None,
+        "unweighed": record.weight_kg is None and record.pieces is None,
+        "unpriced": record.total_price is None,
+        "reprint_question": t("2 Etiketten nachdrucken?") + "\n\n"
+            + f"{record.species} – {record.part}, {format_amount(record)}",
+    }
+
+
+templates.env.globals["amount_text"] = _amount_text
+templates.env.globals["price_text"] = _price_text
 
 
 @app.post("/parts/{part_uuid}/edit")
-def edit_part(
-    part_uuid: str,
-    hunter: str = Form(...),
-    species: str = Form(...),
-    part: str = Form(...),
-    weight_kg: str = Form(""),
-    price_per_kg: str = Form(""),
-    ingredients: str = Form(""),
-    then: str = Form("save"),
-    printer: str = Form(""),
-):
-    """Correct an entry in place. The uuid stays, so the label already on the
-    package still scans; "save and reprint" prints fresh labels for it."""
+def edit_part(part_uuid: str, weight_kg: str = Form(""), price_per_kg: str = Form("")):
+    """Correct amount and price of an entry, from the Stock row. Everything
+    else stays as entered; the uuid and date too, so the label on the package
+    still scans. Reprinting afterwards prints labels for the same uuid."""
     record = registry.get(part_uuid)
     if record is None:
-        raise HTTPException(status_code=404, detail=t("Teilstück nicht gefunden"))
-    edit_url = f"/parts/{part_uuid}/edit"
+        return JSONResponse({"ok": False, "error": t("Teilstück nicht gefunden")}, status_code=404)
+    if record.consumed_at is not None:
+        return JSONResponse({"ok": False, "error": t("Bereits entnommen — nicht mehr änderbar")}, status_code=409)
     try:
         part_in = PartIn(
-            hunter=hunter, species=species, part=part,
+            hunter=record.hunter, species=record.species, part=record.part,
             weight_kg=weight_kg, price_per_kg=price_per_kg,
-            ingredients=" ".join(ingredients.split()) or None,
+            ingredients=record.ingredients,
         )
     except (ValidationError, ValueError):
-        return RedirectResponse(
-            _msg_url(edit_url, t("Ungültige Eingabe — Gewicht als 1,25 oder Stückzahl als 5x"), error=True),
-            status_code=303,
+        return JSONResponse(
+            {"ok": False, "error": t("Ungültige Eingabe — Gewicht als 1,25 oder Stückzahl als 5x")}, status_code=400
         )
     record = record.edited(part_in)
     registry.update(record)
-    if then != "reprint":
-        return RedirectResponse(_msg_url("/inventory", t("„{part}“ geändert", part=record.part)), status_code=303)
-    images = [
-        render_info_label(record, find_hunter(record.hunter), config.label_language),
-        render_qr_label(record, config.best_before_months, config.label_language),
-    ]
-    error = print_safely(images, config.printer(printer), config.dry_run)
-    if error:
-        msg = t("Geändert, aber Nachdruck fehlgeschlagen ({error})", error=error)
-    elif config.dry_run:
-        msg = t("Geändert (Testmodus, nicht gedruckt)")
-    else:
-        msg = t("Geändert und neu gedruckt — altes Etikett ersetzen")
-    return RedirectResponse(_msg_url("/inventory", msg, error), status_code=303)
-
-
-@app.get("/parts/{part_uuid}/preview")
-def edit_part_preview(
-    part_uuid: str,
-    hunter: str,
-    species: str,
-    part: str,
-    weight_kg: str = "",
-    price_per_kg: str = "",
-    ingredients: str = "",
-    type: str = "info",
-):
-    """Label preview for the edit page: the entry's own uuid and date, so the
-    preview shows exactly what a reprint will print."""
-    record = registry.get(part_uuid)
-    if record is None:
-        raise HTTPException(status_code=404, detail=t("Teilstück nicht gefunden"))
-    try:
-        record = record.edited(PartIn(
-            hunter=hunter, species=species, part=part,
-            weight_kg=weight_kg, price_per_kg=price_per_kg,
-            ingredients=" ".join(ingredients.split()) or None,
-        ))
-    except (ValidationError, ValueError):
-        pass                                        # half-typed input: keep the stored values
-    img = (
-        render_info_label(record, find_hunter(record.hunter), config.label_language)
-        if type == "info"
-        else render_qr_label(record, config.best_before_months, config.label_language)
-    )
-    buf = io.BytesIO()
-    img.convert("L").save(buf, format="PNG")
-    buf.seek(0)
-    return StreamingResponse(buf, media_type="image/png")
+    return JSONResponse(_row_json(record))
 
 
 @app.post("/parts/{part_uuid}/reprint")

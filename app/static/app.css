@@ -292,7 +292,7 @@
        out of room, which pushed the hunter onto a third line. Here every cell
        has a fixed slot and only the hunter gives way (ellipsis). */
     table.inventory tr { display: grid; align-items: center; column-gap: var(--s-2); row-gap: 0.1rem;
-                         grid-template-columns: 1.75rem auto auto minmax(0, 1fr) auto auto; padding: var(--s-2) var(--s-3); }
+                         grid-template-columns: 1.75rem minmax(0, max-content) minmax(0, max-content) minmax(0, 1fr) auto auto; padding: var(--s-2) var(--s-3); }
     table.inventory td { padding: 0; border: none; white-space: nowrap; font-size: var(--text-sm); color: var(--muted); display: block; }
     table.inventory td::before { content: none; }
 
@@ -300,9 +300,10 @@
     table.inventory td.c-part { grid-area: 1 / 2 / 2 / 5; white-space: normal; font-size: var(--text-md); font-weight: 600; color: var(--ink); }
     table.inventory td.c-price { grid-area: 1 / 5; font-size: var(--text-md); font-weight: 600; color: var(--ink); }
     table.inventory td.c-price::after { content: " €"; }   /* the column header that says € is hidden here */
-    table.inventory td.c-actions { grid-area: 1 / 6 / 3 / 7; display: flex; gap: var(--s-1); }
-    table.inventory td.c-species { grid-area: 2 / 2; }
-    table.inventory td.c-date { grid-area: 2 / 3; }
+    /* pencil above printer: side by side they push the card past the screen */
+    table.inventory td.c-actions { grid-area: 1 / 6 / 3 / 7; display: flex; flex-direction: column; gap: var(--s-1); }
+    table.inventory td.c-species { grid-area: 2 / 2; overflow: hidden; text-overflow: ellipsis; }
+    table.inventory td.c-date { grid-area: 2 / 3; overflow: hidden; text-overflow: ellipsis; }
     table.inventory td.c-hunter { grid-area: 2 / 4; overflow: hidden; text-overflow: ellipsis; }
     table.inventory td.c-amount { grid-area: 2 / 5; }
     table.inventory td.c-status { grid-area: 3 / 2 / 4 / 6; margin-top: var(--s-1); }
@@ -744,20 +745,52 @@ nav.tabbar { view-transition-name: tabbar; }       /* the bar stays put while th
 .part-editor .recipe-hint { grid-column: 1 / -1; display: flex; gap: var(--s-2); align-items: flex-start; margin: 0; }
 .part-editor .recipe-hint .icon { flex: none; margin-top: 0.15em; }
 
-/* Stock: edit link next to reprint — an icon button, same size as the reprint
-   button on the phone */
+/* Stock: amount and price edited in place.
+   Desktop: the cells are the inputs, borderless until hovered or focused, so
+   the table still reads as a table. Phone: the numbers stay text; the
+   pencil opens both inputs as a row under the card. */
 @layer components {
-  a.btn-icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; min-height: 36px;
-               border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); color: var(--ink); }
-  a.btn-icon:hover { background: var(--surface-2); }
   td.c-actions { white-space: nowrap; }
   td.c-actions > * + * { margin-left: var(--s-1); }
-  @media (max-width: 640px) { td.c-actions > * + * { margin-left: 0; } }
+  table.inventory .cell-input { width: 6.5rem; min-height: 36px; padding: 0.3rem 0.5rem; text-align: right;
+                                font-size: var(--text-sm); font-variant-numeric: tabular-nums;
+                                border-color: transparent; background: transparent; }
+  table.inventory tr:hover .cell-input { border-color: var(--line); background: var(--surface); }
+  table.inventory .cell-input:focus { background: var(--surface); }
+  table.inventory .cell-text { display: none; }
+  table.inventory .edit-toggle { display: none; }
+  table.inventory tr.saving { opacity: 0.6; }
+  table.inventory tr.has-error .cell-input { border-color: var(--danger); }
+  table.inventory td.c-price { position: relative; }
+  table.inventory td.c-edit { white-space: nowrap; }
+  .cell-note { display: none; margin-left: var(--s-1); font-size: var(--text-xs); color: var(--muted); }
+  td.is-pieces .cell-note { display: inline; }
+  .row-flash { position: absolute; right: 0; top: 100%; z-index: 5; margin-top: -4px; white-space: nowrap;
+               font-size: var(--text-xs); font-weight: 500; padding: 0.1rem 0.5rem; border-radius: var(--r-pill);
+               background: var(--accent-soft); color: var(--accent); }
+  .row-flash[data-kind="failed"] { background: var(--danger-soft); color: var(--danger); max-width: 18rem; white-space: normal; }
 
-  /* edit page: cancel / save / save & reprint in one row */
-  .edit-actions { display: flex; gap: var(--s-2); align-items: stretch; }
-  .edit-actions > * { flex: none; }
-  .edit-actions button.print { flex: 1; grid-column: auto; white-space: nowrap; }
-  /* phone: the Stock tab right below does what Cancel does */
-  @media (max-width: 640px) { .edit-actions a.btn-secondary { display: none; } }
+  @media (max-width: 640px) {
+    table.inventory td.c-actions > * + * { margin-left: 0; }
+    table.inventory .cell-text { display: inline; }
+    table.inventory .cell-input { display: none; }
+    table.inventory .edit-toggle { display: inline-flex; }
+    table.inventory td.c-per-kg.c-edit { display: none; }
+    /* open: a third line with both inputs, labelled, full width */
+    table.inventory tr.editing td.c-amount.c-edit, table.inventory tr.editing td.c-per-kg.c-edit {
+      display: flex; flex-direction: column; align-items: stretch; gap: 2px; grid-row: 3; margin-top: var(--s-2); }
+    table.inventory tr.editing td.c-amount.c-edit { grid-column: 2 / 4; }
+    table.inventory tr.editing td.c-per-kg.c-edit { grid-column: 4 / 7; }
+    table.inventory tr.editing td.c-edit::before { content: attr(data-label); display: block; font-size: var(--text-xs); color: var(--muted); }
+    /* the open row must not be wider than the card */
+    table.inventory tr.editing td.c-edit { min-width: 0; white-space: normal; }
+    table.inventory td.is-pieces .cell-note { display: none; }
+    table.inventory tr.editing .cell-text { display: none; }
+    table.inventory tr.editing .cell-input { display: block; width: 100%; min-height: var(--tap); font-size: var(--text-md);
+                                             border-color: var(--line); background: var(--surface); }
+    table.inventory tr.editing .edit-toggle { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+    .row-flash { top: auto; bottom: 100%; margin: 0 0 2px; }
+  }
+}
+
 }

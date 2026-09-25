@@ -57,6 +57,7 @@
   </tr>
   {% for r in records %}
   <tr class="part-row{% if r.consumed_at %} is-consumed{% endif %}"
+      data-uuid="{{ r.uuid }}"
       data-species="{{ r.species }}" data-part="{{ r.part }}"
       data-status="{{ 'consumed' if r.consumed_at else 'stock' }}"
       data-unpriced="{{ 1 if r.total_price is none else 0 }}"
@@ -78,13 +79,34 @@
        ausgeblendet, damit die Spalten unverändert bleiben. #}
     <td class="row-break" aria-hidden="true"></td>
     <td class="c-hunter" data-label="{{ t("Jäger") }}">{{ r.hunter }}</td>
+    {# Amount and price are editable in place (not for taken-out cuts): the
+       inputs sit in the cells and save on change. Everything else is fixed —
+       hunter, cut and date are what the label on the package says. #}
+    {% if r.consumed_at %}
     <td class="num c-amount{% if r.weight_kg is none and r.pieces is none %} is-empty{% endif %}" data-label="{{ t("Menge") }}">{{ r | amount }}</td>
     <td class="num c-per-kg{% if r.price_per_kg is none %} is-empty{% endif %}" data-label="€/kg">{{ r.price_per_kg | de }}</td>
+    {% else %}
+    <td class="num c-amount c-edit{% if r.weight_kg is none and r.pieces is none %} is-empty{% endif %}" data-label="{{ t("Menge") }}">
+      <span class="cell-text">{{ r | amount }}</span>
+      <input class="cell-input" name="weight_kg" value="{{ amount_text(r) }}" autocomplete="off" enterkeyhint="next"
+             pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]" placeholder="–" title="{{ t("1,25 oder 5x") }}"
+             aria-label="{{ t("Menge") }} {{ r.part }} ({{ t("1,25 oder 5x") }})">
+    </td>
+    {# for a counted cut this is its fixed price, marked "fix" #}
+    <td class="num c-per-kg c-edit{% if r.pieces is not none %} is-pieces{% endif %}" data-label="{{ t("Preis (€)") }}">
+      <span class="cell-text">{{ r.price_per_kg | de }}</span>
+      <input class="cell-input" name="price_per_kg" value="{{ price_text(r) }}" autocomplete="off" inputmode="decimal" enterkeyhint="done"
+             pattern="[0-9]+([.,][0-9]+)?" placeholder="–"
+             aria-label="{{ t("Preis/kg bzw. Festpreis (€)") }} {{ r.part }}"><span class="cell-note">{{ t("fix") }}</span>
+    </td>
+    {% endif %}
     <td class="num c-price{% if r.total_price is none %} is-empty{% endif %}" data-label="€">{{ r.total_price | de }}</td>
     <td class="c-id" data-label="ID"><code>{{ r.uuid[:8] }}</code></td>
     <td class="c-status" data-label="{{ t("Status") }}">{% if r.consumed_at %}<span class="badge">{{ t("entnommen {date}", date=r.consumed_at | date) }}</span>{% else %}<span class="badge frost">{{ icon('snowflake') }}{{ t("im Bestand") }}</span>{% endif %}</td>
     <td class="c-actions" data-label="">
-      <a class="btn-icon" href="/parts/{{ r.uuid }}/edit" title="{{ t("Bearbeiten") }}" aria-label="{{ t("Bearbeiten") }}">{{ icon('pencil') }}</a>
+      {% if not r.consumed_at %}
+      <button type="button" class="small icon-only edit-toggle" title="{{ t("Menge und Preis ändern") }}" aria-label="{{ t("Menge und Preis ändern") }}" aria-expanded="false">{{ icon('pencil') }}</button>
+      {% endif %}
       <form method="post" action="/parts/{{ r.uuid }}/reprint"
             data-confirm="{{ t("2 Etiketten nachdrucken?") ~ "\n\n" ~ r.species ~ " – " ~ r.part ~ ", " ~ (r | amount) }}" data-confirm-ok="{{ t("Nachdrucken") }}">
         <button class="small" type="submit" title="{{ t("Nachdrucken") }}" aria-label="{{ t("Nachdrucken") }}">{{ icon('printer') }}<span class="btn-label">{{ t("Nachdrucken") }}</span></button>
@@ -110,6 +132,8 @@
 
 <script>
 const T = {{ {
+  "Gespeichert": t("Gespeichert"),
+  "Fehler — Verbindung prüfen": t("Fehler — Verbindung prüfen"),
   "{n} Teilstücke entnehmen?": t("{n} Teilstücke entnehmen?"),
   "{n} ohne Gewicht": t("{n} ohne Gewicht"),
   "{n} ohne Preis": t("{n} ohne Preis"),
@@ -183,6 +207,71 @@ document.getElementById('check-all').addEventListener('change', e => {
   visiblePicks().forEach(cb => cb.checked = e.target.checked);
   updateBar();
 });
+// --- amount and price, edited in the row ---------------------------------
+// Desktop: the cells are inputs. Phone: the pencil opens both inputs under
+// the card. Either way a change saves on its own (no save button), the
+// server recomputes the price, and the row shows the result.
+async function saveRow(row) {
+  const fd = new FormData();
+  row.querySelectorAll('.cell-input').forEach(i => fd.append(i.name, i.value));
+  row.classList.add('saving');
+  try {
+    const resp = await fetch(`/parts/${row.dataset.uuid}/edit`, { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error);
+    row.querySelector('.c-amount .cell-text').textContent = data.amount;
+    row.querySelector('.c-per-kg .cell-text').textContent = data.price_per_kg;
+    row.querySelector('[name=weight_kg]').value = data.amount_input;
+    row.querySelector('[name=price_per_kg]').value = data.price_input;
+    const price = row.querySelector('.c-price');
+    price.textContent = data.total_price;
+    price.classList.toggle('is-empty', data.unpriced);
+    row.querySelector('.c-per-kg').classList.toggle('is-pieces', data.pieces);
+    row.querySelector('.c-amount').classList.toggle('is-empty', data.unweighed);
+    Object.assign(row.dataset, {
+      weight: data.weight_kg, price: data.total,
+      unweighed: data.unweighed ? 1 : 0, unpriced: data.unpriced ? 1 : 0,
+    });
+    // the reprint question names the new amount
+    row.querySelector('form[action$="/reprint"]').dataset.confirm = data.reprint_question;
+    row.classList.remove('has-error');
+    row.removeAttribute('title');
+    flash(row, 'saved');
+    applyFilter();                                  // totals at the top
+  } catch (e) {
+    row.classList.add('has-error');
+    row.title = e.message || T['Fehler — Verbindung prüfen'];
+    flash(row, 'failed', row.title);
+  } finally {
+    row.classList.remove('saving');
+  }
+}
+function flash(row, kind, text) {
+  let tip = row.querySelector('.row-flash');
+  if (!tip) { tip = document.createElement('span'); tip.className = 'row-flash'; row.querySelector('.c-price').append(tip); }
+  tip.textContent = text || T['Gespeichert'];
+  tip.dataset.kind = kind;
+  clearTimeout(tip._t);
+  tip._t = setTimeout(() => tip.remove(), kind === 'saved' ? 1500 : 5000);
+}
+document.querySelectorAll('.cell-input').forEach(input => {
+  input.dataset.saved = input.value;
+  input.addEventListener('change', () => {
+    if (!input.checkValidity()) { input.reportValidity(); return; }
+    if (input.value === input.dataset.saved) return;
+    input.dataset.saved = input.value;
+    saveRow(input.closest('tr'));
+  });
+  // Enter saves and leaves the field, like in a spreadsheet
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } });
+});
+document.querySelectorAll('.edit-toggle').forEach(btn => btn.addEventListener('click', () => {
+  const row = btn.closest('tr');
+  const open = row.classList.toggle('editing');
+  btn.setAttribute('aria-expanded', String(open));
+  if (open) row.querySelector('[name=weight_kg]').focus();
+}));
+
 [fSpecies, fPart, fStatus].forEach(el => el.addEventListener('change', applyFilter));
 fSearch.addEventListener('input', applyFilter);
 applyFilter();
