@@ -20,7 +20,7 @@ EN = {
     "Rechnung Nr. {number} – {buyer}": "Invoice no. {number} – {buyer}",
     "Paperless ist nicht eingerichtet": "Paperless is not set up",
     "Wird an Paperless gesendet …": "Sending to Paperless …",
-    "Verbindung zu Paperless steht (Benutzer {user}).": "Connected to Paperless (user {user}).",
+    "Verbindung zu Paperless steht, die Rechte reichen.": "Connected to Paperless, permissions are sufficient.",
     "Paperless nicht erreichbar: {error}": "Paperless unreachable: {error}",
     "Abgelegt": "Filed",
     "Öffnen": "Open",

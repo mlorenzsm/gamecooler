@@ -613,7 +613,7 @@ def settings_page(request: Request, msg: str = "", species: str = "", tab: str =
 def settings_paperless_test():
     ok, detail = paperless.check_connection()
     if ok:
-        msg = t("Verbindung zu Paperless steht (Benutzer {user}).", user=detail or "?")
+        msg = t("Verbindung zu Paperless steht, die Rechte reichen.")
     else:
         msg = t("Paperless nicht erreichbar: {error}", error=detail)
     return RedirectResponse(_msg_url("/settings", msg, error=not ok) + "&tab=general", status_code=303)

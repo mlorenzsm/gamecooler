@@ -94,8 +94,9 @@ Settings → General → Paperless → **Test connection**. It reports one of:
 
 | Message | Meaning |
 |---|---|
-| Connected (user gamecooler) | ready |
-| HTTP 401/403: token rejected or missing permission | wrong token, or the user lacks a permission from step 1 |
+| Connected, permissions are sufficient | ready |
+| HTTP 401: token rejected | wrong or old token — create a new one for the user |
+| HTTP 403: missing permission "…" | the user lacks that permission from step 1 — grant it and test again |
 | unreachable: [Errno 111] Connection refused / Name or service not known | wrong URL, or Paperless down |
 | unreachable: … CERTIFICATE_VERIFY_FAILED | see below |
 

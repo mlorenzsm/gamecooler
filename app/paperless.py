@@ -89,8 +89,12 @@ def _request(method: str, path: str, *, data: bytes | None = None, content_type:
             body = resp.read()
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", "replace")[:300]
-        if e.code in (401, 403):
-            raise PaperlessError(f"HTTP {e.code}: token rejected or missing permission") from None
+        # 401 = the token itself is wrong; 403 = token fine, the user lacks a
+        # permission — say which endpoint, so it's clear what to grant
+        if e.code == 401:
+            raise PaperlessError("HTTP 401: token rejected") from None
+        if e.code == 403:
+            raise PaperlessError(f"HTTP 403: user lacks permission for {path}") from None
         raise PaperlessError(f"HTTP {e.code} on {path}: {detail}") from None
     except urllib.error.URLError as e:
         # e.reason carries the useful bit: refused, DNS, certificate
@@ -235,11 +239,24 @@ def upload_sale(sale_id: str, hunter: Hunter | None, options: PaperlessSettings,
         _save(sale, status="failed", error=type(e).__name__)
 
 
+# What the upload reads, one line per Paperless permission (docs/paperless.md).
+# The test asks exactly these, so "OK" means the upload's reads will work and
+# a 403 names the missing one. Creating (add) is only tried on a real upload.
+CHECKS = [
+    ("/api/document_types/", "Document type: view"),
+    ("/api/tags/", "Tag: view"),
+    ("/api/correspondents/", "Correspondent: view"),
+    ("/api/tasks/", "PaperlessTask: view"),
+]
+
+
 def check_connection() -> tuple[bool, str]:
     """For the settings page: (ok, message). The message never has the token."""
-    try:
-        me = _get("/api/ui_settings/")
-        user = (me or {}).get("user", {}).get("username", "")
-        return True, user
-    except PaperlessError as e:
-        return False, str(e)
+    for path, permission in CHECKS:
+        try:
+            _get(path, page_size=1)
+        except PaperlessError as e:
+            if str(e).startswith("HTTP 403"):
+                return False, f"HTTP 403: missing permission \"{permission}\""
+            return False, str(e)
+    return True, ""
