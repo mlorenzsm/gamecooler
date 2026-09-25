@@ -173,6 +173,8 @@ no internet connection:
 
 - Fonts **Geist**, **Geist Mono** and **Bricolage Grotesque** — SIL Open Font
   License 1.1, see `app/static/fonts/LICENSE-*.txt`.
+  The invoice PDF uses static TrueType cuts of the same fonts in `app/fonts/`,
+  built by `tools/build_pdf_fonts.py` (run it again after changing a web font).
 - Icons from **Lucide** — ISC License, notice at the top of `icons.svg`.
 
 ## Accounting
