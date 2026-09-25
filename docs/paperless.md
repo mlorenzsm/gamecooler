@@ -45,11 +45,19 @@ the password manager.
 
 Documents belong to the user that uploaded them, so without further setup
 the invoices are invisible to you (unless you're a superuser). Add a
-**workflow**:
+**workflow** (Manage → Workflows → Create), name it e.g. "Gamecooler
+invoices":
 
-- Trigger: *Consumption started*, source *API upload*
-- Action: *Assignment* → permissions: grant your own user (or group) *view*
-  and *change*; owner can stay unset
+- **Trigger:** type *Consumption Started*, sources only *API Upload*, filter
+  filename `rechnung-*.pdf`. The app uploads every invoice under that name
+  (`rechnung-7.pdf`), so other API uploads (e.g. a phone app) aren't touched.
+- **Action:** type *Assignment*. Under permissions, give your own user (or
+  group) *view* and *edit*, or set *Owner* to your user so the invoices are
+  simply yours.
+
+The workflow only applies to new uploads. For an invoice filed before it
+existed, select it in the document list and use *Permissions* in the
+bulk-edit bar.
 
 ### 2. In each container: address and token
 
