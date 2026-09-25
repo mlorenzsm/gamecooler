@@ -20,6 +20,16 @@
     {% for r in sp.recipes %}<option {% if p and r.name == p.recipe %}selected{% endif %}>{{ r.name }}</option>{% endfor %}
   </select>
 </label>
+{% elif kind == 'prep' %}
+{# Without a recipe for this species there is nothing to pick — say where to
+   make one, otherwise the recipe link looks like it's gone. #}
+<p class="hint recipe-hint">{{ icon('book-open') }}<span>
+  {{ t("Noch kein Rezept für {species}.", species=sp.name) }}
+  <a href="/recipes?species={{ sp.name | urlencode }}">{{ t("Rezept anlegen") }}</a>
+  — {{ t("danach lässt es sich hier verknüpfen und füllt die Zutaten aus.") }}</span></p>
+{% elif name %}
+<p class="hint recipe-hint">{{ icon('book-open') }}<span>
+  {{ t("Rezepte gibt es für Zubereitungen: diesen Eintrag in die Liste „Zubereitungen“ ziehen, um ein Rezept zu verknüpfen.") }}</span></p>
 {% endif %}
 {# Mit Rezept: Text aus dem Rezept, nur zur Ansicht. Ohne: frei eintippen. #}
 <label class="field wide">{{ t("Zutaten (klein auf dem Etikett)") }}

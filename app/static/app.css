@@ -739,3 +739,7 @@ nav.tabbar { view-transition-name: tabbar; }       /* the bar stays put while th
 /* Paperless row on the receipt: the error can be long (a URL, a reason) */
 .paperless-error { display: block; overflow-wrap: anywhere; margin-top: var(--s-1); }
 .paperless-send { margin-top: var(--s-2); }
+
+/* part editor: where to link a recipe, when the dropdown can't be shown */
+.part-editor .recipe-hint { grid-column: 1 / -1; display: flex; gap: var(--s-2); align-items: flex-start; margin: 0; }
+.part-editor .recipe-hint .icon { flex: none; margin-top: 0.15em; }
