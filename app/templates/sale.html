@@ -4,40 +4,34 @@
 <div class="msg">{{ icon('circle-check') }}{{ t("Verkauf Nr. {number} abgeschlossen", number=sale.number) }}</div>
 
 <h2 class="page-title">{{ t("Verkauf Nr. {number}", number=sale.number) }}</h2>
-<p class="pre-line"><b>{{ sale.buyer_name }}</b>
-{{ sale.buyer_address }}</p>
-{% if sale.delivery_address != sale.buyer_address %}
-<p class="pre-line"><b>{{ t("Lieferadresse:") }}</b>
-{{ sale.delivery_address }}</p>
-{% endif %}
-<p>{{ t("Datum: {date}", date=sale.created_at | date) }}</p>
 
-<table class="responsive sale-items">
-  <tr>
-    <th>{{ t("Wildart") }}</th><th>{{ t("Teilstück") }}</th><th class="num">{{ t("Menge") }}</th><th class="num">€/kg</th><th class="num">€</th><th>ID</th>
-  </tr>
+<div class="list-group">
+  <div class="list-row is-multiline"><span class="list-label">{{ t("Käufer") }}</span>
+    <span class="pre-line grow"><b>{{ sale.buyer_name }}</b>
+{{ sale.buyer_address }}</span></div>
+  {% if sale.delivery_address != sale.buyer_address %}
+  <div class="list-row is-multiline"><span class="list-label">{{ t("Lieferadresse") }}</span>
+    <span class="pre-line grow">{{ sale.delivery_address }}</span></div>
+  {% endif %}
+  <div class="list-row"><span class="list-label">{{ t("Datum") }}</span><span class="grow">{{ sale.created_at | date }}</span></div>
+</div>
+
+<ul class="list-group sale-list">
   {% for i in sale.items %}
-  <tr>
-    <td data-label="{{ t("Wildart") }}">{{ i.species }}</td>
-    <td data-label="{{ t("Teilstück") }}">{{ i.part }}</td>
-    <td class="num" data-label="{{ t("Menge") }}">{{ i | amount }}</td>
-    <td class="num" data-label="€/kg">{{ i.price_per_kg | de }}</td>
-    <td class="num" data-label="€">{{ i.total_price | de }}</td>
-    <td data-label="ID"><code>{{ i.uuid[:8] }}</code></td>
-  </tr>
+  <li class="list-row">
+    <span class="grow">
+      <b>{{ i.part }}</b><br>
+      <span class="muted small-line">{{ i.species }}{% if i.weight_kg is not none or i.pieces is not none %} · {{ i | amount }}{% endif %}{% if i.price_per_kg is not none %} · {{ i.price_per_kg | de }} €/kg{% endif %} · <code>{{ i.uuid[:8] }}</code></span>
+    </span>
+    <span class="num">{{ i.total_price | de }} €</span>
+  </li>
   {% endfor %}
-  <tr class="total-row">
-    <td class="right" colspan="4"><b>{{ t("Gesamt") }}</b></td>
-    <td class="num"><b>{{ sale.total | de }} €</b></td>
-    <td></td>
-  </tr>
-</table>
+  <li class="list-row sale-total"><span class="grow">{{ t("Gesamt") }}</span><span class="num">{{ sale.total | de }} €</span></li>
+</ul>
 
-<p class="mt-4">
-  <a href="/sales/{{ sale.sale_id }}/pdf" target="_blank">
-    <button class="print" type="button">{{ icon('file-text') }}{{ t("PDF öffnen") }}</button>
-  </a>
-  <a href="/inventory"><button type="button">{{ t("Zurück zum Bestand") }}</button></a>
-</p>
+<div class="toolbar mt-4">
+  <a class="btn-primary" href="/sales/{{ sale.sale_id }}/pdf" target="_blank">{{ icon('file-text') }}{{ t("PDF öffnen") }}</a>
+  <a class="btn-secondary" href="/inventory">{{ t("Zurück zum Bestand") }}</a>
+</div>
 
 {% endblock %}
