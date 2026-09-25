@@ -6,14 +6,14 @@ from datetime import date
 from urllib.parse import quote
 from pathlib import Path
 
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
 from pydantic import ValidationError
 
-from . import registry, sales
+from . import paperless, registry, sales
 from .config import PART_KINDS, UNITS, Hunter, PartDefaults, Preset, PresetItem, Recipe, RecipeItem, Species, load_config, save_config
 from .i18n import LANGUAGES, decimal_separator, format_date, get_lang, pick_language, reset_lang, set_lang, t
 from .labels import render_info_label, render_qr_label
@@ -443,8 +443,16 @@ async def sell_form(request: Request):
     )
 
 
+def _schedule_paperless(background: BackgroundTasks, sale: Sale) -> None:
+    """Upload the invoice after the response is sent — a slow or unreachable
+    Paperless must not hold up (or fail) completing the sale."""
+    if paperless.enabled():
+        background.add_task(paperless.upload_sale, sale.sale_id, find_hunter(sale.hunter),
+                            config.paperless, config.label_language)
+
+
 @app.post("/sell/confirm")
-async def sell_confirm(request: Request):
+async def sell_confirm(request: Request, background: BackgroundTasks):
     form = await request.form()
     uuids = form.getlist("uuid")
     prices = form.getlist("item_price")
@@ -481,19 +489,38 @@ async def sell_confirm(request: Request):
     )
     sales.append(sale)
     registry.mark_sold([i.uuid for i in items], sale.sale_id)
+    _schedule_paperless(background, sale)
     return RedirectResponse(url=f"/sales/{sale.sale_id}", status_code=303)
 
 
 @app.get("/sales/{sale_id}")
-def sale_page(request: Request, sale_id: str):
+def sale_page(request: Request, sale_id: str, msg: str = ""):
     sale = sales.get(sale_id)
     if sale is None:
         raise HTTPException(status_code=404, detail=t("Verkauf nicht gefunden"))
+    # a still-pending upload may have finished in the meantime
+    sale = paperless.refresh(sale)
     return templates.TemplateResponse(
         request,
         "sale.html",
-        {"config": config, "active": "inventory", "sale": sale},
+        {"config": config, "active": "inventory", "sale": sale, "msg": msg,
+         "paperless_on": paperless.enabled(),
+         "paperless_link": paperless.document_url(sale.paperless.document_id)
+             if sale.paperless and sale.paperless.document_id else ""},
     )
+
+
+@app.post("/sales/{sale_id}/paperless")
+def sale_paperless(sale_id: str, background: BackgroundTasks):
+    """Send (or resend) a sale's invoice. Safe to press twice: upload_sale
+    checks an earlier task before uploading again."""
+    sale = sales.get(sale_id)
+    if sale is None:
+        raise HTTPException(status_code=404, detail=t("Verkauf nicht gefunden"))
+    if not paperless.enabled():
+        return RedirectResponse(_msg_url(f"/sales/{sale_id}", t("Paperless ist nicht eingerichtet"), error=True), status_code=303)
+    _schedule_paperless(background, sale)
+    return RedirectResponse(_msg_url(f"/sales/{sale_id}", t("Wird an Paperless gesendet …")), status_code=303)
 
 
 @app.get("/sales/{sale_id}/pdf")
@@ -576,8 +603,20 @@ def settings_page(request: Request, msg: str = "", species: str = "", tab: str =
             "recipe_texts": {
                 sp.name: {r.name: r.label_text() or "" for r in sp.recipes} for sp in config.species
             },
+            "paperless_on": paperless.enabled(),
+            "paperless_url": paperless.base_url(),
         },
     )
+
+
+@app.post("/settings/paperless/test")
+def settings_paperless_test():
+    ok, detail = paperless.check_connection()
+    if ok:
+        msg = t("Verbindung zu Paperless steht, die Rechte reichen.")
+    else:
+        msg = t("Paperless nicht erreichbar: {error}", error=detail)
+    return RedirectResponse(_msg_url("/settings", msg, error=not ok) + "&tab=general", status_code=303)
 
 
 def _settings_url(msg: str, species: str = "") -> str:

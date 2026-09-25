@@ -6,57 +6,55 @@
 <form method="post" action="/sell/confirm" id="sell-form"
       data-confirm-fn="saleQuestion" data-confirm-ok="{{ t("Verkauf abschließen") }}">
 
-  <div class="part-form form-grid">
-    <label class="field">{{ t("Verkäufer (Jäger)") }}
+  <div class="list-group">
+    <label class="list-row"><span class="list-label">{{ t("Verkäufer (Jäger)") }}</span>
       <select name="hunter" required>
         {% for h in config.hunters %}<option>{{ h.name }}</option>{% endfor %}
       </select>
     </label>
-    <span></span>
-    <label class="field">{{ t("Käufer") }}
-      <input name="buyer_name" required placeholder="{{ t("Max Mustermann") }}">
+  </div>
+
+  <h3>{{ t("Käufer") }}</h3>
+  <div class="list-group">
+    <label class="list-row"><span class="list-label">{{ t("Name") }}</span>
+      <input name="buyer_name" required autocomplete="name" placeholder="{{ t("Max Mustermann") }}">
     </label>
-    <label class="field">{{ t("Adresse") }}
-      <textarea name="buyer_address" id="buyer-address" required rows="3" placeholder="{{ t("Straße Nr.\nPLZ Ort") }}"></textarea>
+    <label class="list-row is-multiline"><span class="list-label">{{ t("Adresse") }}</span>
+      <textarea name="buyer_address" id="buyer-address" required rows="2" autocomplete="street-address" placeholder="{{ t("Straße Nr.\nPLZ Ort") }}"></textarea>
     </label>
-    <label class="inline-check span-all">
+    <label class="list-row"><span class="list-label grow">{{ t("Lieferadresse = Käuferadresse") }}</span>
       <input type="checkbox" id="same-address" checked>
-      {{ t("Lieferadresse = Käuferadresse") }}
     </label>
-    <label id="delivery-label" class="field span-all" hidden>{{ t("Lieferadresse") }}
-      <textarea name="delivery_address" id="delivery-address" rows="3" placeholder="{{ t("Straße Nr.\nPLZ Ort") }}"></textarea>
+    <label id="delivery-label" class="list-row is-multiline" hidden><span class="list-label">{{ t("Lieferadresse") }}</span>
+      <textarea name="delivery_address" id="delivery-address" rows="2" placeholder="{{ t("Straße Nr.\nPLZ Ort") }}"></textarea>
     </label>
   </div>
 
-  <table class="responsive sale-items">
-    <tr>
-      <th>{{ t("Wildart") }}</th><th>{{ t("Teilstück") }}</th><th class="num">{{ t("Menge") }}</th><th class="num">€/kg</th><th class="num">{{ t("Preis (€)") }}</th><th>ID</th>
-    </tr>
+  {# One row per cut: what it is on the left, the price — editable, since a
+     sale price can differ from the label — on the right. uuid and
+     item_price travel in pairs by position; keep them in the same row. #}
+  <h3>{{ t("Teilstücke") }}</h3>
+  <ul class="list-group sale-list">
     {% for r in records %}
-    <tr>
-      <td data-label="{{ t("Wildart") }}">{{ r.species }}</td>
-      <td data-label="{{ t("Teilstück") }}">{{ r.part }}</td>
-      <td class="num" data-label="{{ t("Menge") }}">{{ r | amount }}</td>
-      <td class="num" data-label="€/kg">{{ r.price_per_kg | de }}</td>
-      <td class="num" data-label="{{ t("Preis (€)") }}">
-        <input type="hidden" name="uuid" value="{{ r.uuid }}">
-        <input name="item_price" class="item-price num input-num" inputmode="decimal"
-               pattern="[0-9]+([.,][0-9]+)?" value="{{ r.total_price | de if r.total_price is not none else '' }}"
-               placeholder="{{ t("0,00") }}">
-      </td>
-      <td data-label="ID"><code>{{ r.uuid[:8] }}</code></td>
-    </tr>
+    <li class="list-row">
+      <span class="grow">
+        <b>{{ r.part }}</b><br>
+        <span class="muted small-line">{{ r.species }}{% if r.weight_kg is not none or r.pieces is not none %} · {{ r | amount }}{% endif %}{% if r.price_per_kg is not none %} · {{ r.price_per_kg | de }} €/kg{% endif %} · <code>{{ r.uuid[:8] }}</code></span>
+      </span>
+      <input type="hidden" name="uuid" value="{{ r.uuid }}">
+      <input name="item_price" class="item-price num" inputmode="decimal" aria-label="{{ t("Preis (€)") }} {{ r.part }}"
+             pattern="[0-9]+([.,][0-9]+)?" value="{{ r.total_price | de if r.total_price is not none else '' }}"
+             placeholder="{{ t("0,00") }}">
+      <span class="list-unit">€</span>
+    </li>
     {% endfor %}
-    <tr class="total-row">
-      <td class="right" colspan="4"><b>{{ t("Gesamt") }}</b></td>
-      <td class="num"><b id="total">{{ total | de }} €</b></td>
-      <td></td>
-    </tr>
-  </table>
+  </ul>
 
-  <button class="print full mt-4" type="submit">
-    {{ icon('shopping-bag') }}{{ t("Verkauf abschließen") }}
-  </button>
+  <div class="action-bar">
+    <button class="print" type="submit">
+      {{ icon('shopping-bag') }}<span>{{ t("Verkauf abschließen") }}</span><span class="total num" id="total">{{ total | de }} €</span>
+    </button>
+  </div>
 </form>
 
 <script>

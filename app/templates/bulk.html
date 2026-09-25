@@ -40,10 +40,11 @@
   {# c-* classes place the cells in the phone layout (app.css). #}
   <table id="rows" class="responsive bulk-rows">
     <tr>
-      <th>{{ t("Anzahl") }}</th><th>{{ t("Teilstück") }}</th><th>{{ t("Gewicht/Stück (kg) oder Stückzahl (5x)") }}</th><th>{{ t("Preis/kg bzw. Festpreis (€, leer = Standard)") }}</th><th>{{ t("kein Preis") }}</th><th></th>
+      <th>{{ t("Anzahl") }}</th><th>{{ t("Teilstück") }}</th><th class="num">{{ t("Menge je Stück") }}</th><th class="num">{{ t("Preis (€)") }}</th><th>{{ t("kein Preis") }}</th><th></th>
     </tr>
   </table>
   <button type="button" class="small add-row" onclick="addRow()">{{ icon('plus') }}{{ t("Zeile") }}</button>
+  <p class="list-foot">{{ t("Menge: Gewicht in kg, oder „5x“ für eine Stückzahl mit Festpreis. Preis: pro kg bzw. Festpreis — leer lassen für den Standardpreis des Teilstücks.") }}</p>
   <p id="summary" class="list-foot"></p>
 
   <div class="action-bar">

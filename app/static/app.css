@@ -715,3 +715,27 @@ nav.tabbar { view-transition-name: tabbar; }       /* the bar stays put while th
   a.btn-primary { display: inline-flex; align-items: center; gap: var(--s-2); min-height: var(--tap); padding: 0 var(--s-4);
                   border-radius: var(--r-md); text-decoration: none; }
 }
+
+/* Sale: buyer as a grouped list, one row per cut with its price editable on
+   the right, the total in the button. The receipt page uses the same rows. */
+@layer components {
+  .list-row.is-multiline { align-items: flex-start; }
+  .list-row.is-multiline > .list-label { padding-top: 0.75rem; }
+  .list-row.is-multiline > span.grow { padding-block: 0.7rem; }
+  .list-row > textarea { min-height: 3.5rem; resize: vertical; }
+  .list-row > input[type="checkbox"] { flex: none; padding: 0; }   /* not stretched like the text fields */
+  .list-row > .list-label.grow { width: auto; flex: 1; color: var(--ink); font-size: var(--text-md); }
+  .sale-list .list-row { gap: var(--s-2); }
+  .sale-list .grow { min-width: 0; line-height: 1.35; }
+  .sale-list .small-line { font-size: var(--text-sm); }
+  .sale-list .item-price { flex: none; width: 5.5rem; text-align: right; font-weight: 600; }
+  .sale-list .list-unit { min-width: 0; }
+  .sale-total { font-weight: 600; background: var(--surface-2); }
+  a.btn-secondary { display: inline-flex; align-items: center; gap: var(--s-2); min-height: var(--tap); padding: 0 var(--s-4);
+                    border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--ink); text-decoration: none; font-weight: 500; }
+  a.btn-secondary:hover { background: var(--surface-2); }
+}
+
+/* Paperless row on the receipt: the error can be long (a URL, a reason) */
+.paperless-error { display: block; overflow-wrap: anywhere; margin-top: var(--s-1); }
+.paperless-send { margin-top: var(--s-2); }

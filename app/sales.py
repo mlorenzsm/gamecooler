@@ -27,6 +27,18 @@ def append(sale: Sale) -> None:
         _write(entries)
 
 
+def update(sale: Sale) -> None:
+    """Replace the stored sale with the same sale_id."""
+    with _lock:
+        entries = [s.model_dump() for s in load_all()]
+        for i, entry in enumerate(entries):
+            if entry["sale_id"] == sale.sale_id:
+                entries[i] = sale.model_dump()
+                break
+        else:
+            raise KeyError(sale.sale_id)
+        _write(entries)
+
 def get(sale_id: str) -> Sale | None:
     for sale in load_all():
         if sale.sale_id == sale_id:
