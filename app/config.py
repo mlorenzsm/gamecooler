@@ -13,6 +13,9 @@ CONFIG_PATH = STATE_DIR / "config.yaml"
 DATA_DIR = STATE_DIR / "data"
 REGISTRY_PATH = DATA_DIR / "registry.json"
 SALES_PATH = DATA_DIR / "sales.json"
+# Optional logo for the invoice letterhead, uploaded in Settings. Lives with
+# the data, not in the repo: it belongs to this installation.
+LOGO_PATH = DATA_DIR / "logo.png"
 FONTS_DIR = Path(__file__).resolve().parent / "fonts"
 
 

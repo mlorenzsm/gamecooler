@@ -793,4 +793,9 @@ nav.tabbar { view-transition-name: tabbar; }       /* the bar stays put while th
   }
 }
 
-}
+/* Settings: invoice logo preview — on white, like on the invoice */
+.logo-preview { display: inline-grid; place-items: center; padding: var(--s-3); margin-bottom: var(--s-3);
+                background: #FFFFFF; border: 1px solid var(--line); border-radius: var(--r-md); }
+.logo-preview img { display: block; width: 7rem; height: 7rem; object-fit: contain; }
+/* the browser's file picker has a wide minimum; keep it inside the card */
+.settings-card input[type="file"] { min-width: 0; max-width: 100%; flex: 1 1 12rem; }

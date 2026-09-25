@@ -181,6 +181,7 @@ no internet connection:
 
 - `data/registry.json` — all registered cuts
 - `GET /parts.json` — export via the web app
+- `data/logo.png` — optional invoice logo, uploaded in Settings → General
 - `data/sales.json` — all sales; each invoice PDF is also filed in
   Paperless-ngx when configured ([Paperless upload](docs/paperless.md))
 

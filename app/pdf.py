@@ -5,7 +5,7 @@ from fpdf import FPDF
 
 logging.getLogger("fontTools").setLevel(logging.WARNING)
 
-from .config import FONTS_DIR, Hunter
+from .config import FONTS_DIR, LOGO_PATH, Hunter
 from .i18n import format_date, t
 from .models import Sale, format_amount, format_de
 
@@ -26,6 +26,7 @@ ADDRESS_TOP = 45            # address field: 45 mm from the top, 85 mm wide
 ADDRESS_WIDTH = 85
 INFO_LEFT = 125             # information block next to the address field
 FOLD_MARKS = (105, 210)     # fold into thirds
+LOGO_TOP, LOGO_SIZE = 9, 25 # letterhead logo, mm; ends just above the rule at 36
 HOLE_MARK = 148.5           # centre, for the hole punch
 
 # Item table: position, item, amount, €/kg, amount due.
@@ -105,9 +106,15 @@ def render_sale_pdf(sale: Sale, hunter: Hunter | None, lang: str = "de") -> byte
     pdf.line(4, HOLE_MARK, 11, HOLE_MARK)
 
     # --- header: the seller -----------------------------------------------
-    pdf.set_xy(LEFT, 18)
+    # With a logo (Settings -> General) it stands at the left and the name
+    # moves next to it; the header keeps its height either way.
+    name_x = LEFT
+    if LOGO_PATH.exists():
+        pdf.image(str(LOGO_PATH), x=LEFT, y=LOGO_TOP, h=LOGO_SIZE, keep_aspect_ratio=True)
+        name_x = LEFT + LOGO_SIZE + 4
+    pdf.set_xy(name_x, 18)
     pdf.style(17, INK, family="bricolage", bold=True)
-    pdf.cell(WIDTH / 2, 8, sale.hunter)
+    pdf.cell(WIDTH / 2 - (name_x - LEFT), 8, pdf.fit(sale.hunter, WIDTH / 2 - (name_x - LEFT)))
     pdf.set_xy(LEFT + WIDTH / 2, 18.5)
     pdf.style(8.5, MUTED)
     pdf.multi_cell(WIDTH / 2, 4.2, "\n".join(x for x in (address, phone, email) if x), align="R")

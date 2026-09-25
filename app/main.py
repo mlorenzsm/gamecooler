@@ -6,15 +6,16 @@ from datetime import date
 from urllib.parse import quote
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
+from PIL import Image
 from pydantic import ValidationError
 
 from . import paperless, registry, sales
-from .config import PART_KINDS, UNITS, Hunter, PartDefaults, Preset, PresetItem, Recipe, RecipeItem, Species, load_config, save_config
+from .config import LOGO_PATH, PART_KINDS, UNITS, Hunter, PartDefaults, Preset, PresetItem, Recipe, RecipeItem, Species, load_config, save_config
 from .i18n import LANGUAGES, decimal_separator, format_date, get_lang, pick_language, reset_lang, set_lang, t
 from .labels import render_info_label, render_qr_label
 from .models import (
@@ -666,6 +667,7 @@ def settings_page(request: Request, msg: str = "", species: str = "", tab: str =
             },
             "paperless_on": paperless.enabled(),
             "paperless_url": paperless.base_url(),
+            "has_logo": LOGO_PATH.exists(),
         },
     )
 
@@ -729,6 +731,54 @@ def settings_hunter_delete(name: str = Form(""), original_name: str = Form("")):
         return RedirectResponse(url="/settings?tab=general&msg=" + quote(t("Der letzte Jäger kann nicht gelöscht werden")), status_code=303)
     config.hunters.remove(hunter)
     return _settings_general(t("Jäger „{name}“ gelöscht", name=name))
+
+
+LOGO_MAX_PX = 600        # 25 mm on the invoice -> ~600 dpi: sharp in print, ~130 KB per PDF
+LOGO_MAX_UPLOAD = 15 * 1024 * 1024
+
+
+def _prepare_logo(data: bytes) -> Image.Image:
+    """Crop away the empty margin and shrink to print size. Grey + alpha is
+    enough for a one-colour logo and keeps every invoice PDF small."""
+    img = Image.open(io.BytesIO(data))
+    img.load()
+    img = img.convert("RGBA")
+    # the margin often isn't fully transparent: ignore nearly invisible pixels
+    box = img.getchannel("A").point(lambda a: 255 if a > 24 else 0).getbbox()
+    if box is None:
+        raise ValueError("empty image")
+    img = img.crop(box)
+    img.thumbnail((LOGO_MAX_PX, LOGO_MAX_PX), Image.LANCZOS)
+    return img.convert("LA")
+
+
+@app.post("/settings/logo")
+async def settings_logo_upload(logo: UploadFile = File(...)):
+    data = await logo.read(LOGO_MAX_UPLOAD + 1)
+    if not data or len(data) > LOGO_MAX_UPLOAD:
+        return RedirectResponse(_msg_url("/settings", t("Bild zu groß (höchstens 15 MB)"), error=True) + "&tab=general", status_code=303)
+    try:
+        img = _prepare_logo(data)
+    except Exception:
+        return RedirectResponse(_msg_url("/settings", t("Keine lesbare Bilddatei — PNG mit transparentem Hintergrund verwenden"), error=True) + "&tab=general", status_code=303)
+    LOGO_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = LOGO_PATH.with_suffix(".png.tmp")
+    img.save(tmp, format="PNG", optimize=True)
+    tmp.replace(LOGO_PATH)
+    return _settings_general(t("Logo gespeichert — es steht ab jetzt auf jeder Rechnung"))
+
+
+@app.post("/settings/logo/delete")
+def settings_logo_delete():
+    LOGO_PATH.unlink(missing_ok=True)
+    return _settings_general(t("Logo entfernt"))
+
+
+@app.get("/settings/logo.png")
+def settings_logo_image():
+    if not LOGO_PATH.exists():
+        raise HTTPException(status_code=404)
+    return FileResponse(LOGO_PATH, media_type="image/png", headers={"Cache-Control": "no-cache"})
 
 
 @app.post("/settings/label-language")
