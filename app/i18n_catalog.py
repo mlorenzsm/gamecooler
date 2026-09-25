@@ -19,7 +19,6 @@ EN = {
     "Käufer": "Buyer",
     "Rechnung / Lieferschein": "Invoice / delivery note",
     "Nr.": "No.",
-    "Verkäufer": "Seller",
     "Betrag": "Amount",
     "Seite {page} von {pages}": "Page {page} of {pages}",
     "Lieferadresse": "Delivery address",

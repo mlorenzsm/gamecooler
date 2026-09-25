@@ -83,11 +83,12 @@ def render_sale_pdf(sale: Sale, hunter: Hunter | None, lang: str = "de") -> byte
     address = hunter.address if hunter else ""
     phone = t("Tel. {phone}", lang, phone=hunter.phone) if hunter and hunter.phone else ""
     email = hunter.email if hunter else ""
-    contact = " · ".join(x for x in (phone, email) if x)
     date = format_date(datetime.fromisoformat(sale.created_at).date(), lang)
 
+    # The footer names the document, not the seller again: that's what a
+    # second page needs to be matched to the first.
     pdf = InvoicePDF(
-        footer_text=" · ".join(x for x in (sale.hunter, address, contact) if x),
+        footer_text=f"{t('Rechnung / Lieferschein', lang)} {t('Nr.', lang)} {sale.number} · {date}",
         page_text=t("Seite {page} von {pages}", lang, page="{page}", pages="{nb}"),
     )
     pdf.add_page()
@@ -125,10 +126,10 @@ def render_sale_pdf(sale: Sale, hunter: Hunter | None, lang: str = "de") -> byte
     pdf.multi_cell(ADDRESS_WIDTH, 5.2, sale.buyer_address)
 
     # --- information block ------------------------------------------------
-    # the number is in the title already
+    # Only the date: the number is in the title, and the seller is the
+    # letterhead — a "Seller" row would repeat the name a third time.
     info = [
         (t("Datum", lang), date),
-        (t("Verkäufer", lang), sale.hunter),
     ]
     y = ADDRESS_TOP + 5
     for label, value in info:
