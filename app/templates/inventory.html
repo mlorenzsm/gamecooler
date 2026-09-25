@@ -84,6 +84,7 @@
     <td class="c-id" data-label="ID"><code>{{ r.uuid[:8] }}</code></td>
     <td class="c-status" data-label="{{ t("Status") }}">{% if r.consumed_at %}<span class="badge">{{ t("entnommen {date}", date=r.consumed_at | date) }}</span>{% else %}<span class="badge frost">{{ icon('snowflake') }}{{ t("im Bestand") }}</span>{% endif %}</td>
     <td class="c-actions" data-label="">
+      <a class="btn-icon" href="/parts/{{ r.uuid }}/edit" title="{{ t("Bearbeiten") }}" aria-label="{{ t("Bearbeiten") }}">{{ icon('pencil') }}</a>
       <form method="post" action="/parts/{{ r.uuid }}/reprint"
             data-confirm="{{ t("2 Etiketten nachdrucken?") ~ "\n\n" ~ r.species ~ " – " ~ r.part ~ ", " ~ (r | amount) }}" data-confirm-ok="{{ t("Nachdrucken") }}">
         <button class="small" type="submit" title="{{ t("Nachdrucken") }}" aria-label="{{ t("Nachdrucken") }}">{{ icon('printer') }}<span class="btn-label">{{ t("Nachdrucken") }}</span></button>

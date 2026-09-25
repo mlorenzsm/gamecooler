@@ -82,8 +82,9 @@ class PartRecord(BaseModel):
     # shows the recipe that was actually used, not whatever it is today.
     ingredients: str | None = None
 
-    @classmethod
-    def from_input(cls, part: PartIn, printed: bool) -> "PartRecord":
+    @staticmethod
+    def _values(part: PartIn) -> dict:
+        """The fields that come from what was entered, with the price worked out."""
         weight, price = part.weight_kg, part.price_per_kg
         if part.pieces is not None:
             # Counted parts have a fixed price: no per-kg price, no calculation.
@@ -92,19 +93,31 @@ class PartRecord(BaseModel):
         else:
             price_per_kg = round(price, 2) if price is not None else None
             total = round(weight * price, 2) if weight is not None and price is not None else None
+        return {
+            "hunter": part.hunter,
+            "species": part.species,
+            "part": part.part,
+            "weight_kg": round(weight, 3) if weight is not None else None,
+            "pieces": part.pieces,
+            "price_per_kg": price_per_kg,
+            "total_price": total,
+            "ingredients": part.ingredients,
+        }
+
+    @classmethod
+    def from_input(cls, part: PartIn, printed: bool) -> "PartRecord":
         return cls(
             uuid=str(uuid.uuid4()),
-            hunter=part.hunter,
-            species=part.species,
-            part=part.part,
-            weight_kg=round(weight, 3) if weight is not None else None,
-            pieces=part.pieces,
-            price_per_kg=price_per_kg,
-            total_price=total,
-            ingredients=part.ingredients,
             created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             printed=printed,
+            **cls._values(part),
         )
+
+    def edited(self, part: PartIn) -> "PartRecord":
+        """This entry with corrected details. uuid and created_at stay: the QR
+        code on the printed label points at the uuid, and the date (and the
+        best-before date derived from it) is when the meat went in."""
+        return self.model_copy(update=self._values(part))
 
 
 def format_de(value: float | None, decimals: int = 2, lang: str | None = None) -> str:

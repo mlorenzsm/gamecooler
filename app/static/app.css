@@ -292,7 +292,7 @@
        out of room, which pushed the hunter onto a third line. Here every cell
        has a fixed slot and only the hunter gives way (ellipsis). */
     table.inventory tr { display: grid; align-items: center; column-gap: var(--s-2); row-gap: 0.1rem;
-                         grid-template-columns: 1.75rem auto auto minmax(0, 1fr) auto 36px; padding: var(--s-2) var(--s-3); }
+                         grid-template-columns: 1.75rem auto auto minmax(0, 1fr) auto auto; padding: var(--s-2) var(--s-3); }
     table.inventory td { padding: 0; border: none; white-space: nowrap; font-size: var(--text-sm); color: var(--muted); display: block; }
     table.inventory td::before { content: none; }
 
@@ -300,7 +300,7 @@
     table.inventory td.c-part { grid-area: 1 / 2 / 2 / 5; white-space: normal; font-size: var(--text-md); font-weight: 600; color: var(--ink); }
     table.inventory td.c-price { grid-area: 1 / 5; font-size: var(--text-md); font-weight: 600; color: var(--ink); }
     table.inventory td.c-price::after { content: " €"; }   /* the column header that says € is hidden here */
-    table.inventory td.c-actions { grid-area: 1 / 6 / 3 / 7; }
+    table.inventory td.c-actions { grid-area: 1 / 6 / 3 / 7; display: flex; gap: var(--s-1); }
     table.inventory td.c-species { grid-area: 2 / 2; }
     table.inventory td.c-date { grid-area: 2 / 3; }
     table.inventory td.c-hunter { grid-area: 2 / 4; overflow: hidden; text-overflow: ellipsis; }
@@ -743,3 +743,21 @@ nav.tabbar { view-transition-name: tabbar; }       /* the bar stays put while th
 /* part editor: where to link a recipe, when the dropdown can't be shown */
 .part-editor .recipe-hint { grid-column: 1 / -1; display: flex; gap: var(--s-2); align-items: flex-start; margin: 0; }
 .part-editor .recipe-hint .icon { flex: none; margin-top: 0.15em; }
+
+/* Stock: edit link next to reprint — an icon button, same size as the reprint
+   button on the phone */
+@layer components {
+  a.btn-icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; min-height: 36px;
+               border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); color: var(--ink); }
+  a.btn-icon:hover { background: var(--surface-2); }
+  td.c-actions { white-space: nowrap; }
+  td.c-actions > * + * { margin-left: var(--s-1); }
+  @media (max-width: 640px) { td.c-actions > * + * { margin-left: 0; } }
+
+  /* edit page: cancel / save / save & reprint in one row */
+  .edit-actions { display: flex; gap: var(--s-2); align-items: stretch; }
+  .edit-actions > * { flex: none; }
+  .edit-actions button.print { flex: 1; grid-column: auto; white-space: nowrap; }
+  /* phone: the Stock tab right below does what Cancel does */
+  @media (max-width: 640px) { .edit-actions a.btn-secondary { display: none; } }
+}
