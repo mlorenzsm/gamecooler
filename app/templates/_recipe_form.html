@@ -75,7 +75,7 @@
     {% if r %}
     <button class="small" type="submit" formaction="/recipes/delete" formnovalidate
             {% if users %}disabled title="{{ t('Erst die Verknüpfung in den Einstellungen lösen') }}"{% endif %}
-            onclick='return confirm({{ t("Rezept „{name}“ löschen?", name=r.name) | tojson }})'>{{ icon('trash-2') }}{{ t("Rezept löschen") }}</button>
+            data-confirm="{{ t("Rezept „{name}“ löschen?", name=r.name) }}" data-confirm-danger data-confirm-ok="{{ t('Löschen') }}">{{ icon('trash-2') }}{{ t("Rezept löschen") }}</button>
     {% if users %}<span class="hint">{{ t("Löschen erst, wenn keine Zubereitung mehr darauf verweist.") }}</span>{% endif %}
     {% endif %}
   </div>

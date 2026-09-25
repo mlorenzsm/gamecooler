@@ -161,6 +161,13 @@ and once for dark mode (which follows the phone's setting), one type and
 spacing scale, and shared components. Icons come from `app/static/icons.svg`
 and are used in templates as `{{ icon('name') }}`.
 
+Pages don't carry their own `<style>` blocks — anything with a literal
+colour would ignore dark mode. For confirmations, use the app's dialog
+rather than the browser's `confirm()`: put `data-confirm="Question?\n\nDetails"`
+on a form or submit button (or `data-confirm-fn="name"` for a question built
+from the input, `data-confirm-danger` for deletes), or `await ask(…)` from a
+script. It is defined in `base.html`.
+
 Third-party assets bundled in `app/static/`, all self-hosted so the app needs
 no internet connection:
 

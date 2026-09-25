@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h2>{{ icon('shopping-bag') }}{{ t("Verkauf") }}</h2>
+<h2 class="page-title">{{ t("Verkauf") }}</h2>
 
 <form method="post" action="/sell/confirm" id="sell-form"
-      onsubmit="return confirmSale()">
+      data-confirm-fn="saleQuestion" data-confirm-ok="{{ t("Verkauf abschließen") }}">
 
   <div class="part-form form-grid">
     <label class="field">{{ t("Verkäufer (Jäger)") }}
@@ -65,11 +65,11 @@ const T = {{ {
   "{n} Teilstücke für {total}": t("{n} Teilstücke für {total}"),
 } | tojson }};
 const DEC = {{ decimal_separator() | tojson }};
-function confirmSale() {
+function saleQuestion() {
   const n = document.querySelectorAll('.item-price').length;
   const total = document.getElementById('total').textContent;
-  return confirm(`${T['Verkauf abschließen?']}\n\n` +
-    T['{n} Teilstücke für {total}'].replace('{n}', n).replace('{total}', total));
+  return `${T['Verkauf abschließen?']}\n\n` +
+    T['{n} Teilstücke für {total}'].replace('{n}', n).replace('{total}', total);
 }
 function num(s) { return parseFloat((s || '').replace(',', '.')) || 0; }
 function fmt(n) { return n.toFixed(2).replace('.', DEC); }

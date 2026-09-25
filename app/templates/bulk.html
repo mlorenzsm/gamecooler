@@ -2,31 +2,25 @@
 {% block content %}
 
 {% include "_msg.html" %}
+<h2 class="page-title">{{ t("Drucken") }}</h2>
+{% include "_print_switch.html" %}
 {% if config.dry_run %}<div class="dry-run">{{ t("Testmodus aktiv (dry_run) – es wird nicht gedruckt.") }}</div>{% endif %}
 
-<h2>{{ icon('printer') }}{{ t("Sammeldruck") }}</h2>
-
 {# Die Vorgaben gehören zur Wildart; die Liste wird per Script gefüllt. #}
-<div class="preset-bar" id="preset-bar">
-  <label for="preset-select">{{ t("Vorgabe") }}</label>
-  <select id="preset-select"></select>
-  <button type="button" id="preset-apply">{{ t("Übernehmen") }}</button>
-</div>
-
-<form method="post" action="/bulk" id="bulk-form" onsubmit="return confirmBulkPrint()">
-  <div class="part-form form-grid">
-    <label class="field">{{ t("Jäger") }}
+<form method="post" action="/bulk" id="bulk-form" data-confirm-fn="bulkQuestion" data-confirm-ok="{{ t("Drucken") }}">
+  <div class="list-group">
+    <label class="list-row"><span class="list-label">{{ t("Jäger") }}</span>
       <select name="hunter" required>
         {% for h in config.hunters %}<option>{{ h.name }}</option>{% endfor %}
       </select>
     </label>
-    <label class="field">{{ t("Wildart") }}
+    <label class="list-row"><span class="list-label">{{ t("Wildart") }}</span>
       <select name="species" required id="species-select">
         {% for s in config.species %}<option>{{ s.name }}</option>{% endfor %}
       </select>
     </label>
     {% if config.printers | length > 1 %}
-    <label class="field">{{ t("Drucker") }}
+    <label class="list-row"><span class="list-label">{{ t("Drucker") }}</span>
       <select name="printer">
         {% for p in config.printers %}
         <option value="{{ p.name }}" {% if p.name == config.default_printer %}selected{% endif %}>{{ p.name }}</option>
@@ -34,18 +28,27 @@
       </select>
     </label>
     {% endif %}
+    {# Presets belong to the species; the list is filled by the script and
+       the row is hidden when the species has none. Not a form field. #}
+    <div class="list-row" id="preset-bar">
+      <label class="list-label" for="preset-select">{{ t("Vorgabe") }}</label>
+      <select id="preset-select" form="no-form"></select>
+      <button type="button" class="small" id="preset-apply">{{ t("Übernehmen") }}</button>
+    </div>
   </div>
 
-  <table id="rows" class="responsive">
+  {# c-* classes place the cells in the phone layout (app.css). #}
+  <table id="rows" class="responsive bulk-rows">
     <tr>
       <th>{{ t("Anzahl") }}</th><th>{{ t("Teilstück") }}</th><th>{{ t("Gewicht/Stück (kg) oder Stückzahl (5x)") }}</th><th>{{ t("Preis/kg bzw. Festpreis (€, leer = Standard)") }}</th><th>{{ t("kein Preis") }}</th><th></th>
     </tr>
   </table>
-  <p>
-    <button type="button" onclick="addRow()">+ {{ t("Zeile") }}</button>
-  </p>
-  <p id="summary"></p>
-  <button class="print sticky-print" type="submit">{{ t("Alle Etiketten drucken & registrieren") }}</button>
+  <button type="button" class="small add-row" onclick="addRow()">{{ icon('plus') }}{{ t("Zeile") }}</button>
+  <p id="summary" class="list-foot"></p>
+
+  <div class="action-bar">
+    <button class="print" type="submit">{{ icon('printer') }}<span>{{ t("Alle Etiketten drucken & registrieren") }}</span><span class="total num" id="bulk-total"></span></button>
+  </div>
 </form>
 
 <script>
@@ -58,7 +61,6 @@ const T = {{ {
   "Preis/kg bzw. Festpreis (€)": t("Preis/kg bzw. Festpreis (€)"),
   "Kein Preis auf dem Etikett": t("Kein Preis auf dem Etikett"),
   "Zeile entfernen": t("Zeile entfernen"),
-  "entfernen": t("entfernen"),
   "Drucken?": t("Drucken?"),
   "Wirklich drucken?": t("Wirklich drucken?"),
   "{n} ohne Gewicht": t("{n} ohne Gewicht"),
@@ -100,15 +102,15 @@ function addRow(item = { part: null, count: 1 }) {
   // Telefon (siehe table.responsive in base.html) — dort ist die Kopfzeile
   // ausgeblendet, also muss jede Zelle ihren eigenen Titel mitbringen.
   row.innerHTML = `
-    <td data-label="${T['Anzahl']}"><input name="count" type="number" min="1" value="${item.count}" required class="input-num input-num-sm"></td>
-    <td data-label="${T['Teilstück']}"><select name="part" required></select></td>
-    <td data-label="${T['Gewicht/Stück (kg) oder 5x']}"><input name="weight_kg" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]" placeholder="${T['0,4 / 5x']}" value="${defaultWeight(item.part || firstPart)}" class="input-num"></td>
-    <td data-label="${T['Preis/kg bzw. Festpreis (€)']}"><input name="price_per_kg" inputmode="decimal" enterkeyhint="done" pattern="[0-9]+([.,][0-9]+)?" placeholder="${escapeHtml(pricePlaceholder(item.part || firstPart))}" class="input-num"></td>
-    <td class="center" data-label="${T['kein Preis']}">
-      <input type="checkbox" class="no-price" title="${T['Kein Preis auf dem Etikett']}">
+    <td class="c-count" data-label="${T['Anzahl']}"><input name="count" type="number" min="1" value="${item.count}" required class="input-num input-num-sm"></td>
+    <td class="c-part" data-label="${T['Teilstück']}"><select name="part" required aria-label="${T['Teilstück']}"></select></td>
+    <td class="c-weight" data-label="${T['Gewicht/Stück (kg) oder 5x']}"><input aria-label="${T['Gewicht/Stück (kg) oder 5x']}" name="weight_kg" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]" placeholder="${T['0,4 / 5x']}" value="${defaultWeight(item.part || firstPart)}" class="input-num"></td>
+    <td class="c-price" data-label="${T['Preis/kg bzw. Festpreis (€)']}"><input aria-label="${T['Preis/kg bzw. Festpreis (€)']}" name="price_per_kg" inputmode="decimal" enterkeyhint="done" pattern="[0-9]+([.,][0-9]+)?" placeholder="${escapeHtml(pricePlaceholder(item.part || firstPart))}" class="input-num"></td>
+    <td class="center c-noprice" data-label="${T['kein Preis']}">
+      <label class="inline-check"><input type="checkbox" class="no-price" title="${T['Kein Preis auf dem Etikett']}"><span class="noprice-label">${T['kein Preis']}</span></label>
       <input type="hidden" name="no_price" value="">
     </td>
-    <td data-label=""><button type="button" class="small" title="${T['Zeile entfernen']}" aria-label="${T['Zeile entfernen']}" onclick="this.closest('tr').remove(); updateSummary()">{{ icon('trash-2') }}${T['entfernen']}</button></td>
+    <td class="c-del" data-label=""><button type="button" class="small icon-only" title="${T['Zeile entfernen']}" aria-label="${T['Zeile entfernen']}" onclick="this.closest('tr').remove(); updateSummary()">{{ icon('trash-2') }}</button></td>
   `;
   const partSelect = row.querySelector('select[name=part]');
   fillPartSelect(partSelect, PARTS, unknown);
@@ -148,11 +150,11 @@ function rowPrice(row) {
   return currentParts()[part]?.price ?? null;  // may be null
 }
 
-function confirmBulkPrint() {
+function bulkQuestion() {
   renumberNoPrice();
   const summary = document.getElementById('summary').textContent;
-  if (!summary) return confirm(T['Drucken?']);
-  return confirm(`${T['Wirklich drucken?']}\n\n${summary}`);
+  if (!summary) return T['Drucken?'];
+  return `${T['Wirklich drucken?']}\n\n${summary}`;
 }
 
 function updateSummary() {
@@ -179,6 +181,7 @@ function updateSummary() {
   const partsText = T['{n} Teilstücke'].replace('{n}', parts) + (notes.length ? ` (${notes.join(', ')})` : '');
   document.getElementById('summary').textContent =
     labels ? `${partsText} → ` + T['{labels} Etiketten, Gesamtwert {total} €'].replace('{labels}', labels).replace('{total}', fmt(total)) : '';
+  document.getElementById('bulk-total').textContent = total > 0 ? `${fmt(total)} €` : '';
 }
 
 // the backend matches no_price entries to rows by position in the lists;
@@ -208,12 +211,12 @@ function fillPresets() {
 // Switching the species means different parts: rows filled for the old one
 // would point at parts the new one may not have, so start over.
 let lastSpecies = speciesSelect.value;
-speciesSelect.addEventListener('change', () => {
+speciesSelect.addEventListener('change', async () => {
   const rows = document.querySelectorAll('#rows tr:not(:first-child)');
   const touched = [...rows].some(r => r.querySelector('input[name=weight_kg]').value
                                    || r.querySelector('input[name=price_per_kg]').value
                                    || r.querySelector('input[name=count]').value !== '1');
-  if (rows.length && touched && !confirm(T['Wildart wechseln? Die Zeilen werden für die neue Wildart neu angelegt.'])) {
+  if (rows.length && touched && !await ask(T['Wildart wechseln? Die Zeilen werden für die neue Wildart neu angelegt.'])) {
     speciesSelect.value = lastSpecies;
     return;
   }
@@ -227,16 +230,16 @@ fillPresets();
 addRow();
 
 if (presetApply) {
-  presetApply.addEventListener('click', () => {
+  presetApply.addEventListener('click', async () => {
     const name = presetSelect.value;
     if (!name) {
-      if (confirm(T['Alle Zeilen löschen?'])) {
+      if (await ask(T['Alle Zeilen löschen?'], { danger: true })) {
         document.querySelectorAll('#rows tr:not(:first-child)').forEach(tr => tr.remove());
         updateSummary();
       }
       return;
     }
-    if (!confirm(T['Vorgabe „{name}“ übernehmen?'].replace('{name}', () => name))) return;
+    if (!await ask(T['Vorgabe „{name}“ übernehmen?'].replace('{name}', () => name))) return;
     document.querySelectorAll('#rows tr:not(:first-child)').forEach(tr => tr.remove());
     currentPresets()[name].forEach(item => addRow({ part: item.part, count: item.count }));
   });

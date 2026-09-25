@@ -85,14 +85,10 @@ EN = {
     "Testmodus aktiv (dry_run) – es wird nicht gedruckt.": "Test mode active (dry_run) – nothing is printed.",
     "Jäger": "Hunter",
     "Teilstück": "Cut",
-    "Gewicht (kg) oder Stückzahl": "Weight (kg) or piece count",
-    "z. B. 1,25 oder 5x · leer = keine Angabe auf dem Etikett": "e.g. 1.25 or 5x · empty = not shown on the label",
     "1,25 oder 5x": "1.25 or 5x",
     "Preis/kg (€)": "Price/kg (€)",
-    "leer = kein Preis auf dem Etikett": "empty = no price on the label",
     "12,50": "12.50",
     "Drucker": "Printer",
-    "2 Etiketten drucken & registrieren": "Print 2 labels & register",
     "Info-Etikett": "Info label",
     "QR-Etikett": "QR label",
     "Festpreis (€)": "Fixed price (€)",
@@ -116,7 +112,6 @@ EN = {
     "Preis/kg bzw. Festpreis (€)": "Price/kg or fixed price (€)",
     "Kein Preis auf dem Etikett": "No price on the label",
     "Zeile entfernen": "Remove row",
-    "entfernen": "remove",
     "Drucken?": "Print?",
     "Wirklich drucken?": "Really print?",
     "{n} ohne Gewicht": "{n} without weight",
@@ -136,7 +131,9 @@ EN = {
     "Entnommen": "Taken out",
     "Alle": "All",
     "Suche…": "Search…",
-    "{n} Teilstücke entnehmen": "Take out {n} cuts",
+    "{n} ausgewählt": "{n} selected",
+    "Entnehmen": "Take out",
+    "Verkaufen": "Sell",
     "{n} Teilstücke entnehmen?": "Take out {n} cuts?",
     "{n} Teilstücke verkaufen": "Sell {n} cuts",
     "Alle auswählen": "Select all",
@@ -144,6 +141,11 @@ EN = {
     "entnommen {date}": "taken out {date}",
     "2 Etiketten nachdrucken?": "Reprint 2 labels?",
     "Nachdrucken": "Reprint",
+    "Die Truhe ist leer": "The freezer is empty",
+    "Jedes gedruckte Etikett landet hier im Bestand.": "Every label you print ends up here in stock.",
+    "Etikett drucken": "Print a label",
+    "Filter oder Suche ändern — entnommene Teilstücke zeigt „Alle“.": "Change the filter or search — “All” also shows cuts taken out.",
+    "Ein Rezept liefert die Zutaten fürs Etikett und rechnet die Mengen für jede Charge hoch.": "A recipe fills in the ingredients on the label and scales the amounts for each batch.",
     "Keine Treffer.": "No matches.",
     "Scannen": "Scan",
     "Entnahme": "Take out",
@@ -151,6 +153,9 @@ EN = {
     "QR-Etikett vor die Kamera halten — das Teilstück wird aus dem Bestand ausgetragen.": "Hold the QR label in front of the camera — the cut is removed from stock.",
     "QR-Etiketten scannen und in den Warenkorb legen — dann Verkauf abschließen.": "Scan QR labels to add them to the basket — then complete the sale.",
     "Warenkorb": "Basket",
+    "Modus": "Mode",
+    "Bestätigen": "Confirm",
+    "Taschenlampe": "Flashlight",
     "Zuletzt entnommen": "Recently taken out",
     "{n} Teilstücke, {total} €": "{n} cuts, {total} €",
     "Aus dem Warenkorb entfernen": "Remove from basket",
@@ -215,7 +220,6 @@ EN = {
     "Speichern fehlgeschlagen": "Saving failed",
 
     # --- base.html: navigation and language switch ---------------------------
-    "Einzeldruck": "Single print",
     "Sprache": "Language",
 
     # --- Server messages (main.py) -------------------------------------------
@@ -283,4 +287,14 @@ EN = {
     "Zutaten (klein auf dem Etikett)": "Ingredients (small print on the label)",
     "Unverändert": "Unchanged",
     "Wildart „{old}“ heißt jetzt „{name}“": "Species “{old}” is now called “{name}”",
+
+    # --- Navigation (tab bar) --------------------------------------------------
+    "Drucken": "Print",
+    "Navigation": "Navigation",
+    "Einzeln": "Single",
+
+    # --- Print page (step 3) ----------------------------------------------------
+    "2 Etiketten drucken": "Print 2 labels",
+    "Gewicht in kg, oder „5x“ für eine Stückzahl mit Festpreis. Leer lassen, damit es nicht aufs Etikett kommt.":
+        "Weight in kg, or “5x” for a piece count with a fixed price. Leave empty to keep it off the label.",
 }

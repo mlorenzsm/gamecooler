@@ -2,45 +2,62 @@
 {% block content %}
 
 {% include "_msg.html" %}
+<h2 class="page-title">{{ t("Drucken") }}</h2>
+{% include "_print_switch.html" %}
 {% if config.dry_run %}<div class="dry-run">{{ t("Testmodus aktiv (dry_run) – es wird nicht gedruckt.") }}</div>{% endif %}
 
-<form class="part-form" method="post" action="/parts" id="part-form" onsubmit="return confirmPrint()">
-  <label>{{ t("Jäger") }}
-    <select name="hunter" required>
-      {% for h in config.hunters %}<option>{{ h.name }}</option>{% endfor %}
-    </select>
-  </label>
-  <label>{{ t("Wildart") }}
-    <select name="species" required id="species-select">
-      {% for s in config.species %}<option>{{ s.name }}</option>{% endfor %}
-    </select>
-  </label>
-  <label>{{ t("Teilstück") }}
-    <select name="part" required id="part-select">
-
-    </select>
-  </label>
-  <label>{{ t("Gewicht (kg) oder Stückzahl") }} <span class="hint">({{ t("z. B. 1,25 oder 5x · leer = keine Angabe auf dem Etikett") }})</span>
-    <input name="weight_kg" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]" placeholder="{{ t("1,25 oder 5x") }}" id="weight-input">
-  </label>
-  <label><span id="price-label">{{ t("Preis/kg (€)") }}</span> <span class="hint">({{ t("leer = kein Preis auf dem Etikett") }})</span>
-    <input name="price_per_kg" inputmode="decimal" enterkeyhint="done" pattern="[0-9]+([.,][0-9]+)?" placeholder="{{ t("12,50") }}" id="price-input">
-  </label>
-  {% if config.printers | length > 1 %}
-  <label>{{ t("Drucker") }}
-    <select name="printer">
-      {% for p in config.printers %}
-      <option value="{{ p.name }}" {% if p.name == config.default_printer %}selected{% endif %}>{{ p.name }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  {% endif %}
-  <button class="print" type="submit">{{ t("2 Etiketten drucken & registrieren") }}</button>
-</form>
-
-<div class="preview-imgs" id="preview">
+{# Preview first: the label you're about to print is the point of the page.
+   On the phone it sits on top; on desktop it's a column next to the form.
+   Both previews stay black on white in dark mode, like the printed label. #}
+<div class="print-layout">
+<div class="preview-imgs" id="preview" aria-live="polite">
   <img id="preview-info" alt="{{ t("Info-Etikett") }}">
   <img id="preview-qr" alt="{{ t("QR-Etikett") }}">
+</div>
+
+<form class="print-form" method="post" action="/parts" id="part-form" data-confirm-fn="printQuestion" data-confirm-ok="{{ t("Drucken") }}">
+  <div class="list-group">
+    <label class="list-row"><span class="list-label">{{ t("Jäger") }}</span>
+      <select name="hunter" required>
+        {% for h in config.hunters %}<option>{{ h.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="list-row"><span class="list-label">{{ t("Wildart") }}</span>
+      <select name="species" required id="species-select">
+        {% for s in config.species %}<option>{{ s.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="list-row"><span class="list-label">{{ t("Teilstück") }}</span>
+      <select name="part" required id="part-select"></select>
+    </label>
+    {% if config.printers | length > 1 %}
+    <label class="list-row"><span class="list-label">{{ t("Drucker") }}</span>
+      <select name="printer">
+        {% for p in config.printers %}
+        <option value="{{ p.name }}" {% if p.name == config.default_printer %}selected{% endif %}>{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
+  </div>
+
+  <div class="list-group">
+    <label class="list-row"><span class="list-label">{{ t("Menge") }}</span>
+      <input name="weight_kg" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]" placeholder="{{ t("1,25 oder 5x") }}" id="weight-input" autocomplete="off">
+      <span class="list-unit" id="weight-unit">kg</span>
+    </label>
+    <label class="list-row"><span class="list-label" id="price-label">{{ t("Preis/kg (€)") }}</span>
+      <input name="price_per_kg" inputmode="decimal" enterkeyhint="done" pattern="[0-9]+([.,][0-9]+)?" placeholder="{{ t("12,50") }}" id="price-input" autocomplete="off">
+      <span class="list-unit">€</span>
+    </label>
+  </div>
+  <p class="list-foot">{{ t("Gewicht in kg, oder „5x“ für eine Stückzahl mit Festpreis. Leer lassen, damit es nicht aufs Etikett kommt.") }}</p>
+
+  {# Pinned above the tab bar on the phone; shows what will be charged. #}
+  <div class="action-bar">
+    <button class="print" type="submit">{{ icon('printer') }}<span>{{ t("2 Etiketten drucken") }}</span><span class="total num" id="print-total"></span></button>
+  </div>
+</form>
 </div>
 
 <script>
@@ -53,6 +70,7 @@ const T = {{ {
   "zu {price} € Festpreis": t("zu {price} € Festpreis"),
   "zu {price} €/kg": t("zu {price} €/kg"),
   "2 Etiketten drucken?": t("2 Etiketten drucken?"),
+  "Stk.": t("Stk."),
 } | tojson }};
 const DEC = {{ decimal_separator() | tojson }};
 const SPECIES = {{ config.species | species_json | tojson }};
@@ -81,14 +99,22 @@ fillDefaults();
 // "5x" im Gewichtsfeld heisst Stückzahl: dann ist der Preis ein Festpreis
 // fuer das ganze Teilstück, nicht pro kg.
 const PIECES = /^\s*(\d+)\s*x\s*$/i;
+function num(s) { return parseFloat((s || '').replace(',', '.')); }
 function updatePriceLabel() {
-  document.getElementById('price-label').textContent =
-    PIECES.test(weightInput.value) ? T['Festpreis (€)'] : T['Preis/kg (€)'];
+  const pieces = PIECES.test(weightInput.value);
+  document.getElementById('price-label').textContent = pieces ? T['Festpreis (€)'] : T['Preis/kg (€)'];
+  document.getElementById('weight-unit').textContent = pieces ? T['Stk.'] : 'kg';
+  // the amount this label will carry — weight × price/kg, or the fixed price
+  const price = num(priceInput.value), weight = num(weightInput.value);
+  const total = pieces ? price : weight * price;
+  document.getElementById('print-total').textContent =
+    isFinite(total) && total > 0 ? `${total.toFixed(2).replace('.', DEC)} €` : '';
 }
 weightInput.addEventListener('input', updatePriceLabel);
+priceInput.addEventListener('input', updatePriceLabel);
 updatePriceLabel();
 
-function confirmPrint() {
+function printQuestion() {
   const form = document.getElementById('part-form');
   const d = new FormData(form);
   const weight = d.get('weight_kg');
@@ -97,7 +123,7 @@ function confirmPrint() {
   const pieces = (weight || '').match(PIECES);
   if (pieces) details = `${T['{n} Stk.'].replace('{n}', pieces[1])} ` + (price ? T['zu {price} € Festpreis'].replace('{price}', price) : T['ohne Preis']);
   else if (weight) details = `${weight} kg ` + (price ? T['zu {price} €/kg'].replace('{price}', price) : T['ohne Preis']);
-  return confirm(`${T['2 Etiketten drucken?']}\n\n${d.get('species')} – ${d.get('part')}, ${details}`);
+  return `${T['2 Etiketten drucken?']}\n\n${d.get('species')} – ${d.get('part')}, ${details}`;
 }
 
 function showPreview() {

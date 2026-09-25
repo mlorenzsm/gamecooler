@@ -1,33 +1,39 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h2>{{ icon('scan-line') }}{{ t("Scannen") }}</h2>
+<h2 class="page-title">{{ t("Scannen") }}</h2>
 
-<div class="toolbar mb-4">
-  <label class="inline-check">
-    <input type="radio" name="mode" value="consume" checked> {{ icon('package') }}{{ t("Entnahme") }}
-  </label>
-  <label class="inline-check">
-    <input type="radio" name="mode" value="sell"> {{ icon('shopping-bag') }}{{ t("Verkauf") }}
-  </label>
+{# Same segmented control as Single/Bulk on Print, built from radios so the
+   script keeps reading input[name=mode]. #}
+<div class="segmented" role="radiogroup" aria-label="{{ t("Modus") }}">
+  <label><input type="radio" name="mode" value="consume" checked class="visually-hidden">{{ icon('package') }}{{ t("Entnahme") }}</label>
+  <label><input type="radio" name="mode" value="sell" class="visually-hidden">{{ icon('shopping-bag') }}{{ t("Verkauf") }}</label>
 </div>
-<p id="mode-hint">{{ t("QR-Etikett vor die Kamera halten — das Teilstück wird aus dem Bestand ausgetragen.") }}</p>
 
-<div id="reader" class="scanner"></div>
+<div class="viewfinder">
+  <div id="reader" class="scanner"></div>
+  <button type="button" id="torch" class="torch icon-only" hidden aria-pressed="false"
+          title="{{ t("Taschenlampe") }}" aria-label="{{ t("Taschenlampe") }}">{{ icon('flashlight') }}</button>
+</div>
+<p id="mode-hint" class="list-foot center">{{ t("QR-Etikett vor die Kamera halten — das Teilstück wird aus dem Bestand ausgetragen.") }}</p>
 
-<div class="mt-4" id="result"></div>
+{# The answer to each scan: big enough to read at arm's length. #}
+<div id="result" class="scan-result" aria-live="polite"></div>
 
 <form method="post" action="/sell" id="basket-form" class="mt-4" hidden>
-  <h3>{{ icon('shopping-bag') }}{{ t("Warenkorb") }}</h3>
-  <ul id="basket"></ul>
-  <p><b id="basket-summary"></b></p>
-  <button type="submit" class="print">
-    {{ icon('shopping-bag') }}{{ t("{n} Teilstücke verkaufen", n='<span id="basket-count"></span>') | safe }}
-  </button>
+  <h3>{{ t("Warenkorb") }}</h3>
+  <ul id="basket" class="list-group"></ul>
+  <div class="action-bar">
+    <button type="submit" class="print">
+      {{ icon('shopping-bag') }}<span>{{ t("{n} Teilstücke verkaufen", n='<span id="basket-count"></span>') | safe }}</span><span class="total num" id="basket-summary"></span>
+    </button>
+  </div>
 </form>
 
-<h3>{{ t("Zuletzt entnommen") }}</h3>
-<ul id="log"></ul>
+<section id="log-section" class="mt-4" hidden>
+  <h3>{{ t("Zuletzt entnommen") }}</h3>
+  <ul id="log" class="list-group"></ul>
+</section>
 
 <script src="/static/html5-qrcode.min.js"></script>
 <script>
@@ -89,16 +95,20 @@ function updateBasket() {
   const notes = [];
   if (unweighed) notes.push(T['{n} ohne Gewicht'].replace('{n}', unweighed));
   if (unpriced) notes.push(T['{n} ohne Preis'].replace('{n}', unpriced));
-  document.getElementById('basket-summary').textContent =
-    T['{n} Teilstücke, {total} €'].replace('{n}', basket.size).replace('{total}', fmt(total)) + (notes.length ? ` (${notes.join(', ')})` : '');
+  // The button already says how many; it shows the total, and what the
+  // total leaves out goes into the tooltip.
+  const summary = document.getElementById('basket-summary');
+  summary.textContent = `${fmt(total)} €${notes.length ? ' *' : ''}`;
+  summary.title = T['{n} Teilstücke, {total} €'].replace('{n}', basket.size).replace('{total}', fmt(total)) + (notes.length ? ` (${notes.join(', ')})` : '');
 }
 
 function addToBasket(p) {
   if (basket.has(p.uuid)) return false;
   basket.set(p.uuid, p);
   const li = document.createElement('li');
+  li.className = 'list-row';
   const priceText = p.total_price == null ? esc(T['ohne Preis']) : `${fmt(p.total_price)} €`;
-  li.innerHTML = `${p.species} – ${p.part}, ${amount(p)}, ${priceText} ` +
+  li.innerHTML = `<span class="grow">${esc(p.species)} – ${esc(p.part)}<br><span class="muted">${esc(amount(p))}</span></span><span class="num">${priceText}</span>` +
     `<input type="hidden" name="uuid" value="${p.uuid}" form="basket-form"> ` +
     `<button type="button" class="small icon-only" title="${esc(T['Aus dem Warenkorb entfernen'])}" aria-label="${esc(T['Aus dem Warenkorb entfernen'])}">{{ icon('trash-2') }}</button>`;
   li.querySelector('button').addEventListener('click', () => {
@@ -153,8 +163,10 @@ async function onScan(text) {
     } else {
       show(`${esc(T['Entnommen:'])}<br><b>${desc}</b>`, 'msg');
       const li = document.createElement('li');
+      li.className = 'list-row';
       li.textContent = desc;
       logEl.prepend(li);
+      document.getElementById('log-section').hidden = false;
       if (navigator.vibrate) navigator.vibrate(100);
     }
   } catch (e) {
@@ -183,10 +195,25 @@ async function startScanner() {
     // prefer a back camera if present (phone), otherwise first camera (Mac)
     const back = cameras.find(c => /back|rear|rück/i.test(c.label));
     await scanner.start((back || cameras[0]).id, scanConfig, onScan, () => {});
+    setupTorch();
   } catch (err) {
     show(esc(T['Kamera konnte nicht gestartet werden: {error}'].replace('{error}', () => err)) + '<br>' +
          esc(T['Kamerazugriff für den Browser erlauben (macOS: Systemeinstellungen → Datenschutz & Sicherheit → Kamera).']), 'error');
   }
+}
+
+// Torch for labels deep in a dark freezer. Only offered where the camera
+// supports it — Chrome on Android does, Safari on iOS doesn't (yet).
+function setupTorch() {
+  let torch;
+  try { torch = scanner.getRunningTrackCameraCapabilities().torchFeature(); } catch (e) { return; }
+  if (!torch.isSupported()) return;
+  const btn = document.getElementById('torch');
+  btn.hidden = false;
+  btn.addEventListener('click', async () => {
+    const on = btn.getAttribute('aria-pressed') !== 'true';
+    try { await torch.apply(on); btn.setAttribute('aria-pressed', String(on)); } catch (e) {}
+  });
 }
 
 startScanner();

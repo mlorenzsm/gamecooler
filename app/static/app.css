@@ -66,6 +66,7 @@
     --shadow-float: 0 8px 24px rgb(0 0 0 / 0.12), 0 1px 3px rgb(0 0 0 / 0.06);
 
     --tap: 44px;              /* Apple's minimum tap target */
+    --seg-on: #FFFFFF;        /* selected segment, lifted off its track */
   }
 
   @media (prefers-color-scheme: dark) {
@@ -85,6 +86,7 @@
       --danger: #F0877E; --danger-soft: #3A1D1A;
       --accent-hover: color-mix(in oklab, var(--accent) 85%, white);
       --shadow-float: 0 8px 24px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.3);
+      --seg-on: #3A4437;
     }
   }
 }
@@ -186,7 +188,7 @@
   .lang-switch { display: flex; gap: 2px; background: var(--surface-2); border-radius: var(--r-pill); padding: 2px; }
   .lang-switch a { font: 600 var(--text-xs)/1 var(--font-ui); letter-spacing: 0.05em; padding: 0.4rem 0.65rem; border-radius: var(--r-pill);
                    color: var(--muted); text-decoration: none; }
-  .lang-switch a.active { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+  .lang-switch a.active { background: var(--seg-on); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
 
   /* The page itself: no card around everything — content sits on the ground,
      and only real groups (lists, forms) get a surface. */
@@ -251,8 +253,7 @@
   @media (min-width: 900px) { .filters { grid-template-columns: 1fr 1.4fr 1fr 2fr; } .filters input[type="search"] { grid-column: auto; } }
 
   /* camera: html5-qrcode sets the video to 100% of its container */
-  .scanner { max-width: 500px; margin: 0 auto; }
-  .scanner video { border-radius: var(--r-lg); }
+  .scanner video { display: block; }
 
   /* inventory: helper cell that forces the line break in the phone layout;
      on desktop it takes no part in the table so it doesn't shift columns */
@@ -261,12 +262,7 @@
 
 @layer components {
   @media (max-width: 640px) {
-    header.site { justify-content: space-between; padding-bottom: var(--s-3); }
-    /* phone: icons only; the label stays for screen readers and the active state */
-    nav.site-nav { order: 3; width: 100%; justify-content: space-between; }
-    nav.site-nav a { padding: 0 var(--s-2); flex: 1; justify-content: center; }
-    nav.site-nav a .icon { width: 1.4em; height: 1.4em; }
-    nav.site-nav a .nav-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    header.site { padding-bottom: var(--s-2); }
 
     /* Tables become cards. Pure CSS: the cells stay in the DOM and carry their
        own label via data-label, so there is no second copy of the markup. */
@@ -289,31 +285,40 @@
        Hooked on classes (c-*), NOT on data-label: the labels are translated,
        so a selector like [data-label="Wildart"] silently stopped matching in
        English and broke the layout. */
-    table.inventory tr { display: flex; flex-wrap: wrap; align-items: center; gap: 0.15rem var(--s-2); padding: var(--s-3) var(--s-4); }
-    table.inventory td { padding: 0; border: none; white-space: nowrap; font-size: var(--text-sm); color: var(--muted); }
+    /* One row per cut, like a list in Mail:
+         [✓] Rücken                   24,80 €  [🖨]
+             Reh · 12.09. · Manuel…   1,250 kg
+       A grid rather than wrapping flex: a flex line breaks wherever it runs
+       out of room, which pushed the hunter onto a third line. Here every cell
+       has a fixed slot and only the hunter gives way (ellipsis). */
+    table.inventory tr { display: grid; align-items: center; column-gap: var(--s-2); row-gap: 0.1rem;
+                         grid-template-columns: 1.75rem auto auto minmax(0, 1fr) auto 36px; padding: var(--s-2) var(--s-3); }
+    table.inventory td { padding: 0; border: none; white-space: nowrap; font-size: var(--text-sm); color: var(--muted); display: block; }
     table.inventory td::before { content: none; }
 
-    table.inventory td.c-pick { order: 0; margin-right: var(--s-1); }
-    /* title line: the cut alone, so a long name wraps as one sentence */
-    table.inventory td.c-part { order: 1; flex: 1; min-width: 0; white-space: normal; font-size: var(--text-md); font-weight: 600; color: var(--ink); }
-    table.inventory td.row-break { display: block; order: 3; flex-basis: 100%; height: 0; padding: 0; }
+    table.inventory td.c-pick { grid-area: 1 / 1 / 3 / 2; }
+    table.inventory td.c-part { grid-area: 1 / 2 / 2 / 5; white-space: normal; font-size: var(--text-md); font-weight: 600; color: var(--ink); }
+    table.inventory td.c-price { grid-area: 1 / 5; font-size: var(--text-md); font-weight: 600; color: var(--ink); }
+    table.inventory td.c-price::after { content: " €"; }   /* the column header that says € is hidden here */
+    table.inventory td.c-actions { grid-area: 1 / 6 / 3 / 7; }
+    table.inventory td.c-species { grid-area: 2 / 2; }
+    table.inventory td.c-date { grid-area: 2 / 3; }
+    table.inventory td.c-hunter { grid-area: 2 / 4; overflow: hidden; text-overflow: ellipsis; }
+    table.inventory td.c-amount { grid-area: 2 / 5; }
+    table.inventory td.c-status { grid-area: 3 / 2 / 4 / 6; margin-top: var(--s-1); }
+    /* "· " goes on the FOLLOWING cells so the line doesn't start with one */
+    table.inventory td.c-date::before, table.inventory td.c-hunter::before { content: "· "; }
 
-    /* detail line: date first without a label; "· " goes on the FOLLOWING
-       cells so the line doesn't start with a separator */
-    table.inventory td.c-species { order: 4; }
-    table.inventory td.c-date { order: 5; }
-    table.inventory td.c-hunter { order: 6; }
-    table.inventory td.c-amount { order: 7; }
-    table.inventory td.c-per-kg { order: 8; }
-    table.inventory td.c-price { order: 9; }
-    table.inventory td.c-id { order: 10; }
-    table.inventory td.c-status { order: 11; }
-    table.inventory td.c-date::before, table.inventory td.c-hunter::before, table.inventory td.c-amount::before, table.inventory td.c-per-kg::before,
-    table.inventory td.c-price::before, table.inventory td.c-id::before, table.inventory td.c-status::before { content: "· "; }
+    /* not needed at a glance on the phone: the ID is still searchable, €/kg is
+       in the total, and "in stock" is the default filter — only "taken out"
+       says something */
+    table.inventory td.c-id, table.inventory td.c-per-kg, table.inventory td.row-break { display: none; }
+    table.inventory tr:not(.is-consumed) td.c-status { display: none; }
     /* empty values ("–") add nothing on the phone */
     table.inventory td.is-empty { display: none; }
-    table.inventory td.c-actions { order: 12; flex-basis: 100%; margin-top: var(--s-2); }
     table.inventory td.c-actions form { display: inline; }
+    table.inventory td.c-actions button { width: 36px; padding: 0; }
+    table.inventory .btn-label { display: none; }
 
     /* totals row: no card frame, right-aligned as on desktop */
     table.responsive tr.total-row { border: none; background: transparent; padding: var(--s-2) var(--s-1); }
@@ -340,4 +345,373 @@
   .input-cell { width: 100%; min-width: 8rem; }
   .input-num-sm { width: 5rem; }
   .inline-check { display: flex; align-items: center; gap: var(--s-2); color: var(--ink); font-weight: 500; }
+}
+
+/* --- Step 2: navigation --------------------------------------------------- */
+@layer components {
+  /* Single / bulk print switch — an iOS-style segmented control */
+  .segmented { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 2px;
+               background: var(--surface-2); border-radius: var(--r-md); margin-bottom: var(--s-4); max-width: 26rem; }
+  .segmented a { display: flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 var(--s-3);
+                 border-radius: calc(var(--r-md) - 2px); color: var(--muted); font-size: var(--text-sm); font-weight: 500; text-decoration: none; }
+  .segmented a.active { background: var(--seg-on); color: var(--ink); font-weight: 600;
+                        box-shadow: 0 1px 2px rgb(0 0 0 / 0.1), 0 0 0 0.5px rgb(0 0 0 / 0.04); }
+
+  .page-title { margin-bottom: var(--s-3); }
+
+  /* Phone: the tab bar floats above the content at the bottom, inset from the
+     edges, as on iOS 26. Glass (blur) is used here only — Apple reserves it for
+     the navigation layer. Labels stay visible: Apple asks for them. */
+  @media (max-width: 640px) {
+    nav.tabbar {
+      position: fixed; z-index: 50;
+      left: max(var(--s-3), env(safe-area-inset-left)); right: max(var(--s-3), env(safe-area-inset-right));
+      bottom: calc(var(--s-2) + env(safe-area-inset-bottom));
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 0;
+      padding: var(--s-1);
+      border-radius: 24px;
+      background: color-mix(in oklab, var(--surface) 80%, transparent);
+      -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5);
+      border: 1px solid color-mix(in oklab, var(--line) 80%, transparent);
+      box-shadow: var(--shadow-float);
+    }
+    nav.tabbar a { flex-direction: column; gap: 2px; min-height: 52px; padding: 0; justify-content: center;
+                   border-radius: 20px; font-size: 0.68rem; font-weight: 500; color: var(--faint); }
+    nav.tabbar a .icon { width: 1.45rem; height: 1.45rem; }
+    nav.tabbar a.active { background: transparent; color: var(--accent); }
+    nav.tabbar a:hover { background: var(--hover); }
+    nav.tabbar a .nav-label { position: static; width: auto; height: auto; overflow: visible; clip-path: none; white-space: nowrap; }
+
+    /* content must be able to scroll clear of the bar */
+    body { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
+    /* sticky buttons sit above the bar instead of under it */
+    button.sticky-print { bottom: calc(84px + env(safe-area-inset-bottom)); }
+    .segmented { max-width: none; }
+  }
+}
+
+/* Page transitions between pages (Safari 18.2+, Chrome 126+): a short cross-
+   fade instead of a white flash. Browsers without support just load the page. */
+@view-transition { navigation: auto; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 160ms; }
+nav.tabbar { view-transition-name: tabbar; }       /* the bar stays put while the page changes */
+@media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+
+/* --- Step 3: screens ------------------------------------------------------ */
+@layer components {
+  /* iOS-style grouped list: one surface, rows split by hairlines, the label on
+     the left and the control filling the rest. Controls lose their own border
+     inside a row — the group is the frame. */
+  .list-group { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; margin-bottom: var(--s-3); }
+  .list-row { display: flex; align-items: center; gap: var(--s-3); min-height: var(--tap); padding: 0 var(--s-4);
+              border-top: 1px solid var(--line); font-size: var(--text-md); font-weight: 400; color: var(--ink); }
+  .list-row:first-child { border-top: none; }
+  .list-label { flex: none; width: 7.5rem; color: var(--muted); font-size: var(--text-sm); }
+  .list-row > select, .list-row > input, .list-row > textarea {
+    flex: 1; min-width: 0; border: none; background: transparent; padding: 0.7rem 0; box-shadow: none; border-radius: 0;
+  }
+  .list-row > select:focus, .list-row > input:focus { box-shadow: none; }
+  .list-row:focus-within { background: var(--hover); }
+  /* numbers line up on the right (next to their unit); text starts left so a
+     long address stays readable */
+  .list-row > input { text-align: left; }
+  .list-row > input[inputmode="decimal"], .list-row > input#weight-input { text-align: right; }
+  .list-unit { flex: none; color: var(--faint); min-width: 2.2rem; text-align: left; }
+  .list-foot { font-size: var(--text-sm); color: var(--faint); margin: 0 var(--s-4) var(--s-4); }
+
+  /* Print: preview on top (phone), side by side (desktop) */
+  /* minmax(0, 1fr) and min-width: 0 — without them the grid grows to the
+     preview images' natural 991 px width and pushes the form off screen */
+  .print-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s-4); }
+  .print-layout > * { min-width: 0; }
+  .print-layout .preview-imgs { margin: 0; display: grid; gap: var(--s-2); }
+  .print-layout .preview-imgs img { max-width: 100%; }
+  /* phone: the two labels side by side in a swipe row, so the preview costs
+     one label's height instead of two */
+  @media (max-width: 899px) {
+    .print-layout .preview-imgs { grid-auto-flow: column; grid-auto-columns: 88%; overflow-x: auto;
+      scroll-snap-type: x mandatory; scrollbar-width: none; padding-bottom: var(--s-1);
+      margin-inline: calc(-1 * var(--s-4)); padding-inline: var(--s-4); scroll-padding-inline: var(--s-4); }
+    .print-layout .preview-imgs::-webkit-scrollbar { display: none; }
+    .print-layout .preview-imgs img { scroll-snap-align: start; box-shadow: 0 2px 8px rgb(0 0 0 / 0.1); }
+  }
+  @media (min-width: 900px) {
+    .print-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: start; gap: var(--s-6); }
+    .print-layout .preview-imgs { position: sticky; top: var(--s-4); order: 2; }
+  }
+
+  /* bottom action bar: the one thing to do on a page, at the thumb */
+  .action-bar button.print { width: 100%; min-height: 52px; font-size: var(--text-md); }
+  .action-bar .total { margin-left: auto; opacity: 0.85; font-weight: 500; }
+  .action-bar .total:empty { display: none; }
+  @media (max-width: 640px) {
+    .action-bar { position: sticky; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 20; margin-top: var(--s-3); }
+    .action-bar button.print { box-shadow: var(--shadow-float); }
+  }
+}
+
+/* Stock: selection bar. Appears once a row is ticked and floats at the thumb —
+   above the tab bar on the phone, bottom centre on desktop. */
+@layer components {
+  .selection-bar {
+    position: fixed; z-index: 40; left: 0; right: 0; margin-inline: auto;
+    width: min(34rem, calc(100% - 2 * var(--s-3)));
+    bottom: calc(var(--s-4) + env(safe-area-inset-bottom));
+    display: flex; align-items: center; gap: var(--s-2);
+    padding: var(--s-2) var(--s-2) var(--s-2) var(--s-4);
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+    box-shadow: var(--shadow-float);
+  }
+  .selection-bar .sel-count { flex: 1; font-weight: 600; }
+  .selection-bar button { min-height: 40px; }
+  .selection-bar button.print { grid-column: auto; }
+  table.inventory { margin-bottom: 5rem; }   /* room to scroll past the bar */
+  @media (max-width: 640px) {
+    .selection-bar { bottom: calc(84px + env(safe-area-inset-bottom)); }
+  }
+}
+
+/* Scan: a square viewfinder with the camera filling it, corner marks where
+   the label goes, a torch button, and the answer to each scan as a card. */
+@layer components {
+  .segmented label { display: flex; align-items: center; justify-content: center; gap: var(--s-1); min-height: 36px; padding: 0 var(--s-3);
+                     border-radius: calc(var(--r-md) - 2px); color: var(--muted); font-size: var(--text-sm); font-weight: 500; cursor: pointer; }
+  .segmented label:has(input:checked) { background: var(--seg-on); color: var(--ink); font-weight: 600;
+                                        box-shadow: 0 1px 2px rgb(0 0 0 / 0.1), 0 0 0 0.5px rgb(0 0 0 / 0.04); }
+  .segmented label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .viewfinder { position: relative; aspect-ratio: 1; max-width: min(100%, 26rem); margin: 0 auto;
+                border-radius: var(--r-lg); overflow: hidden; background: #0B0E0B; }
+  .viewfinder .scanner, .viewfinder .scanner > div { width: 100%; height: 100%; }
+  /* cover, not contain: the camera's 4:3 frame fills the square */
+  .viewfinder video { width: 100% !important; height: 100% !important; object-fit: cover; }
+  /* html5-qrcode draws its own shaded box; the corner marks replace it */
+  .viewfinder #qr-shaded-region { display: none; }
+  .viewfinder::after {
+    content: ""; position: absolute; inset: 22%; pointer-events: none;
+    --c: rgb(255 255 255 / 0.9); --l: 28px; --w: 3px;
+    background:
+      linear-gradient(var(--c), var(--c)) top left / var(--l) var(--w), linear-gradient(var(--c), var(--c)) top left / var(--w) var(--l),
+      linear-gradient(var(--c), var(--c)) top right / var(--l) var(--w), linear-gradient(var(--c), var(--c)) top right / var(--w) var(--l),
+      linear-gradient(var(--c), var(--c)) bottom left / var(--l) var(--w), linear-gradient(var(--c), var(--c)) bottom left / var(--w) var(--l),
+      linear-gradient(var(--c), var(--c)) bottom right / var(--l) var(--w), linear-gradient(var(--c), var(--c)) bottom right / var(--w) var(--l);
+    background-repeat: no-repeat; border-radius: 6px;
+  }
+  .torch { position: absolute; z-index: 2; right: var(--s-3); bottom: var(--s-3); border-radius: var(--r-pill);
+           background: rgb(0 0 0 / 0.45); border-color: transparent; color: #FFFFFF;
+           -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+  .torch[aria-pressed="true"] { background: #FFFFFF; color: #0B0E0B; }
+  .viewfinder + .list-foot { margin-top: var(--s-2); }
+  .scan-result:empty { display: none; }
+  .scan-result > div { font-size: var(--text-lg); padding: var(--s-4); box-shadow: var(--shadow-float); }
+  .scan-result .icon { width: 1.6rem; height: 1.6rem; flex: none; }
+  ul.list-group { list-style: none; padding: 0; }
+  ul.list-group .list-row { padding-block: var(--s-2); }
+}
+
+@layer components {
+  /* a grouped list that is itself a form: actions in the last row, right */
+  .list-actions { justify-content: flex-end; gap: var(--s-2); padding-block: var(--s-2); }
+  .list-actions button:first-child:not(:only-child) { margin-right: auto; }
+}
+
+/* Settings and Recipes. These used to be <style> blocks in their templates
+   from before the token system — with literal colours they stayed white in
+   dark mode. Everything below takes its colour from the tokens. */
+@layer components {
+  /* underlined tabs (Settings: Species / General) */
+  nav.settings-tabs { display: flex; gap: var(--s-1); border-bottom: 1px solid var(--line); margin: 0 0 var(--s-4); }
+  nav.settings-tabs a { display: inline-flex; align-items: center; gap: var(--s-2); min-height: var(--tap); padding: 0 var(--s-4);
+                        color: var(--muted); font-weight: 500; text-decoration: none; background: none; border-radius: 0;
+                        border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  nav.settings-tabs a:hover { background: none; color: var(--ink); }
+  nav.settings-tabs a.active { background: none; color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
+
+  /* species pills, the same on Settings and Recipes */
+  nav.species-tabs, .species-tabs { display: flex; flex-wrap: wrap; gap: var(--s-2); margin: 0 0 var(--s-4); }
+  nav.species-tabs a, .species-tabs a, .species-add-toggle {
+    display: inline-flex; align-items: center; gap: var(--s-1); min-height: 36px; padding: 0 var(--s-4);
+    border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface);
+    color: var(--ink); font: 500 var(--text-sm)/1 var(--font-ui); text-decoration: none; box-shadow: none; }
+  nav.species-tabs a:hover, .species-tabs a:hover { background: var(--hover); }
+  nav.species-tabs a.active, .species-tabs a.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .species-add-toggle { color: var(--accent); border-style: dashed; cursor: pointer; }
+  .species-tabs .count { background: color-mix(in oklab, currentColor 12%, transparent); color: inherit; }
+
+  .settings-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--s-4); margin: 0 0 var(--s-4); }
+  .settings-card h3, .settings-card h4 { display: flex; align-items: center; gap: var(--s-2); margin: 0 0 var(--s-1); }
+  .settings-card > .hint { margin: 0 0 var(--s-3); }
+  .settings-card .list-group:last-child { margin-bottom: 0; }
+  .footnote { font-size: var(--text-xs); color: var(--faint); margin-top: var(--s-5); }
+  .inline-form, .species-new { display: flex; gap: var(--s-2); flex-wrap: wrap; align-items: center; }
+  .species-new label { display: flex; align-items: center; gap: var(--s-2); font-size: var(--text-sm); color: var(--muted); }
+
+  .species-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s-4); flex-wrap: wrap; margin: 0 0 var(--s-3); }
+  .species-head h3 { margin: 0; font: 600 var(--text-xl, 1.4rem)/1.2 var(--font-display, inherit); }
+  .species-manage > summary { display: inline-flex; align-items: center; gap: var(--s-1); cursor: pointer; font-size: var(--text-sm); color: var(--muted); list-style: none; }
+  .species-manage > summary::-webkit-details-marker { display: none; }
+  .species-manage[open] { display: grid; gap: var(--s-2); justify-items: end; }
+
+  .list-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--s-2); }
+  .count { display: inline-block; min-width: 1.4rem; padding: 0 0.35rem; border-radius: var(--r-pill); background: var(--surface-2);
+           font-size: var(--text-xs); font-weight: 600; text-align: center; color: var(--muted); vertical-align: middle; }
+
+  /* parts list: tap a row to open its editor */
+  ul.part-list { list-style: none; margin: 0; padding: 0; }
+  ul.part-list > li { border-top: 1px solid var(--line); }
+  ul.part-list > li:first-child { border-top: none; }
+  .part-item > summary { display: flex; align-items: center; gap: var(--s-2); min-height: var(--tap); padding: 0 var(--s-1);
+                         cursor: pointer; list-style: none; border-radius: var(--r-sm); }
+  .part-item > summary::-webkit-details-marker { display: none; }
+  .part-item > summary:hover { background: var(--hover); }
+  .part-item[open] > summary { font-weight: 600; }
+  .part-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .part-facts { display: flex; gap: var(--s-2); align-items: center; color: var(--muted); font-size: var(--text-sm); white-space: nowrap; }
+  .part-facts .price { min-width: 6.5rem; text-align: right; font-variant-numeric: tabular-nums; }
+  .preset-items { white-space: normal; text-align: right; max-width: 60%; }
+  .part-facts .badge { background: var(--accent-soft); color: var(--accent); }
+
+  .part-editor { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: var(--s-3);
+                 padding: var(--s-3) var(--s-4) var(--s-4); margin: 0 0 var(--s-3); background: var(--surface-2); border-radius: var(--r-md); }
+  .part-editor .field { font-size: var(--text-xs); }
+  .part-editor .field.wide { grid-column: 1 / -1; }
+  .part-editor textarea[readonly] { background: var(--ground); color: var(--muted); }
+  .editor-buttons { grid-column: 1 / -1; display: flex; gap: var(--s-2); flex-wrap: wrap; align-items: center; }
+  .editor-buttons .danger { margin-left: auto; }
+  .new-part { border: 1px dashed color-mix(in oklab, var(--accent) 50%, var(--line)); }
+
+  /* drag and drop */
+  .drag-handle { cursor: grab; color: var(--faint); font-size: 1.2rem; padding: 0 var(--s-1); user-select: none; touch-action: none; }
+  .drag-handle:hover { color: var(--ink); }
+  .part-row.dragging { position: fixed; z-index: 10; background: var(--surface); box-shadow: var(--shadow-float);
+                       pointer-events: none; border-radius: var(--r-sm); list-style: none; }
+  .part-row.saving { opacity: 0.5; }
+  .drag-placeholder { background: var(--accent-soft); border: 2px dashed color-mix(in oklab, var(--accent) 50%, transparent) !important; border-radius: var(--r-sm); }
+  .drop-hint { color: var(--faint); font-style: italic; font-size: var(--text-sm); padding: var(--s-3) var(--s-1); }
+  td.row-actions { white-space: nowrap; width: 1%; }
+  td.row-actions button + button { margin-left: var(--s-1); }
+
+  @media (max-width: 640px) {
+    .part-facts .price { min-width: 0; }
+    .part-facts .fact:not(.price) { display: none; }      /* phone: price only, weight in the editor */
+    .badge-text { display: none; }                          /* phone: badge as icon, so the name keeps its room */
+    .part-name { white-space: normal; }
+    .preset-items { display: none; }
+  }
+
+  /* --- Recipes --- */
+  .recipe-block { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--s-2) var(--s-4); margin: 0 0 var(--s-3); }
+  .recipe-block > summary { display: flex; align-items: center; gap: var(--s-2); min-height: var(--tap); cursor: pointer; font-weight: 600; }
+  .recipe-block[open] > summary { margin-bottom: var(--s-2); }
+  .recipe-meta { color: var(--muted); font-size: var(--text-sm); font-weight: 400; }
+  .recipe-items td { padding: var(--s-1) var(--s-2); }
+  .recipe-items th { white-space: nowrap; }
+  .recipe-items td.row-actions { white-space: nowrap; width: 1%; }
+  /* phone: one ingredient per two lines instead of a sideways-scrolling table —
+     name on its own line, amount / unit / delete below it */
+  @media (max-width: 640px) {
+    .recipe-items thead { display: none; }
+    .recipe-items tbody tr { display: grid; grid-template-columns: 1fr auto auto; gap: var(--s-2); padding: var(--s-2) 0; border-bottom: 1px solid var(--line); }
+    .recipe-items tbody td { padding: 0; border: none; }
+    .recipe-items tbody td:first-child { grid-column: 1 / -1; }
+    .recipe-items tbody td input[name=item_amount] { width: 100% !important; }
+    .recipe-items td.row-actions { width: auto; }
+  }
+  .label-preview { background: var(--surface-2); border-radius: var(--r-sm); padding: var(--s-3) var(--s-4); font-size: var(--text-sm); margin: var(--s-3) 0; }
+
+  /* scaling calculator: the "weigh this" numbers are what matters at the scale */
+  .scale-box { background: var(--accent-soft); border-radius: var(--r-md); padding: var(--s-3) var(--s-4); margin: var(--s-3) 0; }
+  .scale-hint, .scale-or, .copy-hint { color: var(--muted); font-size: var(--text-xs); }
+  .scale-controls { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; margin: var(--s-2) 0; font-size: var(--text-sm); }
+  .scale-controls label { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; }
+  .scale-result { font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+  .scale-result td, .scale-result th { padding: var(--s-1) var(--s-2); background: transparent; }
+  .scale-result tfoot td { border-top: 2px solid color-mix(in oklab, var(--accent) 35%, transparent); border-bottom: none; }
+  .scale-result td.num, .scale-result th.num { white-space: nowrap; }
+  .scale-base-inline { display: none; }
+  /* phone: drop the "Recipe" column so "Weigh" always fits; the recipe amount
+     moves under the name */
+  @media (max-width: 640px) {
+    .scale-box { padding: var(--s-3); }
+    .scale-result td, .scale-result th { padding: var(--s-1); }
+    .scale-result th { letter-spacing: 0; }
+    .scale-result .scale-base-col, .scale-result th:nth-child(2), .scale-result .scale-total-base { display: none; }
+    .scale-base-inline { display: block; color: var(--muted); font-size: var(--text-xs); }
+  }
+  .recipe-copy { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; margin-top: var(--s-3); padding-top: var(--s-3);
+                 border-top: 1px dashed var(--line); font-size: var(--text-sm); }
+  .recipe-buttons { display: flex; gap: var(--s-2); flex-wrap: wrap; align-items: center; margin-top: var(--s-3); }
+}
+
+/* Bulk: one card per row on the phone —
+     [ 3 ] [ Keule            ▾ ] [🗑]
+     [ 0,4 kg ] [ 16,00 € ] [✓ no price]
+   The desktop table keeps its columns. */
+@layer components {
+  #preset-bar > select { flex: 1; }
+  .add-row { margin: var(--s-2) 0 var(--s-3); }
+  .bulk-rows .noprice-label { display: none; }
+  @media (max-width: 640px) {
+    table.bulk-rows tr { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) minmax(0, 1fr) auto; gap: var(--s-2); align-items: center; }
+    table.bulk-rows td { display: block; padding: 0; }
+    table.bulk-rows td::before { content: none; }
+    table.bulk-rows td input:not([type=checkbox]), table.bulk-rows td select { width: 100%; }
+    table.bulk-rows td.c-count { grid-area: 1 / 1; }
+    table.bulk-rows td.c-part { grid-area: 1 / 2 / 2 / 4; }
+    table.bulk-rows td.c-del { grid-area: 1 / 4; }
+    table.bulk-rows td.c-weight { grid-area: 2 / 1 / 3 / 3; }
+    table.bulk-rows td.c-price { grid-area: 2 / 3; }
+    table.bulk-rows td.c-noprice { grid-area: 2 / 4; }
+    table.bulk-rows .noprice-label { display: inline; font-size: var(--text-xs); color: var(--muted); white-space: nowrap; }
+    table.bulk-rows .c-noprice .inline-check { flex-direction: column; gap: 2px; }
+  }
+}
+
+/* --- Step 4: polish -------------------------------------------------------- */
+@layer components {
+  /* Confirmation dialog (base.html, ask()). A sheet from the bottom on the
+     phone, where the thumb is; centred on desktop. */
+  .confirm-dialog { width: min(24rem, calc(100% - 2 * var(--s-4))); padding: 0; border: none; border-radius: var(--r-lg);
+                    background: var(--surface); color: var(--ink); box-shadow: 0 24px 60px rgb(0 0 0 / 0.3); }
+  .confirm-dialog::backdrop { background: rgb(10 14 10 / 0.45); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+  .confirm-dialog form { padding: var(--s-5) var(--s-5) var(--s-4); }
+  .confirm-dialog h3 { margin: 0 0 var(--s-2); font-size: var(--text-lg); }
+  .confirm-dialog p { color: var(--muted); margin: 0 0 var(--s-4); overflow-wrap: anywhere; }
+  .confirm-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); margin-top: var(--s-4); }
+  .confirm-buttons button { width: 100%; grid-column: auto; }   /* button.print spans the whole grid elsewhere */
+  button.danger-solid { background: var(--danger); border-color: var(--danger); color: #FFFFFF; font-weight: 600; }
+  button.danger-solid:hover { background: color-mix(in oklab, var(--danger) 88%, black); }
+  @media (max-width: 640px) {
+    .confirm-dialog { margin: auto auto calc(var(--s-3) + env(safe-area-inset-bottom)); width: calc(100% - 2 * var(--s-3)); }
+    .confirm-buttons button { min-height: 50px; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .confirm-dialog[open] { animation: sheet-in 180ms cubic-bezier(0.2, 0.9, 0.3, 1); }
+    .confirm-dialog[open]::backdrop { animation: fade-in 180ms ease-out; }
+  }
+  @keyframes sheet-in { from { transform: translateY(16px) scale(0.98); opacity: 0; } }
+  @keyframes fade-in { from { opacity: 0; } }
+
+  /* Focus: controls inside grouped lists have no border of their own, so
+     the whole row shows the keyboard focus instead. */
+  .list-row:has(:focus-visible) { box-shadow: inset 0 0 0 2px var(--accent); }
+  nav.tabbar a:focus-visible, .segmented a:focus-visible { outline-offset: -2px; }
+
+  /* Touch: small buttons stay small to look at but get a 44 px hit area,
+     checkboxes grow a little. */
+  @media (pointer: coarse) {
+    button.small { position: relative; }
+    button.small::after { content: ""; position: absolute; inset: -4px; }
+    input[type="checkbox"], input[type="radio"] { width: 1.45rem; height: 1.45rem; }
+  }
+
+  /* Empty states: say what's missing and what to do about it */
+  .empty-state { display: grid; justify-items: center; gap: var(--s-2); text-align: center;
+                 padding: var(--s-6, 2.5rem) var(--s-4); color: var(--muted); }
+  .empty-state > .icon { width: 2.25rem; height: 2.25rem; color: var(--faint); margin-bottom: var(--s-1); }
+  .empty-state h3 { margin: 0; color: var(--ink); }
+  .empty-state p { margin: 0; max-width: 28rem; font-size: var(--text-sm); }
+  .empty-state .btn-primary, .empty-state button { margin-top: var(--s-2); }
+  a.btn-primary { display: inline-flex; align-items: center; gap: var(--s-2); min-height: var(--tap); padding: 0 var(--s-4);
+                  border-radius: var(--r-md); text-decoration: none; }
 }

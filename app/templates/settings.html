@@ -3,7 +3,7 @@
 
 {% include "_msg.html" %}
 
-<h2>{{ icon('settings-2') }}{{ t("Einstellungen") }}</h2>
+<h2 class="page-title">{{ t("Einstellungen") }}</h2>
 
 {# Zwei Reiter. "Allgemein" ändert sich selten (Jäger, Etikettensprache),
    "Wildarten" ist der Alltag — deshalb eigene Seiten statt einer langen. #}
@@ -18,40 +18,36 @@
 <section class="settings-card">
   <h3>{{ icon('info') }}{{ t("Jäger") }}</h3>
   <p class="hint">{{ t("Name, Adresse und Telefon stehen auf jedem Info-Etikett.") }}</p>
+  {# One grouped list per hunter — four fields side by side didn't fit a
+     phone. Same form fields and routes as before. #}
+  {% macro hunter_rows(h=None) %}
+    <label class="list-row"><span class="list-label">{{ t("Name") }}</span>
+      <input name="name" required {% if h %}value="{{ h.name }}"{% else %}placeholder="{{ t('Neuer Jäger') }}"{% endif %}></label>
+    <label class="list-row"><span class="list-label">{{ t("Adresse") }}</span>
+      <input name="address" required {% if h %}value="{{ h.address }}"{% else %}placeholder="{{ t('Straße Nr., PLZ Ort') }}"{% endif %}></label>
+    <label class="list-row"><span class="list-label">{{ t("Telefon") }}</span>
+      <input name="phone" type="tel" {% if h %}value="{{ h.phone }}"{% else %}placeholder="{{ t('Telefon') }}"{% endif %}></label>
+    <label class="list-row"><span class="list-label">{{ t("E-Mail") }}</span>
+      <input name="email" type="email" {% if h %}value="{{ h.email }}"{% else %}placeholder="{{ t('E-Mail') }}"{% endif %}></label>
+  {% endmacro %}
   {% for h in config.hunters %}
-  <form method="post" action="/settings/hunters" id="hunter-{{ loop.index }}"></form>
+  <form method="post" action="/settings/hunters" class="list-group list-form" id="hunter-{{ loop.index }}">
+    <input type="hidden" name="original_name" value="{{ h.name }}">
+    {{ hunter_rows(h) }}
+    <div class="list-row list-actions">
+      <button class="small" type="submit" formaction="/settings/hunters/delete" formnovalidate
+              title="{{ t('Löschen') }}" aria-label="{{ t('Löschen') }}"
+              data-confirm="{{ t("Jäger „{name}“ löschen?", name=h.name) }}" data-confirm-danger data-confirm-ok="{{ t('Löschen') }}">{{ icon('trash-2') }}</button>
+      <button class="small" type="submit">{{ icon('save') }}{{ t("Speichern") }}</button>
+    </div>
+  </form>
   {% endfor %}
-  <form method="post" action="/settings/hunters" id="hunter-new"></form>
-  <div class="table-scroll">
-  <table>
-    <tr><th style="width:18%">{{ t("Name") }}</th><th style="width:34%">{{ t("Adresse") }}</th><th style="width:18%">{{ t("Telefon") }}</th><th>{{ t("E-Mail") }}</th><th></th></tr>
-    {% for h in config.hunters %}
-    {% set f = 'hunter-' ~ loop.index %}
-    <tr>
-      <td>
-        <input type="hidden" name="original_name" value="{{ h.name }}" form="{{ f }}">
-        <input class="input-cell" name="name" required value="{{ h.name }}" form="{{ f }}">
-      </td>
-      <td><input class="input-cell" name="address" required value="{{ h.address }}" form="{{ f }}"></td>
-      <td><input class="input-cell" name="phone" value="{{ h.phone }}" form="{{ f }}"></td>
-      <td><input class="input-cell" name="email" value="{{ h.email }}" form="{{ f }}"></td>
-      <td class="row-actions">
-        <button class="small" type="submit" form="{{ f }}" title="{{ t('Speichern') }}" aria-label="{{ t('Speichern') }}">{{ icon('save') }}</button>
-        <button class="small" type="submit" form="{{ f }}" formaction="/settings/hunters/delete" formnovalidate
-                title="{{ t('Löschen') }}" aria-label="{{ t('Löschen') }}"
-                onclick='return confirm({{ t("Jäger „{name}“ löschen?", name=h.name) | tojson }})'>{{ icon('trash-2') }}</button>
-      </td>
-    </tr>
-    {% endfor %}
-    <tr>
-      <td><input class="input-cell" name="name" required placeholder="{{ t('Neuer Jäger') }}" form="hunter-new"></td>
-      <td><input class="input-cell" name="address" required placeholder="{{ t('Straße Nr., PLZ Ort') }}" form="hunter-new"></td>
-      <td><input class="input-cell" name="phone" placeholder="{{ t('Telefon') }}" form="hunter-new"></td>
-      <td><input class="input-cell" name="email" placeholder="{{ t('E-Mail') }}" form="hunter-new"></td>
-      <td class="row-actions"><button class="small" type="submit" form="hunter-new">+ {{ t("Hinzufügen") }}</button></td>
-    </tr>
-  </table>
-  </div>
+  <form method="post" action="/settings/hunters" class="list-group list-form" id="hunter-new">
+    {{ hunter_rows() }}
+    <div class="list-row list-actions">
+      <button class="small" type="submit">{{ icon('plus') }}{{ t("Hinzufügen") }}</button>
+    </div>
+  </form>
 </section>
 
 <section class="settings-card">
@@ -106,7 +102,7 @@
       <button class="small" type="submit">{{ icon('save') }}{{ t("Umbenennen") }}</button>
     </form>
     <form method="post" action="/settings/species/delete" class="inline-form"
-          onsubmit='return confirm({{ t("Wildart „{name}“ mit allen Teilstücken und Vorgaben löschen?\n\nBestehende Etiketten und Bestand bleiben erhalten.", name=sp.name) | tojson }})'>
+          data-confirm="{{ t("Wildart „{name}“ mit allen Teilstücken und Vorgaben löschen?\n\nBestehende Etiketten und Bestand bleiben erhalten.", name=sp.name) }}" data-confirm-danger data-confirm-ok="{{ t('Löschen') }}">
       <input type="hidden" name="name" value="{{ sp.name }}">
       <button class="small danger" type="submit">{{ icon('trash-2') }}{{ t("Wildart „{name}“ löschen", name=sp.name) }}</button>
     </form>
@@ -162,7 +158,7 @@
             <button class="print" type="submit">{{ icon('save') }}{{ t("Speichern") }}</button>
             <button type="button" class="small edit-cancel">{{ t("Abbrechen") }}</button>
             <button class="small danger" type="submit" formaction="/settings/parts/delete" formnovalidate
-                    onclick='return confirm({{ t("„{name}“ bei {species} löschen?", name=name, species=sp.name) | tojson }})'>{{ icon('trash-2') }}{{ t("Löschen") }}</button>
+                    data-confirm="{{ t("„{name}“ bei {species} löschen?", name=name, species=sp.name) }}" data-confirm-danger data-confirm-ok="{{ t('Löschen') }}">{{ icon('trash-2') }}{{ t("Löschen") }}</button>
           </div>
         </form>
       </details>
@@ -222,7 +218,7 @@
             <button class="print" type="submit">{{ icon('save') }}{{ t("Speichern") }}</button>
             <button type="button" class="small edit-cancel">{{ t("Abbrechen") }}</button>
             <button class="small danger" type="submit" formaction="/settings/presets/delete" formnovalidate
-                    onclick='return confirm({{ t("Vorgabe „{name}“ bei {species} löschen?", name=preset.name, species=sp.name) | tojson }})'>{{ icon('trash-2') }}{{ t("Löschen") }}</button>
+                    data-confirm="{{ t("Vorgabe „{name}“ bei {species} löschen?", name=preset.name, species=sp.name) }}" data-confirm-danger data-confirm-ok="{{ t('Löschen') }}">{{ icon('trash-2') }}{{ t("Löschen") }}</button>
           </div>
         </form>
       </details>
@@ -415,85 +411,5 @@ document.addEventListener('click', e => {
 
 {% endif %}
 
-<style>
-  /* [hidden] must win over the display: grid/flex below — the "+ Neu" forms rely on it */
-  [hidden] { display: none !important; }
-
-  /* Underlined tabs. The site nav styles every "nav a" as a pill; these rules
-     undo that for the tabs (and the species pills set their own look below). */
-  nav.settings-tabs { display: flex; gap: 0.3rem; border-bottom: 2px solid var(--line); margin: 0.4rem 0 1rem; flex-wrap: nowrap; }
-  nav.settings-tabs a { padding: 0.5rem 1rem; text-decoration: none; color: var(--muted); font-weight: 500;
-                        background: none; border: none; border-radius: 0; box-shadow: none;
-                        border-bottom: 3px solid transparent; margin-bottom: -2px; }
-  nav.settings-tabs a:hover { background: none; color: var(--ink); }
-  nav.settings-tabs a.active { background: none; color: var(--ink); border-bottom-color: var(--green); }
-
-  nav.species-tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.8rem; }
-  nav.species-tabs a, .species-add-toggle { padding: 0.35rem 0.85rem; border: 1px solid var(--line); border-radius: 999px;
-                    text-decoration: none; color: inherit; font-size: 0.9rem; font-weight: 500; background: #fff; box-shadow: none; }
-  nav.species-tabs a:hover { background: #f4f7f4; }
-  nav.species-tabs a.active { background: var(--green); border-color: var(--green); color: #fff; }
-  .species-add-toggle { color: var(--green); border-style: dashed; cursor: pointer; font: inherit; font-size: 0.9rem; }
-
-  .settings-card { border: 1px solid var(--line); border-radius: 12px; padding: 0.9rem 1rem; margin: 0 0 1rem; background: #fff; }
-  .settings-card h3, .settings-card h4 { margin: 0 0 0.3rem; }
-  .hint { font-size: 0.85rem; color: #888; margin: 0 0 0.7rem; }
-  .footnote { font-size: 0.8rem; color: #999; margin-top: 1.2rem; }
-  .inline-form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
-  .species-new { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
-  .species-new label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; color: #666; }
-
-  .species-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; margin: 0.4rem 0 0.8rem; }
-  .species-head h3 { margin: 0; font-size: 1.4rem; }
-  .species-manage > summary { cursor: pointer; font-size: 0.85rem; color: var(--muted); list-style: none; }
-  .species-manage > summary::-webkit-details-marker { display: none; }
-  .species-manage[open] { display: grid; gap: 0.5rem; justify-items: end; }
-  button.danger { color: #a33; border-color: #e3c4c4; }
-
-  .list-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; }
-  .count { display: inline-block; min-width: 1.4rem; padding: 0 0.35rem; border-radius: 999px; background: #f0f0ea;
-           font-size: 0.75rem; font-weight: 600; text-align: center; color: var(--muted); vertical-align: middle; }
-
-  ul.part-list { list-style: none; margin: 0; padding: 0; }
-  ul.part-list > li { border-top: 1px solid var(--line); }
-  ul.part-list > li:first-child { border-top: none; }
-  .part-item > summary { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.2rem; cursor: pointer; list-style: none; }
-  .part-item > summary::-webkit-details-marker { display: none; }
-  .part-item > summary:hover { background: rgba(55,133,55,0.04); }
-  .part-item[open] > summary { font-weight: 600; }
-  .part-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .part-facts { display: flex; gap: 0.6rem; align-items: center; color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
-  .part-facts .price { min-width: 6.5rem; text-align: right; font-variant-numeric: tabular-nums; }
-  .preset-items { white-space: normal; text-align: right; max-width: 60%; }
-  .badge { background: #eef6ee; color: #2a662a; border-radius: 999px; padding: 0.05rem 0.5rem; font-size: 0.75rem; }
-
-  .part-editor { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: 0.6rem;
-                 padding: 0.7rem 0.8rem 0.9rem; margin: 0 0 0.6rem; background: #fafaf7; border-radius: 10px; }
-  .part-editor .field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; color: var(--muted); }
-  .part-editor .field input, .part-editor .field select, .part-editor .field textarea { width: 100%; }
-  .part-editor .field.wide { grid-column: 1 / -1; }
-  .part-editor textarea[readonly] { background: #f0f0ea; color: #555; }
-  .editor-buttons { grid-column: 1 / -1; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
-  .editor-buttons .danger { margin-left: auto; }
-  .new-part { border: 1px dashed #9c9; }
-
-  .drag-handle { cursor: grab; color: #bbb; font-size: 1.2rem; padding: 0 0.2rem; user-select: none; touch-action: none; }
-  .drag-handle:hover { color: #555; }
-  .part-row.dragging { position: fixed; z-index: 10; background: #fff; box-shadow: 0 6px 18px rgba(0,0,0,0.18);
-                       pointer-events: none; border-radius: 8px; list-style: none; }
-  .part-row.saving { opacity: 0.5; }
-  .drag-placeholder { background: #eef6ee; border: 2px dashed #9c9 !important; border-radius: 8px; }
-  .drop-hint { color: #999; font-style: italic; font-size: 0.85rem; padding: 0.7rem 0.2rem; }
-  td.row-actions { white-space: nowrap; width: 1%; }
-  td.row-actions button + button { margin-left: 0.3rem; }
-
-  @media (max-width: 640px) {
-    .part-facts .price { min-width: 0; }
-    .part-facts .fact:not(.price) { display: none; }      /* phone: price only, weight in the editor */
-    .badge-text { display: none; }                          /* phone: badge as icon, so the name keeps its room */
-    .part-name { white-space: normal; }
-    .preset-items { display: none; }
-  }
-</style>
 
 {% endblock %}
