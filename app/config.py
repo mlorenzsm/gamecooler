@@ -42,6 +42,9 @@ class PrinterTarget(BaseModel):
     label: str = "39x90"
     backend: str = "pyusb"
     identifier: str = "usb://0x04f9:0x209b"
+    # Cut once after each info + QR pair instead of after every label, so a
+    # part's two labels come out as one strip. false = cut every label.
+    cut_per_set: bool = True
 
 
 PART_KINDS = {"cut": "Teilstücke", "prep": "Zubereitungen"}
@@ -156,9 +159,9 @@ class Species(BaseModel):
     # Per species too: a Wildschwein-Salsiccia and a Reh-Salsiccia are
     # different recipes, and a part can only link a recipe of its own species.
     recipes: list[Recipe] = []
-    # Wildursprungsmarke required on every label of this species. On for
-    # Wildschwein (trichinae inspection) by default; a setting, so a renamed
-    # or added species can opt in too.
+    # Wildursprungsmarke required on every label of this species. None =
+    # the default: on for Wildschwein (trichinae inspection), off otherwise.
+    # Set per species in Settings.
     needs_mark: bool | None = None
 
     @field_validator("parts", mode="before")

@@ -3,8 +3,13 @@
 A small web app for labelling cuts of game meat for the freezer.
 For each cut it prints two 38×90mm labels (DK-11208) on a Brother QL-800:
 
-1. **Info label**: hunter, species, cut, weight, price/kg, price, date
-2. **QR label**: QR code with a UUID for identification
+1. **Info label**: hunter, species, cut, weight, price/kg, price, kill date
+2. **QR label**: QR code with a UUID for identification, best-before date and
+   the Wildursprungsmarke for species that need one — Wildschwein by default,
+   switchable per species in Settings
+
+The printer cuts once after each pair, so a cut's two labels come out as one
+strip (`cut_per_set: false` under `printers[]` cuts every label instead).
 
 Every printed cut is registered in `data/registry.json` for accounting.
 

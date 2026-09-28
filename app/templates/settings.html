@@ -148,6 +148,21 @@
   </details>
 </div>
 
+{# Per-species label rules. The switch saves on its own (the form submits on
+   change); without JS the button below it does. #}
+<form method="post" action="/settings/species/mark" class="list-group species-rules">
+  <input type="hidden" name="species" value="{{ sp.name }}">
+  <label class="list-row">
+    <span class="grow">
+      {{ t("Wildursprungsmarke Pflicht") }}
+      <span class="hint rule-hint">{{ t("Beim Drucken muss die Nummer der Wildmarke eingegeben werden; sie steht auf dem QR-Etikett.") }}</span>
+    </span>
+    <input type="checkbox" name="needs_mark" value="1" class="switch" {% if sp.mark_required %}checked{% endif %}
+           onchange="this.form.requestSubmit()">
+  </label>
+  <noscript><div class="list-row list-actions"><button class="small" type="submit">{{ t("Speichern") }}</button></div></noscript>
+</form>
+
 {# --- Teilstücke und Zubereitungen ---------------------------------------
    Jede Zeile ist kompakt und zeigt nur, was gesetzt ist. Ein Klick öffnet
    den Editor genau dieser Zeile (ein <details>), damit nicht 17 Formulare
