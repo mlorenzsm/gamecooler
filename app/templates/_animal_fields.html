@@ -1,0 +1,40 @@
+{# Kill date and Wildursprungsmarke, shared by single and bulk print.
+   Both belong to the animal, not the cut, so the page remembers them for the
+   next labels (localStorage, per browser) — cutting up one boar means many
+   labels with the same date and tag. The mark row only shows for a species
+   that needs one (Wildschwein) and is required there. #}
+<label class="list-row"><span class="list-label">{{ t("Erlegt") }}</span>
+  <input type="date" name="killed_on" id="killed-input" value="{{ today() }}" max="{{ today() }}" required>
+</label>
+<label class="list-row" id="mark-row" hidden><span class="list-label" title="{{ t("Wildursprungsmarke") }}">{{ t("Wildmarke") }}</span>
+  <input name="mark" id="mark-input" autocomplete="off" autocapitalize="characters" enterkeyhint="next"
+         placeholder="{{ t("Nr. der Wildmarke") }}" maxlength="40">
+</label>
+<script>
+(() => {
+  const KEY = 'gamecooler.animal';
+  const killed = document.getElementById('killed-input');
+  const mark = document.getElementById('mark-input');
+  const markRow = document.getElementById('mark-row');
+  const species = document.getElementById('species-select');
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+  // a remembered date is only offered on the day it was set: tomorrow's
+  // first label defaults to today again rather than yesterday's hunt
+  if (saved.killed && saved.day === killed.max) killed.value = saved.killed;
+  if (saved.mark) mark.value = saved.mark;
+  function remember() {
+    try { localStorage.setItem(KEY, JSON.stringify({ killed: killed.value, mark: mark.value, day: killed.max })); } catch (e) {}
+  }
+  killed.addEventListener('change', remember);
+  mark.addEventListener('change', remember);
+  function syncMark() {
+    const needs = !!SPECIES[species.value]?.needs_mark;
+    markRow.hidden = !needs;
+    mark.required = needs;
+    mark.disabled = !needs;        // not sent for species without one
+  }
+  species.addEventListener('change', syncMark);
+  syncMark();
+})();
+</script>

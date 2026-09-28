@@ -95,6 +95,18 @@ def mark_sold(part_uuids: list[str], sale_id: str) -> int:
         return changed
 
 
+def update(record: PartRecord) -> None:
+    """Replace the stored entry with the same uuid."""
+    with _lock:
+        records = load_all()
+        for i, r in enumerate(records):
+            if r.uuid == record.uuid:
+                records[i] = record
+                break
+        else:
+            raise KeyError(record.uuid)
+        _write([r.model_dump() for r in records])
+
 def get_many(part_uuids: list[str]) -> list[PartRecord]:
     wanted = set(part_uuids)
     return [r for r in load_all() if r.uuid in wanted]

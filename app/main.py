@@ -6,15 +6,16 @@ from datetime import date
 from urllib.parse import quote
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
+from PIL import Image
 from pydantic import ValidationError
 
 from . import paperless, registry, sales
-from .config import PART_KINDS, UNITS, Hunter, PartDefaults, Preset, PresetItem, Recipe, RecipeItem, Species, load_config, save_config
+from .config import LOGO_PATH, PART_KINDS, UNITS, Hunter, PartDefaults, Preset, PresetItem, Recipe, RecipeItem, Species, load_config, save_config
 from .i18n import LANGUAGES, decimal_separator, format_date, get_lang, pick_language, reset_lang, set_lang, t
 from .labels import render_info_label, render_qr_label
 from .models import (
@@ -86,6 +87,7 @@ def species_json(species: list[Species]) -> dict:
                 for name, p in group.items()
             },
             "presets": {pr.name: [i.model_dump() for i in pr.items] for pr in s.presets},
+            "needs_mark": s.mark_required,
         }
         for s in species
     }
@@ -130,6 +132,7 @@ def icon(name: str, label: str = "") -> Markup:
 
 
 templates.env.globals["icon"] = icon
+templates.env.globals["today"] = lambda: date.today().isoformat()
 templates.env.filters["date"] = date_filter
 # {"cut": "Teilstücke", ...} with the headings in the UI language
 templates.env.filters["map_kinds"] = lambda kinds: {k: t(v) for k, v in kinds.items()}
@@ -176,14 +179,26 @@ def invalid_input(request: Request, exc: ValidationError):
     # stay visible instead of being disguised as a typo.
     if exc.title != "PartIn":
         raise exc
-    return RedirectResponse(
-        url="/?kind=error&msg=" + quote(t("Ungültige Eingabe — Gewicht als 1,25 oder Stückzahl als 5x")),
-        status_code=303,
-    )
+    back = "/bulk" if request.url.path == "/bulk" else "/"
+    return RedirectResponse(_msg_url(back, _invalid_message(exc), error=True), status_code=303)
+
+
+def _invalid_message(exc: Exception) -> str:
+    """What was wrong with a part's input, by the field that failed."""
+    fields = {e["loc"][0] for e in exc.errors() if e.get("loc")} if isinstance(exc, ValidationError) else set()
+    if "killed_on" in fields:
+        return t("Ungültiges Erlegungsdatum — nicht in der Zukunft")
+    return t("Ungültige Eingabe — Gewicht als 1,25 oder Stückzahl als 5x")
 
 
 def find_hunter(name: str) -> Hunter | None:
     return next((h for h in config.hunters if h.name == name), None)
+
+
+def mark_missing(species: str, mark: str) -> bool:
+    """A species that needs a Wildursprungsmarke (Wildschwein) without one."""
+    sp = config.find_species(species)
+    return bool(sp and sp.mark_required and not mark.strip())
 
 
 def part_ingredients(species: str, part: str) -> str | None:
@@ -240,14 +255,21 @@ def preview(
     part: str,
     weight_kg: str = "",
     price_per_kg: str = "",
+    killed_on: str = "",
+    mark: str = "",
     type: str = "info",
 ):
-    part_in = PartIn(
-        hunter=hunter, species=species, part=part,
-        weight_kg=weight_kg,
-        price_per_kg=price_per_kg,
-        ingredients=part_ingredients(species, part),
-    )
+    try:
+        part_in = PartIn(
+            hunter=hunter, species=species, part=part,
+            weight_kg=weight_kg, price_per_kg=price_per_kg,
+            killed_on=killed_on, mark=mark,
+            ingredients=part_ingredients(species, part),
+        )
+    except (ValidationError, ValueError):
+        # half-typed or future date: preview without it rather than a broken image
+        part_in = PartIn(hunter=hunter, species=species, part=part, weight_kg=weight_kg,
+                         price_per_kg=price_per_kg, mark=mark, ingredients=part_ingredients(species, part))
     record = PartRecord.from_input(part_in, printed=False)
     img = (
         render_info_label(record, find_hunter(hunter), config.label_language)
@@ -281,6 +303,11 @@ async def bulk_print(request: Request):
     no_prices = form.getlist("no_price")
     no_price_rows = {int(i) for i in no_prices}
     printer = config.printer(form.get("printer"))
+    # one animal per bulk run: kill date and mark apply to every row
+    killed_on = str(form.get("killed_on", ""))
+    mark = str(form.get("mark", ""))
+    if mark_missing(species, mark):
+        return RedirectResponse(_msg_url("/bulk", t("Wildursprungsmarke fehlt — bei {species} Pflicht", species=species), error=True), status_code=303)
 
     records: list[PartRecord] = []
     for i, (count, part, weight, price) in enumerate(zip(counts, parts, weights, prices)):
@@ -297,6 +324,7 @@ async def bulk_print(request: Request):
         part_in = PartIn(
             hunter=hunter, species=species, part=part,
             weight_kg=weight, price_per_kg=price,
+            killed_on=killed_on, mark=mark,
             ingredients=part_ingredients(species, part),
         )
         for _ in range(int(count)):
@@ -336,11 +364,16 @@ def create_part(
     part: str = Form(...),
     weight_kg: str = Form(""),
     price_per_kg: str = Form(""),
+    killed_on: str = Form(""),
+    mark: str = Form(""),
     printer: str = Form(""),
 ):
+    if mark_missing(species, mark):
+        return RedirectResponse(_msg_url("/", t("Wildursprungsmarke fehlt — bei {species} Pflicht", species=species), error=True), status_code=303)
     part_in = PartIn(
         hunter=hunter, species=species, part=part,
         weight_kg=weight_kg, price_per_kg=price_per_kg,
+        killed_on=killed_on, mark=mark,
         ingredients=part_ingredients(species, part),
     )
     record = PartRecord.from_input(part_in, printed=False)
@@ -359,6 +392,67 @@ def create_part(
     else:
         msg = t("Gedruckt & gespeichert")
     return RedirectResponse(url=_msg_url("/", msg, error), status_code=303)
+
+
+def _amount_text(record: PartRecord) -> str:
+    """The amount as typed into the Stock row: "1,250", "5x" or empty."""
+    if record.pieces is not None:
+        return f"{record.pieces}x"
+    return format_de(record.weight_kg, 3) if record.weight_kg is not None else ""
+
+
+def _price_text(record: PartRecord) -> str:
+    """The price as typed: per kg for weighed parts, fixed for counted ones."""
+    price = record.total_price if record.pieces is not None else record.price_per_kg
+    return format_de(price, 2) if price is not None else ""
+
+
+def _row_json(record: PartRecord) -> dict:
+    """What the Stock row shows after an edit, formatted for the UI language."""
+    return {
+        "ok": True,
+        "amount": format_amount(record),
+        "amount_input": _amount_text(record),
+        "price_input": _price_text(record),
+        "price_per_kg": format_de(record.price_per_kg),
+        "total_price": format_de(record.total_price),
+        "weight_kg": record.weight_kg or 0,
+        "total": record.total_price or 0,
+        "pieces": record.pieces is not None,
+        "killed": format_date(date.fromisoformat(record.killed)),
+        "killed_input": record.killed,
+        "unweighed": record.weight_kg is None and record.pieces is None,
+        "unpriced": record.total_price is None,
+        "reprint_question": t("2 Etiketten nachdrucken?") + "\n\n"
+            + f"{record.species} – {record.part}, {format_amount(record)}",
+    }
+
+
+templates.env.globals["amount_text"] = _amount_text
+templates.env.globals["price_text"] = _price_text
+
+
+@app.post("/parts/{part_uuid}/edit")
+def edit_part(part_uuid: str, weight_kg: str = Form(""), price_per_kg: str = Form(""), killed_on: str = Form("")):
+    """Correct amount and price of an entry, from the Stock row. Everything
+    else stays as entered; the uuid and date too, so the label on the package
+    still scans. Reprinting afterwards prints labels for the same uuid."""
+    record = registry.get(part_uuid)
+    if record is None:
+        return JSONResponse({"ok": False, "error": t("Teilstück nicht gefunden")}, status_code=404)
+    if record.consumed_at is not None:
+        return JSONResponse({"ok": False, "error": t("Bereits entnommen — nicht mehr änderbar")}, status_code=409)
+    try:
+        part_in = PartIn(
+            hunter=record.hunter, species=record.species, part=record.part,
+            weight_kg=weight_kg, price_per_kg=price_per_kg, killed_on=killed_on,
+            ingredients=record.ingredients,
+        )
+    except (ValidationError, ValueError) as e:
+        return JSONResponse({"ok": False, "error": _invalid_message(e)}, status_code=400)
+    record = record.edited(part_in)
+    registry.update(record)
+    return JSONResponse(_row_json(record))
 
 
 @app.post("/parts/{part_uuid}/reprint")
@@ -605,6 +699,7 @@ def settings_page(request: Request, msg: str = "", species: str = "", tab: str =
             },
             "paperless_on": paperless.enabled(),
             "paperless_url": paperless.base_url(),
+            "has_logo": LOGO_PATH.exists(),
         },
     )
 
@@ -668,6 +763,54 @@ def settings_hunter_delete(name: str = Form(""), original_name: str = Form("")):
         return RedirectResponse(url="/settings?tab=general&msg=" + quote(t("Der letzte Jäger kann nicht gelöscht werden")), status_code=303)
     config.hunters.remove(hunter)
     return _settings_general(t("Jäger „{name}“ gelöscht", name=name))
+
+
+LOGO_MAX_PX = 600        # 25 mm on the invoice -> ~600 dpi: sharp in print, ~130 KB per PDF
+LOGO_MAX_UPLOAD = 15 * 1024 * 1024
+
+
+def _prepare_logo(data: bytes) -> Image.Image:
+    """Crop away the empty margin and shrink to print size. Grey + alpha is
+    enough for a one-colour logo and keeps every invoice PDF small."""
+    img = Image.open(io.BytesIO(data))
+    img.load()
+    img = img.convert("RGBA")
+    # the margin often isn't fully transparent: ignore nearly invisible pixels
+    box = img.getchannel("A").point(lambda a: 255 if a > 24 else 0).getbbox()
+    if box is None:
+        raise ValueError("empty image")
+    img = img.crop(box)
+    img.thumbnail((LOGO_MAX_PX, LOGO_MAX_PX), Image.LANCZOS)
+    return img.convert("LA")
+
+
+@app.post("/settings/logo")
+async def settings_logo_upload(logo: UploadFile = File(...)):
+    data = await logo.read(LOGO_MAX_UPLOAD + 1)
+    if not data or len(data) > LOGO_MAX_UPLOAD:
+        return RedirectResponse(_msg_url("/settings", t("Bild zu groß (höchstens 15 MB)"), error=True) + "&tab=general", status_code=303)
+    try:
+        img = _prepare_logo(data)
+    except Exception:
+        return RedirectResponse(_msg_url("/settings", t("Keine lesbare Bilddatei — PNG mit transparentem Hintergrund verwenden"), error=True) + "&tab=general", status_code=303)
+    LOGO_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = LOGO_PATH.with_suffix(".png.tmp")
+    img.save(tmp, format="PNG", optimize=True)
+    tmp.replace(LOGO_PATH)
+    return _settings_general(t("Logo gespeichert — es steht ab jetzt auf jeder Rechnung"))
+
+
+@app.post("/settings/logo/delete")
+def settings_logo_delete():
+    LOGO_PATH.unlink(missing_ok=True)
+    return _settings_general(t("Logo entfernt"))
+
+
+@app.get("/settings/logo.png")
+def settings_logo_image():
+    if not LOGO_PATH.exists():
+        raise HTTPException(status_code=404)
+    return FileResponse(LOGO_PATH, media_type="image/png", headers={"Cache-Control": "no-cache"})
 
 
 @app.post("/settings/label-language")

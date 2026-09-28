@@ -131,7 +131,8 @@ def render_info_label(record: PartRecord, hunter: Hunter | None = None, lang: st
 
     # 2x2 grid: Gewicht / Preis/kg then Datum / Preis. Weight and price depend on
     # each other (total = weight x price), so both drop out if either is unset.
-    date_cell = (t("Datum", lang), _format_date(record.created_at, lang), False)
+    # the kill date, not the print date: that's what the buyer wants to know
+    date_cell = (t("Erlegt", lang), _format_date(record.killed, lang), False)
     price = t("Preis", lang)
     if record.pieces is not None:
         # Counted parts: the piece count is on the QR label, and the price is
@@ -223,12 +224,21 @@ def render_qr_label(record: PartRecord, best_before_months: int = 12, lang: str 
         lines = [record.species, record.part]
     if record.pieces is not None or record.weight_kg is not None:
         lines.append(format_amount(record, lang))
-    lines.append(t("Mind. haltbar bis: {date}", lang, date=_best_before(record.created_at, best_before_months, lang)))
+    # Wildursprungsmarke: the carcass tag, so a cut can be traced back to
+    # its animal (trichinae inspection). Bold — it's what an inspector looks for.
+    mark_line = t("Wildmarke: {number}", lang, number=record.mark) if record.mark else None
+    if mark_line:
+        lines.append(mark_line)
+    lines.append(t("Mind. haltbar bis: {date}", lang, date=_best_before(record.killed, best_before_months, lang)))
 
-    y = MARGIN + 120
+    # With the mark there is one line more than the space was made for:
+    # tighten the spacing instead of running into the UUID at the bottom.
+    step = 48 if len(lines) <= 4 else 40
+    y = MARGIN + 120 if len(lines) <= 4 else MARGIN + 104
     for line in lines:
-        draw.text((text_x, y), line, font=_fit_text(draw, line, 32, text_width, min_size=22), fill=0)
-        y += 48
+        font = _fit_text(draw, line, 32, text_width, min_size=22, bold=line is mark_line)
+        draw.text((text_x, y), line, font=font, fill=0)
+        y += step
 
     uuid_font = _font(20)
     draw.text((text_x, HEIGHT - MARGIN - 28), record.uuid, font=uuid_font, fill=0)

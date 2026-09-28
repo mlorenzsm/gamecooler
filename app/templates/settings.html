@@ -63,6 +63,24 @@
   </form>
 </section>
 
+<section class="settings-card">
+  <h3>{{ icon('file-text') }}{{ t("Rechnungslogo") }}</h3>
+  <p class="hint">{{ t("Steht oben links auf jeder Rechnung. Am besten ein PNG mit transparentem Hintergrund; es wird zugeschnitten und verkleinert.") }}</p>
+  {% if has_logo %}
+  <div class="logo-preview"><img src="/settings/logo.png?v={{ range(100000) | random }}" alt="{{ t("Rechnungslogo") }}"></div>
+  {% endif %}
+  <form method="post" action="/settings/logo" enctype="multipart/form-data" class="inline-form">
+    <input type="file" name="logo" accept="image/png,image/jpeg,image/webp" required aria-label="{{ t("Rechnungslogo") }}">
+    <button class="small" type="submit">{{ icon('save') }}{{ t("Hochladen") if not has_logo else t("Ersetzen") }}</button>
+  </form>
+  {% if has_logo %}
+  <form method="post" action="/settings/logo/delete" class="mt-4"
+        data-confirm="{{ t("Logo entfernen?") }}" data-confirm-danger data-confirm-ok="{{ t("Entfernen") }}">
+    <button class="small danger" type="submit">{{ icon('trash-2') }}{{ t("Entfernen") }}</button>
+  </form>
+  {% endif %}
+</section>
+
 {% if paperless_on %}
 {# Only shown when PAPERLESS_URL and PAPERLESS_TOKEN are set (docs/paperless.md).
    The token itself is never shown. #}
