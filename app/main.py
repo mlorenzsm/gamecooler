@@ -831,8 +831,19 @@ def settings_species_add(name: str = Form(...), copy_from: str = Form("")):
     config.species.append(Species(
         name=name,
         parts={n: p.model_copy() for n, p in source.parts.items()} if source else {},
+        # a species copied from one that needs a tag (e.g. another boar) needs one too
+        needs_mark=source.mark_required if source else None,
     ))
     return _settings_redirect(t("Wildart „{name}“ hinzugefügt", name=name), name)
+
+
+@app.post("/settings/species/mark")
+def settings_species_mark(species: str = Form(...), needs_mark: str = Form("")):
+    sp = _species_or_404(species)
+    sp.needs_mark = bool(needs_mark)
+    msg = (t("{species}: Wildursprungsmarke ist jetzt Pflicht", species=sp.name) if sp.needs_mark
+           else t("{species}: keine Wildursprungsmarke nötig", species=sp.name))
+    return _settings_redirect(msg, sp.name)
 
 
 @app.post("/settings/species/rename")
@@ -844,6 +855,9 @@ def settings_species_rename(original_name: str = Form(...), name: str = Form(...
     if config.find_species(name):
         return _settings_error(sp.name, t("Wildart existiert bereits"))
     # Existing records keep the old name — they describe what was printed.
+    # Pin the mark rule first: the default (on for "Wildschwein") goes by
+    # name, and a rename must not switch it off silently.
+    sp.needs_mark = sp.mark_required
     sp.name = name
     return _settings_redirect(t("Wildart „{old}“ heißt jetzt „{name}“", old=original_name, name=name), name)
 
