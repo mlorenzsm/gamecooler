@@ -42,6 +42,9 @@ class PrinterTarget(BaseModel):
     label: str = "39x90"
     backend: str = "pyusb"
     identifier: str = "usb://0x04f9:0x209b"
+    # Cut once after each info + QR pair instead of after every label, so a
+    # part's two labels come out as one strip. false = cut every label.
+    cut_per_set: bool = True
 
 
 PART_KINDS = {"cut": "Teilstücke", "prep": "Zubereitungen"}
