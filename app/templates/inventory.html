@@ -52,7 +52,7 @@
 <table class="responsive inventory">
   <tr>
     <th><input type="checkbox" id="check-all" title="{{ t("Alle auswählen") }}"></th>
-    <th>{{ t("Datum") }}</th><th>{{ t("Wildart") }}</th><th>{{ t("Teilstück") }}</th><th>{{ t("Jäger") }}</th>
+    <th>{{ t("Erlegt") }}</th><th>{{ t("Wildart") }}</th><th>{{ t("Teilstück") }}</th><th>{{ t("Jäger") }}</th>
     <th class="num">{{ t("Menge") }}</th><th class="num">€/kg</th><th class="num">€</th><th>ID</th><th>{{ t("Status") }}</th><th></th>
   </tr>
   {% for r in records %}
@@ -64,7 +64,7 @@
       data-weight="{{ r.weight_kg if r.weight_kg is not none else 0 }}"
     data-price="{{ r.total_price if r.total_price is not none else 0 }}"
     data-unweighed="{{ 1 if r.weight_kg is none and r.pieces is none else 0 }}"
-      data-search="{{ (r.species ~ ' ' ~ r.part ~ ' ' ~ r.hunter ~ ' ' ~ r.uuid ~ ' ' ~ r.created_at[:10] ~ ' ' ~ (r.created_at | date)) | lower }}">
+      data-search="{{ (r.species ~ ' ' ~ r.part ~ ' ' ~ r.hunter ~ ' ' ~ r.uuid ~ ' ' ~ r.killed ~ ' ' ~ (r.killed | date) ~ ' ' ~ (r.mark or '')) | lower }}">
     {# c-* classes place the cells in the phone layout (app.css). Not the
        data-label: that is translated, so it can't be a selector. #}
     <td class="c-pick" data-label="">
@@ -72,9 +72,19 @@
       <input type="checkbox" class="pick" name="uuid" value="{{ r.uuid }}" form="consume-form">
       {% endif %}
     </td>
-    <td class="c-date" data-label="{{ t("Datum") }}">{{ r.created_at | date }}</td>
+    {# Kill date (older entries: the day they were entered). Editable like
+       amount and price; best-before counts from it. #}
+    {% if r.consumed_at %}
+    <td class="c-date" data-label="{{ t("Erlegt") }}">{{ r.killed | date }}</td>
+    {% else %}
+    <td class="c-date c-edit" data-label="{{ t("Erlegt") }}">
+      <span class="cell-text">{{ r.killed | date }}</span>
+      <input class="cell-input cell-date" type="date" name="killed_on" value="{{ r.killed }}" max="{{ today() }}"
+             aria-label="{{ t("Erlegt") }} {{ r.part }}">
+    </td>
+    {% endif %}
     <td class="c-species" data-label="{{ t("Wildart") }}">{{ r.species }}</td>
-    <td class="c-part" data-label="{{ t("Teilstück") }}">{{ r.part }}</td>
+    <td class="c-part" data-label="{{ t("Teilstück") }}">{{ r.part }}{% if r.mark %}<span class="mark">{{ t("Wildmarke {number}", number=r.mark) }}</span>{% endif %}</td>
     {# Erzwingt auf dem Telefon den Umbruch nach der Titelzeile. Am Desktop
        ausgeblendet, damit die Spalten unverändert bleiben. #}
     <td class="row-break" aria-hidden="true"></td>
@@ -105,7 +115,7 @@
     <td class="c-status" data-label="{{ t("Status") }}">{% if r.consumed_at %}<span class="badge">{{ t("entnommen {date}", date=r.consumed_at | date) }}</span>{% else %}<span class="badge frost">{{ icon('snowflake') }}{{ t("im Bestand") }}</span>{% endif %}</td>
     <td class="c-actions" data-label="">
       {% if not r.consumed_at %}
-      <button type="button" class="small icon-only edit-toggle" title="{{ t("Menge und Preis ändern") }}" aria-label="{{ t("Menge und Preis ändern") }}" aria-expanded="false">{{ icon('pencil') }}</button>
+      <button type="button" class="small icon-only edit-toggle" title="{{ t("Menge, Preis und Erlegt ändern") }}" aria-label="{{ t("Menge, Preis und Erlegt ändern") }}" aria-expanded="false">{{ icon('pencil') }}</button>
       {% endif %}
       <form method="post" action="/parts/{{ r.uuid }}/reprint"
             data-confirm="{{ t("2 Etiketten nachdrucken?") ~ "\n\n" ~ r.species ~ " – " ~ r.part ~ ", " ~ (r | amount) }}" data-confirm-ok="{{ t("Nachdrucken") }}">
@@ -220,6 +230,8 @@ async function saveRow(row) {
     const data = await resp.json();
     if (!data.ok) throw new Error(data.error);
     row.querySelector('.c-amount .cell-text').textContent = data.amount;
+    row.querySelector('.c-date .cell-text').textContent = data.killed;
+    row.querySelector('[name=killed_on]').value = data.killed_input;
     row.querySelector('.c-per-kg .cell-text').textContent = data.price_per_kg;
     row.querySelector('[name=weight_kg]').value = data.amount_input;
     row.querySelector('[name=price_per_kg]').value = data.price_input;

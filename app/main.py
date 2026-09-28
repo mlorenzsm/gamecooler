@@ -87,6 +87,7 @@ def species_json(species: list[Species]) -> dict:
                 for name, p in group.items()
             },
             "presets": {pr.name: [i.model_dump() for i in pr.items] for pr in s.presets},
+            "needs_mark": s.mark_required,
         }
         for s in species
     }
@@ -131,6 +132,7 @@ def icon(name: str, label: str = "") -> Markup:
 
 
 templates.env.globals["icon"] = icon
+templates.env.globals["today"] = lambda: date.today().isoformat()
 templates.env.filters["date"] = date_filter
 # {"cut": "Teilstücke", ...} with the headings in the UI language
 templates.env.filters["map_kinds"] = lambda kinds: {k: t(v) for k, v in kinds.items()}
@@ -177,14 +179,26 @@ def invalid_input(request: Request, exc: ValidationError):
     # stay visible instead of being disguised as a typo.
     if exc.title != "PartIn":
         raise exc
-    return RedirectResponse(
-        url="/?kind=error&msg=" + quote(t("Ungültige Eingabe — Gewicht als 1,25 oder Stückzahl als 5x")),
-        status_code=303,
-    )
+    back = "/bulk" if request.url.path == "/bulk" else "/"
+    return RedirectResponse(_msg_url(back, _invalid_message(exc), error=True), status_code=303)
+
+
+def _invalid_message(exc: Exception) -> str:
+    """What was wrong with a part's input, by the field that failed."""
+    fields = {e["loc"][0] for e in exc.errors() if e.get("loc")} if isinstance(exc, ValidationError) else set()
+    if "killed_on" in fields:
+        return t("Ungültiges Erlegungsdatum — nicht in der Zukunft")
+    return t("Ungültige Eingabe — Gewicht als 1,25 oder Stückzahl als 5x")
 
 
 def find_hunter(name: str) -> Hunter | None:
     return next((h for h in config.hunters if h.name == name), None)
+
+
+def mark_missing(species: str, mark: str) -> bool:
+    """A species that needs a Wildursprungsmarke (Wildschwein) without one."""
+    sp = config.find_species(species)
+    return bool(sp and sp.mark_required and not mark.strip())
 
 
 def part_ingredients(species: str, part: str) -> str | None:
@@ -241,14 +255,21 @@ def preview(
     part: str,
     weight_kg: str = "",
     price_per_kg: str = "",
+    killed_on: str = "",
+    mark: str = "",
     type: str = "info",
 ):
-    part_in = PartIn(
-        hunter=hunter, species=species, part=part,
-        weight_kg=weight_kg,
-        price_per_kg=price_per_kg,
-        ingredients=part_ingredients(species, part),
-    )
+    try:
+        part_in = PartIn(
+            hunter=hunter, species=species, part=part,
+            weight_kg=weight_kg, price_per_kg=price_per_kg,
+            killed_on=killed_on, mark=mark,
+            ingredients=part_ingredients(species, part),
+        )
+    except (ValidationError, ValueError):
+        # half-typed or future date: preview without it rather than a broken image
+        part_in = PartIn(hunter=hunter, species=species, part=part, weight_kg=weight_kg,
+                         price_per_kg=price_per_kg, mark=mark, ingredients=part_ingredients(species, part))
     record = PartRecord.from_input(part_in, printed=False)
     img = (
         render_info_label(record, find_hunter(hunter), config.label_language)
@@ -282,6 +303,11 @@ async def bulk_print(request: Request):
     no_prices = form.getlist("no_price")
     no_price_rows = {int(i) for i in no_prices}
     printer = config.printer(form.get("printer"))
+    # one animal per bulk run: kill date and mark apply to every row
+    killed_on = str(form.get("killed_on", ""))
+    mark = str(form.get("mark", ""))
+    if mark_missing(species, mark):
+        return RedirectResponse(_msg_url("/bulk", t("Wildursprungsmarke fehlt — bei {species} Pflicht", species=species), error=True), status_code=303)
 
     records: list[PartRecord] = []
     for i, (count, part, weight, price) in enumerate(zip(counts, parts, weights, prices)):
@@ -298,6 +324,7 @@ async def bulk_print(request: Request):
         part_in = PartIn(
             hunter=hunter, species=species, part=part,
             weight_kg=weight, price_per_kg=price,
+            killed_on=killed_on, mark=mark,
             ingredients=part_ingredients(species, part),
         )
         for _ in range(int(count)):
@@ -337,11 +364,16 @@ def create_part(
     part: str = Form(...),
     weight_kg: str = Form(""),
     price_per_kg: str = Form(""),
+    killed_on: str = Form(""),
+    mark: str = Form(""),
     printer: str = Form(""),
 ):
+    if mark_missing(species, mark):
+        return RedirectResponse(_msg_url("/", t("Wildursprungsmarke fehlt — bei {species} Pflicht", species=species), error=True), status_code=303)
     part_in = PartIn(
         hunter=hunter, species=species, part=part,
         weight_kg=weight_kg, price_per_kg=price_per_kg,
+        killed_on=killed_on, mark=mark,
         ingredients=part_ingredients(species, part),
     )
     record = PartRecord.from_input(part_in, printed=False)
@@ -387,6 +419,8 @@ def _row_json(record: PartRecord) -> dict:
         "weight_kg": record.weight_kg or 0,
         "total": record.total_price or 0,
         "pieces": record.pieces is not None,
+        "killed": format_date(date.fromisoformat(record.killed)),
+        "killed_input": record.killed,
         "unweighed": record.weight_kg is None and record.pieces is None,
         "unpriced": record.total_price is None,
         "reprint_question": t("2 Etiketten nachdrucken?") + "\n\n"
@@ -399,7 +433,7 @@ templates.env.globals["price_text"] = _price_text
 
 
 @app.post("/parts/{part_uuid}/edit")
-def edit_part(part_uuid: str, weight_kg: str = Form(""), price_per_kg: str = Form("")):
+def edit_part(part_uuid: str, weight_kg: str = Form(""), price_per_kg: str = Form(""), killed_on: str = Form("")):
     """Correct amount and price of an entry, from the Stock row. Everything
     else stays as entered; the uuid and date too, so the label on the package
     still scans. Reprinting afterwards prints labels for the same uuid."""
@@ -411,13 +445,11 @@ def edit_part(part_uuid: str, weight_kg: str = Form(""), price_per_kg: str = For
     try:
         part_in = PartIn(
             hunter=record.hunter, species=record.species, part=record.part,
-            weight_kg=weight_kg, price_per_kg=price_per_kg,
+            weight_kg=weight_kg, price_per_kg=price_per_kg, killed_on=killed_on,
             ingredients=record.ingredients,
         )
-    except (ValidationError, ValueError):
-        return JSONResponse(
-            {"ok": False, "error": t("Ungültige Eingabe — Gewicht als 1,25 oder Stückzahl als 5x")}, status_code=400
-        )
+    except (ValidationError, ValueError) as e:
+        return JSONResponse({"ok": False, "error": _invalid_message(e)}, status_code=400)
     record = record.edited(part_in)
     registry.update(record)
     return JSONResponse(_row_json(record))

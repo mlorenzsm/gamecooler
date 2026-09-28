@@ -28,6 +28,13 @@
   // it still exists. Uses textContent, so part names can't inject markup.
   // headings translated for the UI language; the keys (cut/prep) are data
   const PART_KINDS = {{ PART_KINDS | map_kinds | tojson }};
+  // YYYY-MM-DD -> the UI's date format (25.09.2026 / 25 Sep 2026)
+  function fmtDate(iso) {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(document.documentElement.lang === 'de' ? 'de-DE' : 'en-GB',
+      document.documentElement.lang === 'de' ? { day: '2-digit', month: '2-digit', year: 'numeric' } : { day: 'numeric', month: 'short', year: 'numeric' });
+  }
   function fillPartSelect(select, parts, extra = []) {
     const current = select.value;
     select.replaceChildren();

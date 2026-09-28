@@ -7,6 +7,7 @@
 {% if config.dry_run %}<div class="dry-run">{{ t("Testmodus aktiv (dry_run) – es wird nicht gedruckt.") }}</div>{% endif %}
 
 {# Die Vorgaben gehören zur Wildart; die Liste wird per Script gefüllt. #}
+<script>const SPECIES = {{ config.species | species_json | tojson }};</script>
 <form method="post" action="/bulk" id="bulk-form" data-confirm-fn="bulkQuestion" data-confirm-ok="{{ t("Drucken") }}">
   <div class="list-group">
     <label class="list-row"><span class="list-label">{{ t("Jäger") }}</span>
@@ -28,6 +29,7 @@
       </select>
     </label>
     {% endif %}
+    {% include "_animal_fields.html" %}
     {# Presets belong to the species; the list is filled by the script and
        the row is hidden when the species has none. Not a form field. #}
     <div class="list-row" id="preset-bar">
@@ -72,9 +74,10 @@ const T = {{ {
   "Wildart wechseln? Die Zeilen werden für die neue Wildart neu angelegt.": t("Wildart wechseln? Die Zeilen werden für die neue Wildart neu angelegt."),
   "Alle Zeilen löschen?": t("Alle Zeilen löschen?"),
   "Vorgabe „{name}“ übernehmen?": t("Vorgabe „{name}“ übernehmen?"),
+  "Erlegt {date}": t("Erlegt {date}"),
+  "Wildmarke {number}": t("Wildmarke {number}"),
 } | tojson }};
 const DEC = {{ decimal_separator() | tojson }};
-const SPECIES = {{ config.species | species_json | tojson }};
 const speciesSelect = document.getElementById('species-select');
 // Parts and presets belong to the selected species.
 function currentParts() { return SPECIES[speciesSelect.value]?.parts || {}; }
@@ -155,7 +158,10 @@ function bulkQuestion() {
   renumberNoPrice();
   const summary = document.getElementById('summary').textContent;
   if (!summary) return T['Drucken?'];
-  return `${T['Wirklich drucken?']}\n\n${summary}`;
+  const d = new FormData(document.getElementById('bulk-form'));
+  const animal = [T['Erlegt {date}'].replace('{date}', fmtDate(d.get('killed_on')))];
+  if (d.get('mark')) animal.push(T['Wildmarke {number}'].replace('{number}', d.get('mark')));
+  return `${T['Wirklich drucken?']}\n\n${summary}\n${animal.join(' · ')}`;
 }
 
 function updateSummary() {

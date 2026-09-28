@@ -156,11 +156,21 @@ class Species(BaseModel):
     # Per species too: a Wildschwein-Salsiccia and a Reh-Salsiccia are
     # different recipes, and a part can only link a recipe of its own species.
     recipes: list[Recipe] = []
+    # Wildursprungsmarke required on every label of this species. On for
+    # Wildschwein (trichinae inspection) by default; a setting, so a renamed
+    # or added species can opt in too.
+    needs_mark: bool | None = None
 
     @field_validator("parts", mode="before")
     @classmethod
     def _scalar_is_price(cls, v):
         return _parts_dict(v)
+
+    @property
+    def mark_required(self) -> bool:
+        if self.needs_mark is not None:
+            return self.needs_mark
+        return self.name.casefold() == "wildschwein"
 
     def find_recipe(self, name: str | None) -> Recipe | None:
         return next((r for r in self.recipes if r.name == name), None) if name else None
@@ -363,7 +373,7 @@ def save_config(config: Config) -> None:
                 "parts": {name: _part_yaml(p) for name, p in s.parts.items()},
                 "presets": [p.model_dump() for p in s.presets],
                 "recipes": [_recipe_yaml(r) for r in s.recipes],
-            }
+            } | ({"needs_mark": s.needs_mark} if s.needs_mark is not None else {})
             for s in config.species
         ],
         "printers": [p.model_dump() for p in config.printers],

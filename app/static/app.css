@@ -752,7 +752,7 @@ nav.tabbar { view-transition-name: tabbar; }       /* the bar stays put while th
 @layer components {
   td.c-actions { white-space: nowrap; }
   td.c-actions > * + * { margin-left: var(--s-1); }
-  table.inventory .cell-input { width: 6.5rem; min-height: 36px; padding: 0.3rem 0.5rem; text-align: right;
+  table.inventory .cell-input { width: 5.2rem; min-height: 36px; padding: 0.3rem 0.4rem; text-align: right;
                                 font-size: var(--text-sm); font-variant-numeric: tabular-nums;
                                 border-color: transparent; background: transparent; }
   table.inventory tr:hover .cell-input { border-color: var(--line); background: var(--surface); }
@@ -763,6 +763,15 @@ nav.tabbar { view-transition-name: tabbar; }       /* the bar stays put while th
   table.inventory tr.has-error .cell-input { border-color: var(--danger); }
   table.inventory td.c-price { position: relative; }
   table.inventory td.c-edit { white-space: nowrap; }
+  /* the date picker's icon only on hover/focus: saves the width the table needs */
+  table.inventory .cell-date { width: 7.4rem; text-align: left; padding-inline: 0.2rem; }
+  /* desktop: reprint as an icon like on the phone — its label cost a column's width */
+  table.inventory .btn-label { display: none; }
+  table.inventory td.c-actions button { width: 36px; padding: 0; }
+  table.inventory th, table.inventory td { padding-inline: 0.45rem; }
+  table.inventory .cell-date::-webkit-calendar-picker-indicator { opacity: 0; margin-left: 0; }
+  table.inventory tr:hover .cell-date::-webkit-calendar-picker-indicator, table.inventory .cell-date:focus::-webkit-calendar-picker-indicator { opacity: 0.6; }
+  table.inventory td.c-part .mark { display: block; font-size: var(--text-xs); color: var(--muted); font-weight: 400; white-space: nowrap; }
   .cell-note { display: none; margin-left: var(--s-1); font-size: var(--text-xs); color: var(--muted); }
   td.is-pieces .cell-note { display: inline; }
   .row-flash { position: absolute; right: 0; top: 100%; z-index: 5; margin-top: -4px; white-space: nowrap;
@@ -776,11 +785,17 @@ nav.tabbar { view-transition-name: tabbar; }       /* the bar stays put while th
     table.inventory .cell-input { display: none; }
     table.inventory .edit-toggle { display: inline-flex; }
     table.inventory td.c-per-kg.c-edit { display: none; }
+    table.inventory td.c-date.c-edit .cell-input { display: none; }
     /* open: a third line with both inputs, labelled, full width */
     table.inventory tr.editing td.c-amount.c-edit, table.inventory tr.editing td.c-per-kg.c-edit {
       display: flex; flex-direction: column; align-items: stretch; gap: 2px; grid-row: 3; margin-top: var(--s-2); }
     table.inventory tr.editing td.c-amount.c-edit { grid-column: 2 / 4; }
     table.inventory tr.editing td.c-per-kg.c-edit { grid-column: 4 / 7; }
+    /* the kill date gets its own line under amount and price */
+    table.inventory tr.editing td.c-date.c-edit { display: flex; flex-direction: column; align-items: stretch; gap: 2px;
+                                                  grid-row: 4; grid-column: 2 / 7; margin-top: var(--s-2); }
+    table.inventory tr.editing td.c-date.c-edit .cell-input { display: block; }
+    table.inventory tr.editing td.c-date.c-edit::before { content: attr(data-label); display: block; font-size: var(--text-xs); color: var(--muted); }
     table.inventory tr.editing td.c-edit::before { content: attr(data-label); display: block; font-size: var(--text-xs); color: var(--muted); }
     /* the open row must not be wider than the card */
     table.inventory tr.editing td.c-edit { min-width: 0; white-space: normal; }

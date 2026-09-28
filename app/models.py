@@ -1,6 +1,6 @@
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from pydantic import BaseModel, field_validator, model_validator
 
@@ -48,6 +48,28 @@ class PartIn(BaseModel):
     # whole part — there is no weight to multiply it with.
     price_per_kg: float | None = None
     ingredients: str | None = None
+    # When the animal was shot ("Erlegt" on the label), as YYYY-MM-DD. Empty
+    # means today. Best-before counts from it.
+    killed_on: str | None = None
+    # Wildursprungsmarke: the tag number on the carcass (required for
+    # Wildschwein, see Species.needs_mark). Printed on the QR label.
+    mark: str | None = None
+
+    @field_validator("killed_on", mode="before")
+    @classmethod
+    def _iso_date(cls, v):
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        d = date.fromisoformat(str(v).strip())           # ValueError -> invalid input
+        if d > date.today():
+            raise ValueError("kill date in the future")     # message: main._invalid_message
+        return d.isoformat()
+
+    @field_validator("mark", mode="before")
+    @classmethod
+    def _clean_mark(cls, v):
+        v = " ".join(str(v or "").split())
+        return v or None
 
     @model_validator(mode="before")
     @classmethod
@@ -81,6 +103,15 @@ class PartRecord(BaseModel):
     # Copied from the part's settings when the part is created, so a reprint
     # shows the recipe that was actually used, not whatever it is today.
     ingredients: str | None = None
+    # Date of the kill (YYYY-MM-DD). Older entries don't have it; they fall
+    # back to the day they were entered — see `killed`.
+    killed_on: str | None = None
+    mark: str | None = None                    # Wildursprungsmarke
+
+    @property
+    def killed(self) -> str:
+        """Kill date as YYYY-MM-DD, falling back to the entry date."""
+        return self.killed_on or self.created_at[:10]
 
     @staticmethod
     def _values(part: PartIn) -> dict:
@@ -110,14 +141,21 @@ class PartRecord(BaseModel):
             uuid=str(uuid.uuid4()),
             created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             printed=printed,
+            killed_on=part.killed_on or date.today().isoformat(),
+            mark=part.mark,
             **cls._values(part),
         )
 
     def edited(self, part: PartIn) -> "PartRecord":
         """This entry with corrected details. uuid and created_at stay: the QR
-        code on the printed label points at the uuid, and the date (and the
-        best-before date derived from it) is when the meat went in."""
-        return self.model_copy(update=self._values(part))
+        code on the printed label points at the uuid. Kill date and mark only
+        change when the edit names them — an amount correction keeps both."""
+        update = self._values(part)
+        if part.killed_on:
+            update["killed_on"] = part.killed_on
+        if part.mark:
+            update["mark"] = part.mark
+        return self.model_copy(update=update)
 
 
 def format_de(value: float | None, decimals: int = 2, lang: str | None = None) -> str:

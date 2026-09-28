@@ -15,6 +15,7 @@
   <img id="preview-qr" alt="{{ t("QR-Etikett") }}">
 </div>
 
+<script>const SPECIES = {{ config.species | species_json | tojson }};</script>
 <form class="print-form" method="post" action="/parts" id="part-form" data-confirm-fn="printQuestion" data-confirm-ok="{{ t("Drucken") }}">
   <div class="list-group">
     <label class="list-row"><span class="list-label">{{ t("Jäger") }}</span>
@@ -30,6 +31,10 @@
     <label class="list-row"><span class="list-label">{{ t("Teilstück") }}</span>
       <select name="part" required id="part-select"></select>
     </label>
+  </div>
+
+  <div class="list-group">
+    {% include "_animal_fields.html" %}
     {% if config.printers | length > 1 %}
     <label class="list-row"><span class="list-label">{{ t("Drucker") }}</span>
       <select name="printer">
@@ -71,9 +76,10 @@ const T = {{ {
   "zu {price} €/kg": t("zu {price} €/kg"),
   "2 Etiketten drucken?": t("2 Etiketten drucken?"),
   "Stk.": t("Stk."),
+  "Erlegt {date}": t("Erlegt {date}"),
+  "Wildmarke {number}": t("Wildmarke {number}"),
 } | tojson }};
 const DEC = {{ decimal_separator() | tojson }};
-const SPECIES = {{ config.species | species_json | tojson }};
 const speciesSelect = document.getElementById('species-select');
 const partSelect = document.getElementById('part-select');
 // Parts belong to a species, so the part list follows the species choice.
@@ -123,7 +129,9 @@ function printQuestion() {
   const pieces = (weight || '').match(PIECES);
   if (pieces) details = `${T['{n} Stk.'].replace('{n}', pieces[1])} ` + (price ? T['zu {price} € Festpreis'].replace('{price}', price) : T['ohne Preis']);
   else if (weight) details = `${weight} kg ` + (price ? T['zu {price} €/kg'].replace('{price}', price) : T['ohne Preis']);
-  return `${T['2 Etiketten drucken?']}\n\n${d.get('species')} – ${d.get('part')}, ${details}`;
+  const animal = [T['Erlegt {date}'].replace('{date}', fmtDate(d.get('killed_on')))];
+  if (d.get('mark')) animal.push(T['Wildmarke {number}'].replace('{number}', d.get('mark')));
+  return `${T['2 Etiketten drucken?']}\n\n${d.get('species')} – ${d.get('part')}, ${details}\n${animal.join(' · ')}`;
 }
 
 function showPreview() {
