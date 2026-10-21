@@ -112,14 +112,15 @@ def _post_json(path: str, payload: dict):
     return _request("POST", path, data=json.dumps(payload).encode(), content_type="application/json")
 
 
-def _multipart(fields: list[tuple[str, str]], file_field: str, filename: str, content: bytes) -> tuple[bytes, str]:
+def _multipart(fields: list[tuple[str, str]], file_field: str, filename: str, content: bytes,
+               file_type: str = "application/pdf") -> tuple[bytes, str]:
     boundary = uuid.uuid4().hex
     parts = []
     for name, value in fields:
         parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
     parts.append(
         f'--{boundary}\r\nContent-Disposition: form-data; name="{file_field}"; filename="{filename}"\r\n'
-        f"Content-Type: application/pdf\r\n\r\n".encode() + content + b"\r\n"
+        f"Content-Type: {file_type}\r\n\r\n".encode() + content + b"\r\n"
     )
     parts.append(f"--{boundary}--\r\n".encode())
     return b"".join(parts), f"multipart/form-data; boundary={boundary}"
@@ -237,6 +238,29 @@ def upload_sale(sale_id: str, hunter: Hunter | None, options: PaperlessSettings,
     except Exception as e:                          # never kill the worker
         logger.exception("paperless: unexpected error for sale %s", sale.number)
         _save(sale, status="failed", error=type(e).__name__)
+
+
+def upload_certificate(mark: str, filename: str, content: bytes, file_type: str,
+                       options: PaperlessSettings, lang: str) -> None:
+    """Upload a Trichinenuntersuchung document. Runs as a background task;
+    never raises. Unlike invoices there is no tracked state — the file under
+    data/certificates/ is the source of truth, and Paperless's own duplicate
+    check keeps a retry from filing the same scan twice."""
+    if not enabled():
+        return
+    from .i18n import t
+    try:
+        fields = [
+            ("title", t("Trichinenuntersuchung {mark}", lang, mark=mark)),
+            ("document_type", str(_find_or_create("document_types", "Trichinenuntersuchung"))),
+        ]
+        for tag in options.tags:
+            fields.append(("tags", str(_find_or_create("tags", tag))))
+        body, content_type = _multipart(fields, "document", filename, content, file_type)
+        task_id = _request("POST", "/api/documents/post_document/", data=body, content_type=content_type)
+        logger.info("paperless: certificate %s uploaded, task %s", mark, task_id)
+    except Exception:                               # never kill the worker
+        logger.exception("paperless: certificate upload for %s failed", mark)
 
 
 # What the upload reads, one line per Paperless permission (docs/paperless.md).

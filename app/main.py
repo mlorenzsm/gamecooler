@@ -8,13 +8,16 @@ from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
+# request.form() yields starlette's UploadFile, which fastapi's one subclasses
+# — an isinstance check on a hand-parsed form must use the base class
+from starlette.datastructures import UploadFile as StarletteUploadFile
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
 from PIL import Image
 from pydantic import ValidationError
 
-from . import paperless, registry, sales
+from . import certificates, paperless, registry, sales
 from .config import LOGO_PATH, PART_KINDS, UNITS, Hunter, PartDefaults, Preset, PresetItem, Recipe, RecipeItem, Species, load_config, save_config
 from .i18n import LANGUAGES, decimal_separator, format_date, get_lang, pick_language, reset_lang, set_lang, t
 from .labels import render_info_label, render_qr_label
@@ -26,6 +29,7 @@ from .models import (
     SaleItem,
     format_amount,
     format_de,
+    parse_amount,
     parse_optional_decimal,
 )
 from .pdf import render_sale_pdf
@@ -201,6 +205,33 @@ def mark_missing(species: str, mark: str) -> bool:
     return bool(sp and sp.mark_required and not mark.strip())
 
 
+async def save_certificate(mark: str, upload: StarletteUploadFile | None,
+                           background: BackgroundTasks) -> str | None:
+    """Store a Trichinenuntersuchung for a mark, queue the Paperless copy.
+
+    Returns an error message, or None when there was nothing to do or the
+    file was saved. The document must never block printing — labels are the
+    job, the certificate is a bonus — so the caller appends the error to its
+    redirect message instead of aborting.
+    """
+    if upload is None or not upload.filename or not mark.strip():
+        return None
+    content = await upload.read(certificates.MAX_UPLOAD + 1)
+    if not content:
+        return None
+    if len(content) > certificates.MAX_UPLOAD:
+        return t("Dokument zu groß (höchstens 15 MB)")
+    try:
+        stored = certificates.save(mark, upload.filename, content)
+    except ValueError:
+        return t("Dokument muss PDF, JPG oder PNG sein")
+    if paperless.enabled():
+        background.add_task(paperless.upload_certificate, mark.strip(), stored.name,
+                            content, certificates.ALLOWED[stored.suffix],
+                            config.paperless, config.label_language)
+    return None
+
+
 def part_ingredients(species: str, part: str) -> str | None:
     # A linked recipe wins over typed text, and is read at print time — so a
     # recipe change reaches the next label. The record still keeps a copy, so
@@ -232,6 +263,7 @@ def _inventory_hint(records: list[PartRecord]) -> str:
 @app.get("/inventory")
 def inventory_page(request: Request, msg: str = ""):
     inventory = registry.inventory()
+    records = list(reversed(registry.load_all()))
     return templates.TemplateResponse(
         request,
         "inventory.html",
@@ -239,7 +271,11 @@ def inventory_page(request: Request, msg: str = ""):
             "config": config,
             "msg": msg,
             "active": "inventory",
-            "records": list(reversed(registry.load_all())),
+            "records": records,
+            # marks with a stored Trichinenuntersuchung — checked once per
+            # mark, not per row; one animal means many rows with one mark
+            "certificate_marks": {m for m in {r.mark for r in records if r.mark}
+                                  if certificates.exists(m)},
             "inventory_count": len(inventory),
             "inventory_weight": sum(r.weight_kg for r in inventory if r.weight_kg is not None),
             "inventory_value": sum(r.total_price for r in inventory if r.total_price is not None),
@@ -292,7 +328,7 @@ def bulk_form(request: Request, msg: str = ""):
 
 
 @app.post("/bulk")
-async def bulk_print(request: Request):
+async def bulk_print(request: Request, background: BackgroundTasks):
     form = await request.form()
     hunter = form["hunter"]
     species = form["species"]
@@ -308,6 +344,9 @@ async def bulk_print(request: Request):
     mark = str(form.get("mark", ""))
     if mark_missing(species, mark):
         return RedirectResponse(_msg_url("/bulk", t("Wildursprungsmarke fehlt — bei {species} Pflicht", species=species), error=True), status_code=303)
+    certificate = form.get("certificate")
+    cert_error = await save_certificate(
+        mark, certificate if isinstance(certificate, StarletteUploadFile) else None, background)
 
     records: list[PartRecord] = []
     for i, (count, part, weight, price) in enumerate(zip(counts, parts, weights, prices)):
@@ -354,11 +393,14 @@ async def bulk_print(request: Request):
         msg = t("{n} Teilstücke gespeichert (Testmodus, nicht gedruckt)", n=n)
     else:
         msg = t("{n} Teilstücke ({labels} Etiketten) gedruckt & gespeichert", n=n, labels=2 * n)
-    return RedirectResponse(url=_msg_url("/", msg, error), status_code=303)
+    if cert_error:
+        msg = f"{msg} — {cert_error}"
+    return RedirectResponse(url=_msg_url("/", msg, error or bool(cert_error)), status_code=303)
 
 
 @app.post("/parts")
-def create_part(
+async def create_part(
+    background: BackgroundTasks,
     hunter: str = Form(...),
     species: str = Form(...),
     part: str = Form(...),
@@ -367,9 +409,11 @@ def create_part(
     killed_on: str = Form(""),
     mark: str = Form(""),
     printer: str = Form(""),
+    certificate: UploadFile | None = File(None),
 ):
     if mark_missing(species, mark):
         return RedirectResponse(_msg_url("/", t("Wildursprungsmarke fehlt — bei {species} Pflicht", species=species), error=True), status_code=303)
+    cert_error = await save_certificate(mark, certificate, background)
     part_in = PartIn(
         hunter=hunter, species=species, part=part,
         weight_kg=weight_kg, price_per_kg=price_per_kg,
@@ -391,7 +435,9 @@ def create_part(
         msg = t("Gespeichert (Testmodus, nicht gedruckt)")
     else:
         msg = t("Gedruckt & gespeichert")
-    return RedirectResponse(url=_msg_url("/", msg, error), status_code=303)
+    if cert_error:
+        msg = f"{msg} — {cert_error}"
+    return RedirectResponse(url=_msg_url("/", msg, error or bool(cert_error)), status_code=303)
 
 
 def _amount_text(record: PartRecord) -> str:
@@ -518,6 +564,21 @@ async def consume_many(request: Request):
     )
 
 
+@app.get("/certificates/{mark}/exists")
+def certificate_exists(mark: str):
+    """For the print forms: shows the "Dokument vorhanden" link live."""
+    return JSONResponse({"exists": certificates.exists(mark)})
+
+
+@app.get("/certificates/{mark}")
+def certificate_view(mark: str):
+    stored = certificates.path(mark)
+    if stored is None:
+        raise HTTPException(status_code=404, detail=t("Kein Dokument zu dieser Wildmarke"))
+    return FileResponse(stored, media_type=certificates.ALLOWED[stored.suffix],
+                        headers={"Content-Disposition": f'inline; filename="{stored.name}"'})
+
+
 @app.post("/sell")
 async def sell_form(request: Request):
     form = await request.form()
@@ -566,6 +627,30 @@ async def sell_confirm(request: Request, background: BackgroundTasks):
                 pieces=record.pieces,
                 price_per_kg=record.price_per_kg,
                 total_price=total,
+                mark=record.mark or "",
+            )
+        )
+    # Custom rows: positions sold without a label (not in stock). They travel
+    # in their own fields, grouped by position like uuid/item_price; no uuid,
+    # so the invoice line shows no label ID and nothing is marked sold.
+    for species, part, amount, price, mark in zip(
+        form.getlist("custom_species"), form.getlist("custom_part"),
+        form.getlist("custom_amount"), form.getlist("custom_price"),
+        form.getlist("custom_mark"),
+    ):
+        part = str(part).strip()
+        if not part:
+            continue
+        weight_kg, pieces = parse_amount(str(amount))
+        items.append(
+            SaleItem(
+                uuid="",
+                species=str(species),
+                part=part,
+                weight_kg=weight_kg,
+                pieces=pieces,
+                total_price=round(parse_optional_decimal(price) or 0.0, 2),
+                mark=str(mark).strip(),
             )
         )
     if not items:
@@ -582,7 +667,7 @@ async def sell_confirm(request: Request, background: BackgroundTasks):
         items=items,
     )
     sales.append(sale)
-    registry.mark_sold([i.uuid for i in items], sale.sale_id)
+    registry.mark_sold([i.uuid for i in items if i.uuid], sale.sale_id)
     _schedule_paperless(background, sale)
     return RedirectResponse(url=f"/sales/{sale.sale_id}", status_code=303)
 
@@ -743,8 +828,11 @@ def settings_hunter_save(
     address: str = Form(...),
     phone: str = Form(""),
     email: str = Form(""),
+    bank: str = Form(""),
+    iban: str = Form(""),
 ):
-    hunter = Hunter(name=name.strip(), address=address.strip(), phone=phone.strip(), email=email.strip())
+    hunter = Hunter(name=name.strip(), address=address.strip(), phone=phone.strip(), email=email.strip(),
+                    bank=bank.strip(), iban=iban.strip())
     existing = find_hunter(original_name)
     if existing:
         config.hunters[config.hunters.index(existing)] = hunter

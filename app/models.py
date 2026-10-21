@@ -184,6 +184,8 @@ class SaleItem(BaseModel):
     pieces: int | None = None
     price_per_kg: float | None = None
     total_price: float
+    # Wildmarke (game tag) number, shown next to the label ID on the invoice
+    mark: str = ""
 
 
 class PaperlessState(BaseModel):
@@ -206,8 +208,24 @@ class Sale(BaseModel):
     items: list[SaleItem]
     total: float
     created_at: str
+    # Optional discount in percent on the sum of the items, shown as its own
+    # block between the items and the total. The label names the occasion,
+    # e.g. "Family & Friends"; empty means the generic "Rabatt".
+    discount_percent: float | None = None
+    discount_label: str = ""
     # None = never sent (older sales, or Paperless not configured)
     paperless: PaperlessState | None = None
+
+    @property
+    def subtotal(self) -> float:
+        """Sum of the items, before any discount."""
+        return round(sum(i.total_price for i in self.items), 2)
+
+    @property
+    def discount_amount(self) -> float:
+        if not self.discount_percent:
+            return 0.0
+        return round(self.subtotal * self.discount_percent / 100, 2)
 
     @classmethod
     def create(
@@ -218,8 +236,10 @@ class Sale(BaseModel):
         buyer_address: str,
         delivery_address: str,
         items: list[SaleItem],
+        discount_percent: float | None = None,
+        discount_label: str = "",
     ) -> "Sale":
-        return cls(
+        sale = cls(
             sale_id=str(uuid.uuid4()),
             number=number,
             hunter=hunter,
@@ -227,6 +247,10 @@ class Sale(BaseModel):
             buyer_address=buyer_address,
             delivery_address=delivery_address,
             items=items,
-            total=round(sum(i.total_price for i in items), 2),
+            total=0.0,
             created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            discount_percent=discount_percent,
+            discount_label=discount_label,
         )
+        sale.total = round(sale.subtotal - sale.discount_amount, 2)
+        return sale

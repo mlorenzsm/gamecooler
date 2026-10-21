@@ -10,6 +10,14 @@
   <input name="mark" id="mark-input" autocomplete="off" autocapitalize="characters" enterkeyhint="next"
          placeholder="{{ t("Nr. der Wildmarke") }}" maxlength="40">
 </label>
+{# Trichinenuntersuchung for the animal behind the mark: stored once per mark
+   (data/certificates/), a copy goes to Paperless. Like the mark it belongs to
+   the animal, so it shows and hides with the mark row. A link appears when
+   the mark already has a document; a new file replaces it. #}
+<label class="list-row" id="certificate-row" hidden><span class="list-label">{{ t("Trichinenuntersuchung") }}</span>
+  <input type="file" name="certificate" id="certificate-input" accept=".pdf,.jpg,.jpeg,.png">
+  <a id="certificate-stored" class="hint" target="_blank" rel="noopener" hidden>{{ t("Dokument vorhanden") }}</a>
+</label>
 <script>
 (() => {
   const KEY = 'gamecooler.animal';
@@ -28,11 +36,34 @@
   }
   killed.addEventListener('change', remember);
   mark.addEventListener('change', remember);
+  const certRow = document.getElementById('certificate-row');
+  const certInput = document.getElementById('certificate-input');
+  const certStored = document.getElementById('certificate-stored');
+  // "Dokument vorhanden" link when this mark already has a certificate —
+  // cutting one boar means many prints, the document only needs the first.
+  let certSeq = 0;
+  function syncCert() {
+    const seq = ++certSeq;      // typing fast: only the last answer counts
+    certStored.hidden = true;
+    if (!mark.value.trim()) return;
+    fetch(`/certificates/${encodeURIComponent(mark.value.trim())}/exists`)
+      .then(r => r.json())
+      .then(d => {
+        if (seq !== certSeq || !d.exists) return;
+        certStored.href = `/certificates/${encodeURIComponent(mark.value.trim())}`;
+        certStored.hidden = false;
+      })
+      .catch(() => {});
+  }
+  mark.addEventListener('change', syncCert);
   function syncMark() {
     const needs = !!SPECIES[species.value]?.needs_mark;
     markRow.hidden = !needs;
     mark.required = needs;
     mark.disabled = !needs;        // not sent for species without one
+    certRow.hidden = !needs;
+    certInput.disabled = !needs;   // not sent for species without a mark
+    if (needs) syncCert();
   }
   species.addEventListener('change', syncMark);
   syncMark();

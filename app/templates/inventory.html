@@ -84,7 +84,7 @@
     </td>
     {% endif %}
     <td class="c-species" data-label="{{ t("Wildart") }}">{{ r.species }}</td>
-    <td class="c-part" data-label="{{ t("Teilstück") }}">{{ r.part }}{% if r.mark %}<span class="mark">{{ t("Wildmarke {number}", number=r.mark) }}</span>{% endif %}</td>
+    <td class="c-part" data-label="{{ t("Teilstück") }}">{{ r.part }}{% if r.mark %}<span class="mark">{{ t("Wildmarke {number}", number=r.mark) }}{% if r.mark in certificate_marks %} <a href="/certificates/{{ r.mark | urlencode }}" target="_blank" rel="noopener" title="{{ t("Trichinenuntersuchung") }}">{{ icon('file-text', t("Trichinenuntersuchung")) }}</a>{% endif %}</span>{% endif %}</td>
     {# Erzwingt auf dem Telefon den Umbruch nach der Titelzeile. Am Desktop
        ausgeblendet, damit die Spalten unverändert bleiben. #}
     <td class="row-break" aria-hidden="true"></td>

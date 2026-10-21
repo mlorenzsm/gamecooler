@@ -10,6 +10,9 @@ hunters:
   address: Musterweg 1, 12345 Musterstadt
   phone: 0123 456789
   email: max@example.com
+  # Optional: shown on the invoice as the payment line. Empty = no line.
+  bank: Musterbank
+  iban: DE02120300000000202051
 
 # Species, each with its own cuts and presets. When printing, only the cuts of
 # the selected species are offered; the same name can have a different price

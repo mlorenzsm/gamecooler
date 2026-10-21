@@ -203,10 +203,15 @@ def render_sale_pdf(sale: Sale, hunter: Hunter | None, lang: str = "de") -> byte
         pdf.cell(COLS[1] - 2, 4.5, pdf.fit(item.part, COLS[1] - 4))
         pdf.set_xy(x + 2, y + 6.3)
         pdf.style(8, MUTED)
-        species = f"{item.species} · "
+        species = f"{item.species} · " if item.uuid or item.mark else item.species
         pdf.cell(pdf.get_string_width(species), 3.5, species)
-        pdf.style(7.5, MUTED, family="mono")
-        pdf.cell(30, 3.5, item.uuid[:8].upper())
+        if item.uuid:
+            pdf.style(7.5, MUTED, family="mono")
+            pdf.cell(pdf.get_string_width(item.uuid[:8].upper()) + 2, 3.5, item.uuid[:8].upper())
+        if item.mark:
+            pdf.style(8, MUTED)
+            prefix = "· " if item.uuid else ""
+            pdf.cell(40, 3.5, prefix + t("Wildmarke {number}", lang, number=item.mark))
         x += COLS[1]
         # numbers, on the first line
         has_amount = item.weight_kg is not None or item.pieces is not None
@@ -223,10 +228,27 @@ def render_sale_pdf(sale: Sale, hunter: Hunter | None, lang: str = "de") -> byte
         pdf.line(LEFT, y + ROW_HEIGHT, RIGHT, y + ROW_HEIGHT)
         pdf.set_y(y + ROW_HEIGHT)
 
-    # --- total ------------------------------------------------------------
-    if pdf.get_y() + 34 > pdf.page_break_trigger:
+    # --- discount: its own block, not an item — items are packages ---------
+    discount_rows = 2 if sale.discount_percent else 0
+    if pdf.get_y() + 34 + discount_rows * 6 > pdf.page_break_trigger:
         pdf.add_page()
         pdf.set_y(20)
+    if sale.discount_percent:
+        y = pdf.get_y() + 3
+        label = sale.discount_label or t("Rabatt", lang)
+        for name, value, color in (
+            (t("Zwischensumme", lang), sale.subtotal, MUTED),
+            (f"{label} −{format_de(sale.discount_percent, 0, lang)} %", -sale.discount_amount, INK),
+        ):
+            pdf.set_xy(RIGHT - 110, y)
+            pdf.style(9.5, color)
+            pdf.cell(80, 5, name, align="R")
+            pdf.style(10, color, bold=True)
+            pdf.cell(30, 5, f"{format_de(value, 2, lang)} €", align="R")
+            y += 6
+        pdf.set_y(y)
+
+    # --- total ------------------------------------------------------------
     y = pdf.get_y() + 5
     box_w = 78
     pdf.set_fill_color(*ACCENT_SOFT)
@@ -246,5 +268,21 @@ def render_sale_pdf(sale: Sale, hunter: Hunter | None, lang: str = "de") -> byte
     pdf.set_xy(LEFT, y + 2)
     pdf.style(8.5, MUTED)
     pdf.multi_cell(WIDTH - box_w - 10, 4.4, t("Wildbret aus eigener Jagd. Kein Ausweis der Umsatzsteuer (Kleinunternehmerregelung, § 19 UStG).", lang), align="L")
+
+    # --- payment ------------------------------------------------------------
+    # Below note and total, full width: bank details are what the buyer acts
+    # on, so they get their own line rather than hiding in the letterhead.
+    if hunter and hunter.iban:
+        iban = hunter.iban.replace(" ", "")
+        iban = " ".join(iban[i:i + 4] for i in range(0, len(iban), 4))
+        bank = f"{hunter.bank} · " if hunter.bank else ""
+        pdf.set_xy(LEFT, y + 20)
+        pdf.style(8.5, MUTED, bold=True)
+        pdf.cell(WIDTH, 4.4, t("Zahlung per Überweisung", lang))
+        pdf.set_xy(LEFT, y + 24.5)
+        pdf.style(9, INK)
+        pdf.cell(pdf.get_string_width(bank), 4.4, bank)
+        pdf.style(9, INK, family="mono")
+        pdf.cell(WIDTH, 4.4, iban)
 
     return bytes(pdf.output())
