@@ -329,6 +329,8 @@ EN = {
     "Wildarten": "Species",
     "Allgemein": "General",
     "Name, Adresse und Telefon stehen auf jedem Info-Etikett.": "Name, address and phone appear on every info label.",
+    "Bank": "Bank",
+    "Bank und IBAN stehen als Zahlungszeile auf der Rechnung — leer lassen, wenn keine gewünscht ist.": "Bank and IBAN appear as the payment line on the invoice — leave empty for none.",
     "Umbenennen oder löschen": "Rename or delete",
     "Neuer Name": "New name",
     "Umbenennen": "Rename",

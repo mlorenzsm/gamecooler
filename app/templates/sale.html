@@ -49,7 +49,7 @@
   <li class="list-row">
     <span class="grow">
       <b>{{ i.part }}</b><br>
-      <span class="muted small-line">{{ i.species }}{% if i.weight_kg is not none or i.pieces is not none %} · {{ i | amount }}{% endif %}{% if i.price_per_kg is not none %} · {{ i.price_per_kg | de }} €/kg{% endif %}{% if i.uuid %} · <code>{{ i.uuid[:8] }}</code>{% endif %}</span>
+      <span class="muted small-line">{{ i.species }}{% if i.weight_kg is not none or i.pieces is not none %} · {{ i | amount }}{% endif %}{% if i.price_per_kg is not none %} · {{ i.price_per_kg | de }} €/kg{% endif %}{% if i.uuid %} · <code>{{ i.uuid[:8] }}</code>{% endif %}{% if i.mark %} · {{ t("Wildmarke {number}", number=i.mark) }}{% endif %}</span>
     </span>
     <span class="num">{{ i.total_price | de }} €</span>
   </li>

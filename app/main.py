@@ -567,14 +567,16 @@ async def sell_confirm(request: Request, background: BackgroundTasks):
                 pieces=record.pieces,
                 price_per_kg=record.price_per_kg,
                 total_price=total,
+                mark=record.mark or "",
             )
         )
     # Custom rows: positions sold without a label (not in stock). They travel
     # in their own fields, grouped by position like uuid/item_price; no uuid,
     # so the invoice line shows no label ID and nothing is marked sold.
-    for species, part, amount, price in zip(
+    for species, part, amount, price, mark in zip(
         form.getlist("custom_species"), form.getlist("custom_part"),
         form.getlist("custom_amount"), form.getlist("custom_price"),
+        form.getlist("custom_mark"),
     ):
         part = str(part).strip()
         if not part:
@@ -588,6 +590,7 @@ async def sell_confirm(request: Request, background: BackgroundTasks):
                 weight_kg=weight_kg,
                 pieces=pieces,
                 total_price=round(parse_optional_decimal(price) or 0.0, 2),
+                mark=str(mark).strip(),
             )
         )
     if not items:
@@ -765,8 +768,11 @@ def settings_hunter_save(
     address: str = Form(...),
     phone: str = Form(""),
     email: str = Form(""),
+    bank: str = Form(""),
+    iban: str = Form(""),
 ):
-    hunter = Hunter(name=name.strip(), address=address.strip(), phone=phone.strip(), email=email.strip())
+    hunter = Hunter(name=name.strip(), address=address.strip(), phone=phone.strip(), email=email.strip(),
+                    bank=bank.strip(), iban=iban.strip())
     existing = find_hunter(original_name)
     if existing:
         config.hunters[config.hunters.index(existing)] = hunter

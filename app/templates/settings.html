@@ -17,7 +17,7 @@
 
 <section class="settings-card">
   <h3>{{ icon('info') }}{{ t("Jäger") }}</h3>
-  <p class="hint">{{ t("Name, Adresse und Telefon stehen auf jedem Info-Etikett.") }}</p>
+  <p class="hint">{{ t("Name, Adresse und Telefon stehen auf jedem Info-Etikett.") }} {{ t("Bank und IBAN stehen als Zahlungszeile auf der Rechnung — leer lassen, wenn keine gewünscht ist.") }}</p>
   {# One grouped list per hunter — four fields side by side didn't fit a
      phone. Same form fields and routes as before. #}
   {% macro hunter_rows(h=None) %}
@@ -29,6 +29,10 @@
       <input name="phone" type="tel" {% if h %}value="{{ h.phone }}"{% else %}placeholder="{{ t('Telefon') }}"{% endif %}></label>
     <label class="list-row"><span class="list-label">{{ t("E-Mail") }}</span>
       <input name="email" type="email" {% if h %}value="{{ h.email }}"{% else %}placeholder="{{ t('E-Mail') }}"{% endif %}></label>
+    <label class="list-row"><span class="list-label">{{ t("Bank") }}</span>
+      <input name="bank" {% if h %}value="{{ h.bank }}"{% else %}placeholder="{{ t('Bank') }}"{% endif %}></label>
+    <label class="list-row"><span class="list-label">IBAN</span>
+      <input name="iban" {% if h %}value="{{ h.iban }}"{% else %}placeholder="DE02 1203 0000 0000 2020 51"{% endif %}></label>
   {% endmacro %}
   {% for h in config.hunters %}
   <form method="post" action="/settings/hunters" class="list-group list-form" id="hunter-{{ loop.index }}">

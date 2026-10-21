@@ -74,6 +74,8 @@ const T = {{ {
   "Preis (€)": t("Preis (€)"),
   "0,00": t("0,00"),
   "Zeile entfernen": t("Zeile entfernen"),
+  "Nr. der Wildmarke": t("Nr. der Wildmarke"),
+  "Wildmarke": t("Wildmarke"),
 } | tojson }};
 const DEC = {{ decimal_separator() | tojson }};
 function saleQuestion() {
@@ -98,7 +100,10 @@ function escapeHtml(s) {
 
 // A custom position mirrors a stock row: name + species + amount on the
 // left, the price on the right — same classes, so updateTotal and the
-// confirm question count it like any other item.
+// confirm question count it like any other item. The Wildmarke input only
+// shows for a species that needs one (like the print forms); it is hidden
+// and cleared, never disabled — the custom_* fields travel grouped by
+// position, so every row must submit all of them.
 function addCustomRow() {
   const li = document.createElement('li');
   li.className = 'list-row';
@@ -111,6 +116,8 @@ function addCustomRow() {
         </select>
         <input name="custom_amount" class="input-num input-num-sm" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]"
                placeholder="${escapeHtml(T['0,4 / 5x'])}" aria-label="${escapeHtml(T['Gewicht/Stück (kg) oder 5x'])}">
+        <input name="custom_mark" autocomplete="off" autocapitalize="characters" maxlength="40"
+               placeholder="${escapeHtml(T['Nr. der Wildmarke'])}" aria-label="${escapeHtml(T['Wildmarke'])}">
       </span>
     </span>
     <input name="custom_price" class="item-price num" inputmode="decimal" aria-label="${escapeHtml(T['Preis (€)'])}"
@@ -121,6 +128,15 @@ function addCustomRow() {
   `;
   document.getElementById('custom-items').appendChild(li);
   li.querySelector('.item-price').addEventListener('input', updateTotal);
+  const speciesSelect = li.querySelector('select[name=custom_species]');
+  const mark = li.querySelector('input[name=custom_mark]');
+  function syncMark() {
+    const needs = !!SPECIES[speciesSelect.value]?.needs_mark;
+    mark.hidden = !needs;
+    if (!needs) mark.value = '';
+  }
+  speciesSelect.addEventListener('change', syncMark);
+  syncMark();
   li.querySelector('input[name=custom_part]').focus();
 }
 
