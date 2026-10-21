@@ -16,7 +16,7 @@
 </div>
 
 <script>const SPECIES = {{ config.species | species_json | tojson }};</script>
-<form class="print-form" method="post" action="/parts" id="part-form" data-confirm-fn="printQuestion" data-confirm-ok="{{ t("Drucken") }}">
+<form class="print-form" method="post" action="/parts" enctype="multipart/form-data" id="part-form" data-confirm-fn="printQuestion" data-confirm-ok="{{ t("Drucken") }}">
   <div class="list-group">
     <label class="list-row"><span class="list-label">{{ t("Jäger") }}</span>
       <select name="hunter" required>

@@ -8,7 +8,7 @@
 
 {# Die Vorgaben gehören zur Wildart; die Liste wird per Script gefüllt. #}
 <script>const SPECIES = {{ config.species | species_json | tojson }};</script>
-<form method="post" action="/bulk" id="bulk-form" data-confirm-fn="bulkQuestion" data-confirm-ok="{{ t("Drucken") }}">
+<form method="post" action="/bulk" enctype="multipart/form-data" id="bulk-form" data-confirm-fn="bulkQuestion" data-confirm-ok="{{ t("Drucken") }}">
   <div class="list-group">
     <label class="list-row"><span class="list-label">{{ t("Jäger") }}</span>
       <select name="hunter" required>
