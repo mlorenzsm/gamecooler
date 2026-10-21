@@ -32,7 +32,7 @@ from .models import (
     parse_amount,
     parse_optional_decimal,
 )
-from .pdf import render_sale_pdf
+from .pdf import render_sale_pdf, render_stock_pdf
 from .printer import print_labels
 
 logging.basicConfig(level=logging.INFO)
@@ -561,6 +561,23 @@ async def consume_many(request: Request):
     changed = registry.mark_consumed_many(uuids)
     return RedirectResponse(
         url="/inventory?msg=" + quote(t("{n} Teilstücke entnommen", n=changed)), status_code=303
+    )
+
+
+@app.get("/inventory/offer.pdf")
+def stock_pdf(hunter: str = ""):
+    """The unsold stock as an offer sheet, to send to friends and customers.
+    The hunter picks whose letterhead it carries; default is the first one."""
+    records = registry.inventory()
+    if not records:
+        raise HTTPException(status_code=404, detail=t("Kein Bestand"))
+    hunter_config = find_hunter(hunter) or (config.hunters[0] if config.hunters else None)
+    pdf_bytes = render_stock_pdf(records, hunter_config,
+                                 [s.name for s in config.species], config.label_language)
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="wildbret-angebot-{date.today().isoformat()}.pdf"'},
     )
 
 
