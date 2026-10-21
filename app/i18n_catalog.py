@@ -57,6 +57,9 @@ EN = {
     "€/kg": "€/kg",
     "ID": "ID",
     "Gesamt": "Total",
+    "Zwischensumme": "Subtotal",
+    "Rabatt": "Discount",
+    "Zahlung per Überweisung": "Payment by bank transfer",
     # German small-business VAT exemption; the legal reference stays German law.
     "Wildbret aus eigener Jagd. Kein Ausweis der Umsatzsteuer (Kleinunternehmerregelung, § 19 UStG).":
         "Game from own hunting. No VAT shown (small business exemption, § 19 German VAT Act).",

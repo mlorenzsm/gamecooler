@@ -24,6 +24,9 @@ class Hunter(BaseModel):
     address: str
     phone: str
     email: str = ""
+    # Bank details for the invoice's payment line; empty means no line.
+    bank: str = ""
+    iban: str = ""
 
 
 class PrinterTarget(BaseModel):
