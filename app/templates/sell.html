@@ -50,6 +50,11 @@
     {% endfor %}
   </ul>
 
+  {# Custom positions: sold without a label (not in stock) — e.g. fresh from
+     the day's cutting. custom_* fields travel grouped by position. #}
+  <ul class="list-group sale-list" id="custom-items"></ul>
+  <button type="button" class="small add-row" onclick="addCustomRow()">{{ icon('plus') }}{{ t("Position ohne Etikett") }}</button>
+
   <div class="action-bar">
     <button class="print" type="submit">
       {{ icon('shopping-bag') }}<span>{{ t("Verkauf abschließen") }}</span><span class="total num" id="total">{{ total | de }} €</span>
@@ -58,9 +63,17 @@
 </form>
 
 <script>
+const SPECIES = {{ config.species | species_json | tojson }};
 const T = {{ {
   "Verkauf abschließen?": t("Verkauf abschließen?"),
   "{n} Teilstücke für {total}": t("{n} Teilstücke für {total}"),
+  "Bezeichnung": t("Bezeichnung"),
+  "Wildart": t("Wildart"),
+  "Gewicht/Stück (kg) oder 5x": t("Gewicht/Stück (kg) oder 5x"),
+  "0,4 / 5x": t("0,4 / 5x"),
+  "Preis (€)": t("Preis (€)"),
+  "0,00": t("0,00"),
+  "Zeile entfernen": t("Zeile entfernen"),
 } | tojson }};
 const DEC = {{ decimal_separator() | tojson }};
 function saleQuestion() {
@@ -78,6 +91,38 @@ function updateTotal() {
   document.getElementById('total').textContent = fmt(total) + ' €';
 }
 document.querySelectorAll('.item-price').forEach(i => i.addEventListener('input', updateTotal));
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+}
+
+// A custom position mirrors a stock row: name + species + amount on the
+// left, the price on the right — same classes, so updateTotal and the
+// confirm question count it like any other item.
+function addCustomRow() {
+  const li = document.createElement('li');
+  li.className = 'list-row';
+  li.innerHTML = `
+    <span class="grow">
+      <input name="custom_part" required placeholder="${escapeHtml(T['Bezeichnung'])}" aria-label="${escapeHtml(T['Bezeichnung'])}">
+      <span class="muted small-line">
+        <select name="custom_species" aria-label="${escapeHtml(T['Wildart'])}">
+          ${Object.keys(SPECIES).map(s => `<option>${escapeHtml(s)}</option>`).join('')}
+        </select>
+        <input name="custom_amount" class="input-num input-num-sm" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]"
+               placeholder="${escapeHtml(T['0,4 / 5x'])}" aria-label="${escapeHtml(T['Gewicht/Stück (kg) oder 5x'])}">
+      </span>
+    </span>
+    <input name="custom_price" class="item-price num" inputmode="decimal" aria-label="${escapeHtml(T['Preis (€)'])}"
+           pattern="[0-9]+([.,][0-9]+)?" placeholder="${escapeHtml(T['0,00'])}">
+    <span class="list-unit">€</span>
+    <button type="button" class="small icon-only" title="${escapeHtml(T['Zeile entfernen'])}" aria-label="${escapeHtml(T['Zeile entfernen'])}"
+            onclick="this.closest('li').remove(); updateTotal()">{{ icon('trash-2') }}</button>
+  `;
+  document.getElementById('custom-items').appendChild(li);
+  li.querySelector('.item-price').addEventListener('input', updateTotal);
+  li.querySelector('input[name=custom_part]').focus();
+}
 
 const same = document.getElementById('same-address');
 const deliveryLabel = document.getElementById('delivery-label');

@@ -26,6 +26,7 @@ from .models import (
     SaleItem,
     format_amount,
     format_de,
+    parse_amount,
     parse_optional_decimal,
 )
 from .pdf import render_sale_pdf
@@ -568,6 +569,27 @@ async def sell_confirm(request: Request, background: BackgroundTasks):
                 total_price=total,
             )
         )
+    # Custom rows: positions sold without a label (not in stock). They travel
+    # in their own fields, grouped by position like uuid/item_price; no uuid,
+    # so the invoice line shows no label ID and nothing is marked sold.
+    for species, part, amount, price in zip(
+        form.getlist("custom_species"), form.getlist("custom_part"),
+        form.getlist("custom_amount"), form.getlist("custom_price"),
+    ):
+        part = str(part).strip()
+        if not part:
+            continue
+        weight_kg, pieces = parse_amount(str(amount))
+        items.append(
+            SaleItem(
+                uuid="",
+                species=str(species),
+                part=part,
+                weight_kg=weight_kg,
+                pieces=pieces,
+                total_price=round(parse_optional_decimal(price) or 0.0, 2),
+            )
+        )
     if not items:
         return RedirectResponse(url="/inventory?msg=" + quote(t("Keine Teilstücke im Verkauf")), status_code=303)
 
@@ -582,7 +604,7 @@ async def sell_confirm(request: Request, background: BackgroundTasks):
         items=items,
     )
     sales.append(sale)
-    registry.mark_sold([i.uuid for i in items], sale.sale_id)
+    registry.mark_sold([i.uuid for i in items if i.uuid], sale.sale_id)
     _schedule_paperless(background, sale)
     return RedirectResponse(url=f"/sales/{sale.sale_id}", status_code=303)
 

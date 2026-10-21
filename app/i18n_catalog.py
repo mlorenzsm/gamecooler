@@ -142,6 +142,8 @@ EN = {
     "Menge je Stück": "Amount each",
     "Menge: Gewicht in kg, oder „5x“ für eine Stückzahl mit Festpreis. Preis: pro kg bzw. Festpreis — leer lassen für den Standardpreis des Teilstücks.": "Amount: weight in kg, or “5x” for a piece count with a fixed price. Price: per kg or the fixed price — leave empty for the cut's default price.",
     "Zeile": "Row",
+    "Bezeichnung": "Name",
+    "Position ohne Etikett": "Item without a label",
     "Alle Etiketten drucken & registrieren": "Print all labels & register",
     "Gewicht/Stück (kg) oder 5x": "Weight each (kg) or 5x",
     "0,4 / 5x": "0.4 / 5x",

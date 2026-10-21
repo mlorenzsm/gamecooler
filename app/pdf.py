@@ -203,13 +203,15 @@ def render_sale_pdf(sale: Sale, hunter: Hunter | None, lang: str = "de") -> byte
         pdf.cell(COLS[1] - 2, 4.5, pdf.fit(item.part, COLS[1] - 4))
         pdf.set_xy(x + 2, y + 6.3)
         pdf.style(8, MUTED)
-        species = f"{item.species} · "
+        species = f"{item.species} · " if item.uuid or item.mark else item.species
         pdf.cell(pdf.get_string_width(species), 3.5, species)
-        pdf.style(7.5, MUTED, family="mono")
-        pdf.cell(pdf.get_string_width(item.uuid[:8].upper()) + 2, 3.5, item.uuid[:8].upper())
+        if item.uuid:
+            pdf.style(7.5, MUTED, family="mono")
+            pdf.cell(pdf.get_string_width(item.uuid[:8].upper()) + 2, 3.5, item.uuid[:8].upper())
         if item.mark:
             pdf.style(8, MUTED)
-            pdf.cell(40, 3.5, "· " + t("Wildmarke {number}", lang, number=item.mark))
+            prefix = "· " if item.uuid else ""
+            pdf.cell(40, 3.5, prefix + t("Wildmarke {number}", lang, number=item.mark))
         x += COLS[1]
         # numbers, on the first line
         has_amount = item.weight_kg is not None or item.pieces is not None
