@@ -371,6 +371,9 @@ EN = {
 
     # --- finances.html ----------------------------------------------------------
     "Finanzen": "Finances",
+    "{year}: Einnahmen {income}, Ausgaben {expenses} — Ergebnis {result}":
+        "{year}: income {income}, expenses {expenses} — result {result}",
+    "Ergebnis {year}: {result}": "Result {year}: {result}",
     "Einnahmen {income}, Ausgaben {expenses} — Ergebnis {result}":
         "Income {income}, expenses {expenses} — result {result}",
     "Art": "Type",

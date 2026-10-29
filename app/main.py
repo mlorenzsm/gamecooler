@@ -774,20 +774,36 @@ def _finance_rows() -> list[dict]:
     return rows
 
 
+def _year_totals(rows: list[dict], year: int) -> tuple[float, float]:
+    """(income, expenses) of one year; sales count as income."""
+    of_year = [r for r in rows if r["date"].startswith(str(year))]
+    income = sum(r["amount"] for r in of_year if r["kind"] in ("income", "sale"))
+    expenses = sum(r["amount"] for r in of_year if r["kind"] == "expense")
+    return income, expenses
+
+
 @app.get("/finances")
 def finances_page(request: Request, msg: str = ""):
     rows = _finance_rows()
-    income = sum(r["amount"] for r in rows if r["kind"] in ("income", "sale"))
-    expenses = sum(r["amount"] for r in rows if r["kind"] == "expense")
+    # The headline is the current year — that's the figure that matters for the
+    # season and the tax year. Last year's result stays visible for comparison;
+    # anything older is reachable through the year filter.
+    year = date.today().year
+    income, expenses = _year_totals(rows, year)
+    last_income, last_expenses = _year_totals(rows, year - 1)
+    has_last_year = any(r["date"].startswith(str(year - 1)) for r in rows)
     return templates.TemplateResponse(
         request,
         "finances.html",
         {
             "config": config, "msg": msg, "active": "finances",
             "rows": rows,
+            "year": year,
             "income": income,
             "expenses": expenses,
             "result": round(income - expenses, 2),
+            "last_year": year - 1,
+            "last_result": round(last_income - last_expenses, 2) if has_last_year else None,
             "years": sorted({r["date"][:4] for r in rows}, reverse=True),
         },
     )
