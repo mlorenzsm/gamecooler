@@ -7,7 +7,7 @@ logging.getLogger("fontTools").setLevel(logging.WARNING)
 
 from .config import FONTS_DIR, LOGO_PATH, Hunter
 from .i18n import format_date, t
-from .models import Sale, format_amount, format_de
+from .models import PartRecord, Sale, format_amount, format_de
 
 # The app's palette ("Field kit", app/static/app.css), in print terms. Green
 # is spent in one place only — the total — so the page stays calm.
@@ -284,5 +284,154 @@ def render_sale_pdf(sale: Sale, hunter: Hunter | None, lang: str = "de") -> byte
         pdf.cell(pdf.get_string_width(bank), 4.4, bank)
         pdf.style(9, INK, family="mono")
         pdf.cell(WIDTH, 4.4, iban)
+
+    return bytes(pdf.output())
+
+
+# --- stock sheet -------------------------------------------------------------
+# What's in the freezer, as a page to send to friends and customers. Same
+# letterhead and table idiom as the invoice, but no addressee and no totals —
+# it's an offer, not a bill.
+
+# Item, count, amount per package, €/kg, price per package.
+STOCK_COLS = (92, 18, 26, 17, 17)
+STOCK_ROW = 7.5
+
+
+def _stock_groups(records: list[PartRecord], lang: str) -> list[dict]:
+    """Identical packages as one line with a count.
+
+    Grouped by species + cut + amount + price: two 4-piece Bratwurst packs at
+    7,50 € are one line "2 ×". Weighed cuts differ by their exact weight, so
+    they group by the rounded-to-0.1-kg weight and show it as "~0,5 kg" when
+    the group's weights vary.
+    """
+    groups: dict[tuple, dict] = {}
+    for r in records:
+        rounded = round(r.weight_kg, 1) if r.weight_kg is not None else None
+        key = (r.species, r.part, r.pieces, rounded, r.price_per_kg, r.total_price)
+        g = groups.setdefault(key, {
+            "species": r.species, "part": r.part, "pieces": r.pieces,
+            "price_per_kg": r.price_per_kg, "total_price": r.total_price,
+            "count": 0, "weights": [],
+        })
+        g["count"] += 1
+        if r.weight_kg is not None:
+            g["weights"].append(r.weight_kg)
+    for g in groups.values():
+        if g["pieces"] is not None:
+            g["amount"] = t("{n} Stk.", lang, n=g["pieces"])
+        elif g["weights"]:
+            w = g["weights"]
+            exact = min(w) == max(w)
+            g["amount"] = f"{'' if exact else '~'}{format_de(sum(w) / len(w), 3 if exact else 1, lang)} kg"
+        else:
+            g["amount"] = t("1 Paket", lang)
+    # the species keep their config order via the caller; within one, heaviest
+    # price first reads like a menu — roasts before sausages
+    return sorted(groups.values(), key=lambda g: (g["species"], -(g["total_price"] or 0), g["part"]))
+
+
+def render_stock_pdf(records: list[PartRecord], hunter: Hunter | None,
+                     species_order: list[str], lang: str = "de") -> bytes:
+    """The unsold stock as a dated offer sheet, grouped per species."""
+    address = hunter.address if hunter else ""
+    phone = t("Tel. {phone}", lang, phone=hunter.phone) if hunter and hunter.phone else ""
+    email = hunter.email if hunter else ""
+    date = format_date(datetime.now().date(), lang)
+
+    pdf = InvoicePDF(
+        footer_text=f"{t('Wildbret-Angebot', lang)} · {date}",
+        page_text=t("Seite {page} von {pages}", lang, page="{page}", pages="{nb}"),
+    )
+    pdf.add_page()
+
+    # --- header: the seller, like the invoice -------------------------------
+    name = hunter.name if hunter else ""
+    name_x = LEFT
+    if LOGO_PATH.exists():
+        pdf.image(str(LOGO_PATH), x=LEFT, y=LOGO_TOP, h=LOGO_SIZE, keep_aspect_ratio=True)
+        name_x = LEFT + LOGO_SIZE + 4
+    pdf.set_xy(name_x, 18)
+    pdf.style(17, INK, family="bricolage", bold=True)
+    pdf.cell(WIDTH / 2 - (name_x - LEFT), 8, pdf.fit(name, WIDTH / 2 - (name_x - LEFT)))
+    pdf.set_xy(LEFT + WIDTH / 2, 18.5)
+    pdf.style(8.5, MUTED)
+    pdf.multi_cell(WIDTH / 2, 4.2, "\n".join(x for x in (address, phone, email) if x), align="R")
+    pdf.set_draw_color(*LINE)
+    pdf.set_line_width(0.3)
+    pdf.line(LEFT, 36, RIGHT, 36)
+
+    # --- title ---------------------------------------------------------------
+    pdf.set_xy(LEFT, 44)
+    pdf.style(20, INK, family="bricolage", bold=True)
+    pdf.cell(WIDTH / 2, 10, t("Wildbret-Angebot", lang))
+    pdf.set_xy(LEFT + WIDTH / 2, 47)
+    pdf.style(9.5, MUTED)
+    pdf.cell(WIDTH / 2, 5, t("Stand {date}", lang, date=date), align="R")
+    pdf.set_y(58)
+
+    heads = [(t("Artikel", lang), "L"), (t("Anzahl", lang), "R"), (t("Menge", lang), "R"),
+             (t("€/kg", lang), "R"), (t("Preis", lang), "R")]
+
+    def table_head():
+        y = pdf.get_y()
+        x = LEFT
+        for (text, align), w in zip(heads, STOCK_COLS):
+            pdf.eyebrow(text, x + (2 if align == "L" else 0), y, w - (2 if align == "L" else 0), align)
+            x += w
+        pdf.set_draw_color(*INK)
+        pdf.set_line_width(0.35)
+        pdf.line(LEFT, y + 6, RIGHT, y + 6)
+        pdf.set_y(y + 6)
+
+    groups = _stock_groups(records, lang)
+    order = {name: i for i, name in enumerate(species_order)}
+    groups.sort(key=lambda g: order.get(g["species"], len(order)))
+
+    table_head()
+    pdf.set_line_width(0.2)
+    last_species = None
+    for g in groups:
+        # species heading + at least one row must fit, or both move on
+        need = STOCK_ROW + (10 if g["species"] != last_species else 0)
+        if pdf.get_y() + need > pdf.page_break_trigger:
+            pdf.add_page()
+            pdf.set_y(20)
+            table_head()
+            pdf.set_line_width(0.2)
+            last_species = None
+        if g["species"] != last_species:
+            pdf.set_xy(LEFT, pdf.get_y() + 4)
+            pdf.style(9, ACCENT, bold=True, spacing=0.6)
+            pdf.cell(WIDTH, 5, g["species"].upper())
+            pdf.set_char_spacing(0)
+            pdf.set_y(pdf.get_y() + 5.5)
+            last_species = g["species"]
+        y = pdf.get_y()
+        x = LEFT
+        pdf.set_xy(x + 2, y + 1.5)
+        pdf.style(10, INK, bold=True)
+        pdf.cell(STOCK_COLS[0] - 2, 4.5, pdf.fit(g["part"], STOCK_COLS[0] - 4))
+        x += STOCK_COLS[0]
+        for w, text, color, bold in (
+            (STOCK_COLS[1], f"{g['count']} ×", MUTED, False),
+            (STOCK_COLS[2], g["amount"], INK, False),
+            (STOCK_COLS[3], format_de(g["price_per_kg"], 2, lang), MUTED if g["price_per_kg"] is not None else FAINT, False),
+            (STOCK_COLS[4], f"{format_de(g['total_price'], 2, lang)} €" if g["total_price"] is not None else "–",
+             INK if g["total_price"] is not None else FAINT, True),
+        ):
+            pdf.set_xy(x, y + 1.5)
+            pdf.style(10, color, bold=bold)
+            pdf.cell(w, 4.5, text, align="R")
+            x += w
+        pdf.set_draw_color(*LINE)
+        pdf.line(LEFT, y + STOCK_ROW, RIGHT, y + STOCK_ROW)
+        pdf.set_y(y + STOCK_ROW)
+
+    # --- foot ----------------------------------------------------------------
+    pdf.set_xy(LEFT, pdf.get_y() + 6)
+    pdf.style(8.5, MUTED)
+    pdf.multi_cell(WIDTH, 4.4, t("Wildbret aus eigener Jagd. Preis je Paket; Angebot freibleibend, solange der Vorrat reicht.", lang))
 
     return bytes(pdf.output())

@@ -188,6 +188,42 @@ class SaleItem(BaseModel):
     mark: str = ""
 
 
+class LedgerEntry(BaseModel):
+    """A manual line in the hunting ledger (expenses, odd income). Sales are
+    not stored here — the Finanzen page merges them in from sales.json, so a
+    sale can never be missing, doubled or stale."""
+
+    uuid: str
+    kind: str = "expense"               # expense | income
+    booked_on: str                      # YYYY-MM-DD, the day it happened
+    description: str
+    amount: float                       # always positive; kind gives the sign
+    created_at: str
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def _known_kind(cls, v):
+        return v if v in ("expense", "income") else "expense"
+
+    @field_validator("booked_on", mode="before")
+    @classmethod
+    def _iso_date(cls, v):
+        if v is None or not str(v).strip():
+            return date.today().isoformat()
+        return date.fromisoformat(str(v).strip()).isoformat()
+
+    @classmethod
+    def create(cls, kind: str, booked_on: str, description: str, amount: float) -> "LedgerEntry":
+        return cls(
+            uuid=str(uuid.uuid4()),
+            kind=kind,
+            booked_on=booked_on,
+            description=description,
+            amount=round(amount, 2),
+            created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        )
+
+
 class PaperlessState(BaseModel):
     """Where this sale's invoice stands in Paperless-ngx (app/paperless.py)."""
 

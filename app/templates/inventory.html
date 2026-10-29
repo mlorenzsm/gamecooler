@@ -13,6 +13,10 @@
   <span class="hint" id="sum-hint">{{ inventory_hint }}</span>
 </p>
 
+<div class="toolbar mb-4">
+  <a class="btn-secondary" href="/inventory/offer.pdf" target="_blank">{{ icon('file-text') }}{{ t("Angebot als PDF") }}</a>
+</div>
+
 <div class="filters mb-4">
   <select id="f-species">
     <option value="">{{ t("Alle Wildarten") }}</option>
