@@ -17,12 +17,13 @@ from markupsafe import Markup, escape
 from PIL import Image
 from pydantic import ValidationError
 
-from . import certificates, paperless, registry, sales
+from . import certificates, ledger, paperless, registry, sales
 from .config import LOGO_PATH, PART_KINDS, UNITS, Hunter, PartDefaults, Preset, PresetItem, Recipe, RecipeItem, Species, load_config, save_config
 from .i18n import LANGUAGES, decimal_separator, format_date, get_lang, pick_language, reset_lang, set_lang, t
 from .labels import render_info_label, render_qr_label
 from .models import (
     PIECES_RE,
+    LedgerEntry,
     PartIn,
     PartRecord,
     Sale,
@@ -30,6 +31,7 @@ from .models import (
     format_amount,
     format_de,
     parse_amount,
+    parse_german_decimal,
     parse_optional_decimal,
 )
 from .pdf import render_sale_pdf, render_stock_pdf
@@ -730,6 +732,96 @@ def sale_pdf(sale_id: str):
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="verkauf-{sale.number}.pdf"'},
     )
+
+
+# --- Finanzen -----------------------------------------------------------------
+#
+# One list of everything hunting costs and brings in. Manual entries (ammo,
+# lease, a direct sale of a whole animal) live in data/ledger.json; completed
+# sales are merged in from sales.json on every view, so they are always there
+# and never doubled.
+
+
+def _finance_rows() -> list[dict]:
+    """Ledger entries and sales as one list, newest first.
+
+    Plain dicts, not models: the two sources have different shapes, and the
+    template needs the same keys for every row.
+    """
+    rows = [
+        {
+            "uuid": e.uuid,
+            "kind": e.kind,
+            "date": e.booked_on,
+            "description": e.description,
+            "amount": e.amount,
+            "sale_id": None,
+        }
+        for e in ledger.load_all()
+    ]
+    rows += [
+        {
+            "uuid": s.sale_id,
+            "kind": "sale",
+            "date": s.created_at[:10],
+            "description": t("Verkauf Nr. {number} – {buyer}", number=s.number, buyer=s.buyer_name),
+            "amount": s.total,
+            "sale_id": s.sale_id,
+        }
+        for s in sales.load_all()
+    ]
+    rows.sort(key=lambda r: r["date"], reverse=True)
+    return rows
+
+
+@app.get("/finances")
+def finances_page(request: Request, msg: str = ""):
+    rows = _finance_rows()
+    income = sum(r["amount"] for r in rows if r["kind"] in ("income", "sale"))
+    expenses = sum(r["amount"] for r in rows if r["kind"] == "expense")
+    return templates.TemplateResponse(
+        request,
+        "finances.html",
+        {
+            "config": config, "msg": msg, "active": "finances",
+            "rows": rows,
+            "income": income,
+            "expenses": expenses,
+            "result": round(income - expenses, 2),
+            "years": sorted({r["date"][:4] for r in rows}, reverse=True),
+        },
+    )
+
+
+@app.post("/finances")
+def finances_add(
+    kind: str = Form("expense"),
+    booked_on: str = Form(""),
+    description: str = Form(...),
+    amount: str = Form(...),
+):
+    description = " ".join(description.split())
+    try:
+        value = parse_german_decimal(amount)
+    except ValueError:
+        value = None
+    if not description or value is None or value <= 0:
+        return RedirectResponse(_msg_url("/finances", t("Beschreibung und Betrag (größer 0) angeben"), error=True), status_code=303)
+    try:
+        entry = LedgerEntry.create(kind=kind, booked_on=booked_on, description=description, amount=value)
+    except (ValidationError, ValueError):
+        return RedirectResponse(_msg_url("/finances", t("Ungültiges Datum"), error=True), status_code=303)
+    ledger.append(entry)
+    return RedirectResponse(_msg_url("/finances", t("Eintrag gespeichert")), status_code=303)
+
+
+@app.post("/finances/{entry_uuid}/delete")
+def finances_delete(entry_uuid: str):
+    # Only manual entries: a sale row has no delete button, and its sale_id
+    # is not in the ledger anyway.
+    if not ledger.delete(entry_uuid):
+        return RedirectResponse(_msg_url("/finances", t("Eintrag nicht gefunden"), error=True), status_code=303)
+    return RedirectResponse(_msg_url("/finances", t("Eintrag gelöscht")), status_code=303)
 
 
 def parse_preset_items(text: str) -> list[PresetItem] | None:

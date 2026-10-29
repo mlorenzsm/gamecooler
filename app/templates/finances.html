@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% include "_msg.html" %}
+
+<h2 class="page-title">{{ t("Finanzen") }}</h2>
+<p id="summary-line">
+  {# The values are formatted numbers, so the translated sentence is safe to emit as markup. #}
+  {{ t("Einnahmen {income}, Ausgaben {expenses} — Ergebnis {result}",
+       income='<b id="sum-income">' ~ (income | de) ~ ' €</b>',
+       expenses='<b id="sum-expenses">' ~ (expenses | de) ~ ' €</b>',
+       result='<b id="sum-result">' ~ (result | de) ~ ' €</b>') | safe }}
+</p>
+
+{# New entry. Expenses are the main use (ammo, lease, butcher); an income row
+   covers what has no invoice in the app, e.g. a whole animal sold off the
+   books page. Completed sales join the list below on their own. #}
+<form method="post" action="/finances">
+  <div class="list-group">
+    <label class="list-row"><span class="list-label">{{ t("Art") }}</span>
+      <select name="kind">
+        <option value="expense">{{ t("Ausgabe") }}</option>
+        <option value="income">{{ t("Einnahme") }}</option>
+      </select>
+    </label>
+    <label class="list-row"><span class="list-label">{{ t("Datum") }}</span>
+      <input type="date" name="booked_on" value="{{ today() }}">
+    </label>
+    <label class="list-row"><span class="list-label">{{ t("Beschreibung") }}</span>
+      <input name="description" required maxlength="200" placeholder="{{ t("z. B. Munition, Pacht, Metzger") }}">
+    </label>
+    <label class="list-row"><span class="list-label">{{ t("Betrag") }}</span>
+      <input name="amount" required inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
+             placeholder="{{ t("0,00") }}" aria-label="{{ t("Betrag") }} (€)">
+      <span class="list-unit">€</span>
+    </label>
+  </div>
+  <button class="print mb-4" type="submit">{{ icon('plus') }}{{ t("Hinzufügen") }}</button>
+</form>
+
+<div class="filters mb-4">
+  <select id="f-year">
+    <option value="">{{ t("Alle Jahre") }}</option>
+    {% for y in years %}<option>{{ y }}</option>{% endfor %}
+  </select>
+  <select id="f-kind">
+    <option value="">{{ t("Alle Arten") }}</option>
+    <option value="expense">{{ t("Ausgaben") }}</option>
+    <option value="income">{{ t("Einnahmen") }}</option>
+    <option value="sale">{{ t("Verkäufe") }}</option>
+  </select>
+  <input id="f-search" type="search" placeholder="{{ t("Suche…") }}">
+</div>
+
+<table class="responsive finances">
+  <tr>
+    <th>{{ t("Datum") }}</th><th>{{ t("Art") }}</th><th>{{ t("Beschreibung") }}</th>
+    <th class="num">€</th><th></th>
+  </tr>
+  {% for r in rows %}
+  <tr class="fin-row" data-year="{{ r.date[:4] }}" data-kind="{{ r.kind }}"
+      data-amount="{{ r.amount }}"
+      data-search="{{ (r.description ~ ' ' ~ r.date ~ ' ' ~ (r.date | date)) | lower }}">
+    <td data-label="{{ t("Datum") }}">{{ r.date | date }}</td>
+    <td data-label="{{ t("Art") }}">
+      {% if r.kind == 'expense' %}<span class="badge bad">{{ t("Ausgabe") }}</span>
+      {% elif r.kind == 'income' %}<span class="badge ok">{{ t("Einnahme") }}</span>
+      {% else %}<span class="badge frost">{{ icon('shopping-bag') }}{{ t("Verkauf") }}</span>{% endif %}
+    </td>
+    <td data-label="{{ t("Beschreibung") }}">
+      {% if r.sale_id %}<a href="/sales/{{ r.sale_id }}">{{ r.description }}</a>
+      {% else %}{{ r.description }}{% endif %}
+    </td>
+    <td class="num {{ 'amount-neg' if r.kind == 'expense' else 'amount-pos' }}" data-label="€">
+      {{ '−' if r.kind == 'expense' else '+' }}{{ r.amount | de }}
+    </td>
+    <td data-label="">
+      {% if not r.sale_id %}
+      <form method="post" action="/finances/{{ r.uuid }}/delete"
+            data-confirm="{{ t("Eintrag löschen?") ~ "\n\n" ~ r.description ~ ", " ~ (r.amount | de) ~ " €" }}"
+            data-confirm-danger data-confirm-ok="{{ t('Löschen') }}">
+        <button class="small icon-only danger" type="submit" title="{{ t('Löschen') }}" aria-label="{{ t('Löschen') }}">{{ icon('trash-2') }}</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% if not rows %}
+<div class="empty-state">
+  {{ icon('coins') }}
+  <h3>{{ t("Noch keine Einträge") }}</h3>
+  <p>{{ t("Ausgaben hier eintragen — abgeschlossene Verkäufe erscheinen automatisch.") }}</p>
+</div>
+{% endif %}
+{# shown by the filter script when nothing matches #}
+<div id="no-match" class="empty-state" hidden>
+  {{ icon('search') }}
+  <h3>{{ t("Keine Treffer.") }}</h3>
+  <p>{{ t("Filter oder Suche ändern.") }}</p>
+</div>
+
+<script>
+const DEC = {{ decimal_separator() | tojson }};
+const rows = [...document.querySelectorAll('.fin-row')];
+const fYear = document.getElementById('f-year');
+const fKind = document.getElementById('f-kind');
+const fSearch = document.getElementById('f-search');
+
+function fmt(n) { return n.toFixed(2).replace('.', DEC); }
+
+function applyFilter() {
+  const year = fYear.value, kind = fKind.value;
+  const search = fSearch.value.trim().toLowerCase();
+  let shown = 0, income = 0, expenses = 0;
+  for (const row of rows) {
+    const match =
+      (!year || row.dataset.year === year) &&
+      (!kind || row.dataset.kind === kind) &&
+      (!search || row.dataset.search.includes(search));
+    row.hidden = !match;
+    if (match) {
+      shown++;
+      const amount = parseFloat(row.dataset.amount);
+      if (row.dataset.kind === 'expense') expenses += amount; else income += amount;
+    }
+  }
+  document.getElementById('no-match').hidden = shown > 0 || !rows.length;
+  document.getElementById('sum-income').textContent = fmt(income) + ' €';
+  document.getElementById('sum-expenses').textContent = fmt(expenses) + ' €';
+  document.getElementById('sum-result').textContent = fmt(income - expenses) + ' €';
+}
+
+[fYear, fKind].forEach(el => el.addEventListener('change', applyFilter));
+fSearch.addEventListener('input', applyFilter);
+applyFilter();
+</script>
+
+{% endblock %}

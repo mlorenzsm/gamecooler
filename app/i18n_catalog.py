@@ -368,4 +368,30 @@ EN = {
     "2 Etiketten drucken": "Print 2 labels",
     "Gewicht in kg, oder „5x“ für eine Stückzahl mit Festpreis. Leer lassen, damit es nicht aufs Etikett kommt.":
         "Weight in kg, or “5x” for a piece count with a fixed price. Leave empty to keep it off the label.",
+
+    # --- finances.html ----------------------------------------------------------
+    "Finanzen": "Finances",
+    "Einnahmen {income}, Ausgaben {expenses} — Ergebnis {result}":
+        "Income {income}, expenses {expenses} — result {result}",
+    "Art": "Type",
+    "Ausgabe": "Expense",
+    "Einnahme": "Income",
+    "Ausgaben": "Expenses",
+    "Einnahmen": "Income",
+    "Verkäufe": "Sales",
+    "Beschreibung": "Description",
+    "z. B. Munition, Pacht, Metzger": "e.g. ammunition, lease, butcher",
+    "Alle Jahre": "All years",
+    "Alle Arten": "All types",
+    "Verkauf Nr. {number} – {buyer}": "Sale no. {number} – {buyer}",
+    "Eintrag löschen?": "Delete this entry?",
+    "Noch keine Einträge": "No entries yet",
+    "Ausgaben hier eintragen — abgeschlossene Verkäufe erscheinen automatisch.":
+        "Enter expenses here — completed sales appear automatically.",
+    "Filter oder Suche ändern.": "Change the filter or search.",
+    "Beschreibung und Betrag (größer 0) angeben": "Enter a description and an amount (greater than 0)",
+    "Ungültiges Datum": "Invalid date",
+    "Eintrag gespeichert": "Entry saved",
+    "Eintrag gelöscht": "Entry deleted",
+    "Eintrag nicht gefunden": "Entry not found",
 }
