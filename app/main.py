@@ -17,7 +17,7 @@ from markupsafe import Markup, escape
 from PIL import Image
 from pydantic import ValidationError
 
-from . import certificates, ledger, paperless, registry, sales
+from . import certificates, ledger, paperless, registry, sales, scale
 from .config import LOGO_PATH, PART_KINDS, UNITS, Hunter, PartDefaults, Preset, PresetItem, Recipe, RecipeItem, Species, load_config, save_config
 from .i18n import LANGUAGES, decimal_separator, format_date, get_lang, pick_language, reset_lang, set_lang, t
 from .labels import render_info_label, render_qr_label
@@ -148,6 +148,32 @@ templates.env.policies["json.dumps_kwargs"] = {"sort_keys": False}
 templates.env.filters["preset_text"] = preset_text
 
 config = load_config()
+
+# Scale: optional (docs/scale.md). The reader thread only exists when a port
+# is configured; without one /scale/weight says "no scale" and the weight
+# fields are simply typed.
+scale_reader: scale.ScaleReader | None = None
+if config.scale.port:
+    scale_reader = scale.ScaleReader(config.scale.port, config.scale.baudrate)
+    scale_reader.start()
+
+
+@app.get("/scale/weight")
+def scale_weight():
+    """The scale's latest reading, for the weigh buttons on the print forms.
+
+    ok=false covers everything from "no scale configured" to "stream went
+    quiet" — the button greys out either way, the form keeps working.
+    """
+    reading = scale_reader.latest() if scale_reader else None
+    if reading is None or reading.mode != scale.MODE_WEIGH or reading.overload or reading.negative:
+        return JSONResponse({"ok": False})
+    return JSONResponse({
+        "ok": True,
+        "weight_kg": reading.weight_kg,
+        "stable": reading.stable,
+    })
+
 
 LANG_COOKIE = "lang"
 

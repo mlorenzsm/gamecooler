@@ -203,6 +203,18 @@ class Species(BaseModel):
         }
 
 
+class ScaleSettings(BaseModel):
+    """Bench scale on RS-232 (docs/scale.md). Empty port = no scale; the app
+    is fully functional without one — the weight fields are just typed then.
+
+    port is a pyserial URL: "/dev/tty.usbserial-*" for a USB adapter,
+    "socket://<ip>:<port>" for the WLAN bridge or tools/scale_sim.py.
+    """
+
+    port: str = ""
+    baudrate: int = 9600
+
+
 class PaperlessSettings(BaseModel):
     """What an uploaded invoice is filed as in Paperless-ngx. Names, not IDs:
     they are looked up (and created if missing) on upload.
@@ -228,6 +240,7 @@ class Config(BaseModel):
     # pack goes to the same buyers.
     label_language: str = "de"
     paperless: PaperlessSettings = PaperlessSettings()
+    scale: ScaleSettings = ScaleSettings()
 
     @field_validator("label_language", mode="before")
     @classmethod
@@ -392,6 +405,8 @@ def save_config(config: Config) -> None:
     # only written once someone changed it, so existing files stay as they are
     if config.paperless != PaperlessSettings():
         data["paperless"] = config.paperless.model_dump()
+    if config.scale != ScaleSettings():
+        data["scale"] = config.scale.model_dump()
     tmp_path = CONFIG_PATH.with_suffix(".yaml.tmp")
     with open(tmp_path, "w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)

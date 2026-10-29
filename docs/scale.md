@@ -1,7 +1,18 @@
-# Scale integration (planned)
+# Scale integration
 
-Status: **Idea / not implemented yet.** A scale is to be bought later and then
-integrated. This document records the research so the decision doesn't have to
+Status: **Implemented against a simulator; awaiting the real hardware.**
+`app/scale.py` speaks the frame protocol below, `tools/scale_sim.py` plays
+the scale (same encoder, real TCP like the WLAN bridge), and the print forms
+have a weigh button when `scale:` is configured. When the SBS-TW-15C
+arrives, confirm the baud rate and the unit-byte values (`UNITS` in
+app/scale.py) — everything else should work unchanged.
+
+Try it without hardware:
+
+    .venv/bin/python tools/scale_sim.py        # then type a weight, e.g. 2.5
+    # config.yaml:  scale: {port: socket://127.0.0.1:8765}
+
+This document records the hardware research so the decision doesn't have to
 be made again.
 
 Goal: take the weight directly from the scale when filling in a bulk print row

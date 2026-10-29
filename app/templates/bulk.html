@@ -54,9 +54,11 @@
   </div>
 </form>
 
+{% include "_scale.html" %}
 <script>
 const T = {{ {
   "kein Preis": t("kein Preis"),
+  "Von der Waage übernehmen": t("Von der Waage übernehmen"),
   "Anzahl": t("Anzahl"),
   "Teilstück": t("Teilstück"),
   "Gewicht/Stück (kg) oder 5x": t("Gewicht/Stück (kg) oder 5x"),
@@ -108,7 +110,7 @@ function addRow(item = { part: null, count: 1 }) {
   row.innerHTML = `
     <td class="c-count" data-label="${T['Anzahl']}"><input name="count" type="number" min="1" value="${item.count}" required class="input-num input-num-sm"></td>
     <td class="c-part" data-label="${T['Teilstück']}"><select name="part" required aria-label="${T['Teilstück']}"></select></td>
-    <td class="c-weight" data-label="${T['Gewicht/Stück (kg) oder 5x']}"><input aria-label="${T['Gewicht/Stück (kg) oder 5x']}" name="weight_kg" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]" placeholder="${T['0,4 / 5x']}" value="${defaultWeight(item.part || firstPart)}" class="input-num"></td>
+    <td class="c-weight" data-label="${T['Gewicht/Stück (kg) oder 5x']}"><input aria-label="${T['Gewicht/Stück (kg) oder 5x']}" name="weight_kg" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]" placeholder="${T['0,4 / 5x']}" value="${defaultWeight(item.part || firstPart)}" class="input-num">{% if config.scale.port %}<button type="button" class="small icon-only weigh-btn" title="${escapeHtml(T['Von der Waage übernehmen'])}" aria-label="${escapeHtml(T['Von der Waage übernehmen'])}">{{ icon('scale') }}</button>{% endif %}</td>
     <td class="c-price" data-label="${T['Preis/kg bzw. Festpreis (€)']}"><input aria-label="${T['Preis/kg bzw. Festpreis (€)']}" name="price_per_kg" inputmode="decimal" enterkeyhint="done" pattern="[0-9]+([.,][0-9]+)?" placeholder="${escapeHtml(pricePlaceholder(item.part || firstPart))}" class="input-num"></td>
     <td class="center c-noprice" data-label="${T['kein Preis']}">
       <label class="inline-check"><input type="checkbox" class="no-price" title="${T['Kein Preis auf dem Etikett']}"><span class="noprice-label">${T['kein Preis']}</span></label>
@@ -132,6 +134,8 @@ function addRow(item = { part: null, count: 1 }) {
     updateSummary();
   });
   row.querySelectorAll('input').forEach(i => i.addEventListener('input', updateSummary));
+  const weighBtn = row.querySelector('.weigh-btn');
+  if (weighBtn) attachScaleButton(weighBtn, row.querySelector('input[name=weight_kg]'));
   updateSummary();
 }
 

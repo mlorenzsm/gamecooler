@@ -1,0 +1,56 @@
+{# Weigh buttons (app/scale.py): poll /scale/weight, wait for a stable
+   reading, fill the weight field. Included by the print forms BEFORE their
+   own script blocks — bulk.html's addRow() needs attachScaleButton().
+   The buttons only show while the scale actually answers (body.scale-ready),
+   so a missing or switched-off scale leaves the forms exactly as they were. #}
+{% if config.scale.port %}
+<style>
+  .weigh-btn { display: none; }
+  body.scale-ready .weigh-btn { display: inline-flex; }
+  .weigh-btn[disabled] .icon { animation: weigh-pulse 0.8s ease-in-out infinite; }
+  @keyframes weigh-pulse { 50% { opacity: 0.3; } }
+</style>
+<script>
+(function () {
+  async function read() {
+    return (await fetch('/scale/weight')).json();
+  }
+  // Wait for a stable reading, up to 5 s — putting meat on the platform
+  // wobbles first. null = scale gone or never settled.
+  async function stableWeight() {
+    for (let i = 0; i < 25; i++) {
+      const data = await read();
+      if (!data.ok) return null;
+      if (data.stable) return data.weight_kg;
+      await new Promise(r => setTimeout(r, 200));
+    }
+    return null;
+  }
+  window.attachScaleButton = function (btn, input) {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        const kg = await stableWeight();
+        if (kg == null) { check(); return; }
+        input.value = kg.toFixed(3).replace('.', typeof DEC === 'undefined' ? ',' : DEC);
+        // the pages' own listeners (preview, totals) hang on these events
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      } catch (e) {
+        check();
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  };
+  function check() {
+    read().then(d => document.body.classList.toggle('scale-ready', d.ok))
+          .catch(() => document.body.classList.remove('scale-ready'));
+  }
+  document.querySelectorAll('.weigh-btn[data-weigh]').forEach(btn =>
+    attachScaleButton(btn, document.getElementById(btn.dataset.weigh)));
+  check();
+  setInterval(check, 5000);
+})();
+</script>
+{% endif %}
