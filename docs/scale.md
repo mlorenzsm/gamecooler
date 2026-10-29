@@ -13,11 +13,15 @@ The preferred model is the **Steinberg Systems SBS-TW-15** (Metro Marketplace
 link, see below) — a bench scale, **15 kg / 0.5 g**, with an **RS-232**
 interface.
 
-> **Still to be confirmed:** Metro blocks fetching the product page directly
-> (HTTP 403). The model identification comes from search results, not from the
-> page itself. Before buying, check the product description, especially whether
-> the **RS-232 data cable is included** or has to be ordered separately
-> (some retailers charge ~€20 extra for it).
+> **Confirmed (expondo product page, Oct 2026):** the model sold as
+> "Tischwaage 15 kg / 0,5 g" is the **SBS-TW-15C** (the C variant — see note
+> below), with RS-232. The **data cable is NOT included**: the Lieferumfang
+> lists only scale, 6V battery and power supply. Order a cable (and the
+> USB→RS-232 FTDI adapter) separately.
+>
+> Cheapest source was expondo directly (~€52), Metro ~€58, Amazon ~€79,
+> Otto ~€95. expondo is the manufacturer, so warranty handling is simplest
+> there.
 
 Steinberg Systems is expondo's house brand (`steinbergsystems.de`), not to be
 confused with Steinberg (audio software, `steinberg.net`) — search results mix
@@ -32,8 +36,9 @@ up the two brands heavily.
 | SBS-TW-30C | 30 kg | 1 g | RS-232 |
 
 The suffix **C** marks the counting-scale variant (piece counting) — irrelevant
-for this use case. Double-check exact model numbers and prices when buying; the
-product range changes.
+for this use case, but harmless: what expondo actually sells at 15 kg / 0.5 g
+**is the SBS-TW-15C**, and the counting feature simply goes unused. Double-check
+exact model numbers and prices when buying; the product range changes.
 
 ## Why a cheap one is good enough
 
