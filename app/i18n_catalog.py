@@ -369,6 +369,11 @@ EN = {
     "Gewicht in kg, oder „5x“ für eine Stückzahl mit Festpreis. Leer lassen, damit es nicht aufs Etikett kommt.":
         "Weight in kg, or “5x” for a piece count with a fixed price. Leave empty to keep it off the label.",
 
+    # --- wildkammer.html (kiosk) ------------------------------------------------
+    "Wildkammer": "Game chamber",
+    "Teilstücke im Bestand": "cuts in stock",
+    "{weight} · Warenwert {value}": "{weight} · stock value {value}",
+
     # --- finances.html ----------------------------------------------------------
     "Finanzen": "Finances",
     "{year}: Einnahmen {income}, Ausgaben {expenses} — Ergebnis {result}":
