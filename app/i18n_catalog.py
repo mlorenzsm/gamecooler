@@ -381,6 +381,9 @@ EN = {
     "Waage nicht erreichbar — Gewicht antippen und eintippen": "Scale unreachable — tap the weight and type it in",
     "{n} Teilstücke gepackt, {total} €": "{n} cuts packed, {total} €",
     "{price} €/kg": "{price} €/kg",
+    "Beutel": "Bag",
+    "Ohne Beutel": "No bag",
+    "abzüglich Beutel ({g} g)": "minus bag ({g} g)",
 
     # --- finances.html ----------------------------------------------------------
     "Finanzen": "Finances",

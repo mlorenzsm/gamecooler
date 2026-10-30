@@ -30,9 +30,19 @@
     .animal-bar .home { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px;
                         border-radius: var(--r-md); border: 1px solid var(--line); background: var(--surface); color: var(--muted); }
 
+    /* Bag chips: which vacuum bag is on the scale — its weight is the tare.
+       Same row style as the animal bar, but they sit with the weight. */
+    .bag-bar { display: flex; flex-wrap: wrap; gap: var(--s-2); justify-content: center; }
+    .bag-bar button { min-height: 56px; padding: 0 var(--s-4); font-size: var(--text-lg); font-weight: 600;
+                      border-radius: var(--r-pill); border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+    .bag-bar button .bag-weight { font-size: var(--text-sm); font-weight: 400; color: var(--muted); margin-left: var(--s-1); }
+    .bag-bar button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+    .bag-bar button[aria-pressed="true"] .bag-weight { color: var(--accent-ink); opacity: 0.8; }
+
     /* The weight: the biggest thing on the screen, readable from the vacuum
        sealer. Amber while settling, ink when stable (scale.html colors). */
     .weight-zone { display: flex; align-items: baseline; justify-content: center; gap: var(--s-4); min-height: 18vh; }
+    .tare-note { text-align: center; font-size: var(--text-sm); color: var(--muted); min-height: 1.2em; }
     .weight-value { font-size: clamp(4rem, 16vmin, 10rem); line-height: 1; font-weight: 650; letter-spacing: -0.02em;
                     font-variant-numeric: tabular-nums; }
     .weight-value.settling { color: var(--warn); }
@@ -92,6 +102,19 @@
 
 {% if config.dry_run %}<div class="dry-run">{{ t("Testmodus aktiv (dry_run) – es wird nicht gedruckt.") }}</div>{% endif %}
 
+{# Bag tare: tap the bag that's on the scale, its weight comes off the
+   reading. "Ohne" = weighing without a bag. Configured in config.yaml. #}
+{% if config.bags %}
+<div class="bag-bar" role="group" aria-label="{{ t("Beutel") }}">
+  <button type="button" class="bag-btn" data-tare="0" aria-pressed="true">{{ t("Ohne Beutel") }}</button>
+  {% for b in config.bags %}
+  <button type="button" class="bag-btn" data-tare="{{ b.weight_g }}" aria-pressed="false">
+    {{ b.name }}<span class="bag-weight">−{{ b.weight_g | de(0) }} g</span>
+  </button>
+  {% endfor %}
+</div>
+{% endif %}
+
 <div class="weight-zone">
   {% if scale_on %}
   <span class="weight-value gone" id="weight">–,–––</span>
@@ -101,6 +124,7 @@
          aria-label="{{ t("Gewicht (kg)") }}"><span class="weight-unit">kg</span>
   {% endif %}
 </div>
+<p class="tare-note" id="tare-note"></p>
 
 <div class="pack-result" id="result" aria-live="polite"></div>
 
@@ -123,15 +147,26 @@ const T = {{ {
   "Waage nicht erreichbar — Gewicht antippen und eintippen": t("Waage nicht erreichbar — Gewicht antippen und eintippen"),
   "{n} Teilstücke gepackt, {total} €": t("{n} Teilstücke gepackt, {total} €"),
   "{price} €/kg": t("{price} €/kg"),
+  "abzüglich Beutel ({g} g)": t("abzüglich Beutel ({g} g)"),
 } | tojson }};
 
 const weightEl = document.getElementById('weight');
 const manualEl = document.getElementById('weight-manual');
-let liveKg = null;          // last stable weight from the scale
+let liveKg = null;          // last stable NET weight (scale minus bag)
 let settling = false;
 
 function fmt(n, d = 3) { return n.toFixed(d).replace('.', DEC); }
 function num(s) { return parseFloat((s || '').replace(',', '.')); }
+
+// --- bag tare: the selected bag's weight comes off every reading ----------
+let tareKg = 0;
+const tareNote = document.getElementById('tare-note');
+document.querySelectorAll('.bag-btn').forEach(btn => btn.addEventListener('click', () => {
+  document.querySelectorAll('.bag-btn').forEach(b => b.setAttribute('aria-pressed', 'false'));
+  btn.setAttribute('aria-pressed', 'true');
+  tareKg = parseFloat(btn.dataset.tare) / 1000;
+  tareNote.textContent = tareKg > 0 ? T['abzüglich Beutel ({g} g)'].replace('{g}', fmt(tareKg * 1000, 0)) : '';
+}));
 
 // --- scale: always following, no toggle — this page exists to weigh -------
 {% if scale_on %}
@@ -139,9 +174,13 @@ async function tick() {
   try {
     const d = await (await fetch('/scale/weight')).json();
     if (d.ok) {
+      // the bag is on the scale with the meat: show and pack the net weight.
+      // An empty platform with a bag selected reads slightly negative — show
+      // 0 and treat it as "nothing on the scale".
+      const net = Math.max(0, d.weight_kg - tareKg);
       settling = !d.stable;
-      if (d.stable) liveKg = d.weight_kg;
-      weightEl.textContent = fmt(d.weight_kg);
+      if (d.stable) liveKg = net;
+      weightEl.textContent = fmt(net);
       weightEl.className = 'weight-value' + (settling ? ' settling' : '');
     } else {
       liveKg = null;
@@ -156,8 +195,9 @@ tick();
 
 function currentWeight() {
   if (SCALE_ON) return liveKg != null && liveKg >= 0.005 ? liveKg : null;
-  const v = num(manualEl.value);
-  return isFinite(v) && v > 0 ? v : null;
+  // typed from the scale's own display, which includes the bag
+  const v = num(manualEl.value) - tareKg;
+  return isFinite(v) && v > 0.005 ? v : null;
 }
 
 // --- part tiles: one per part of the species, grouped like the dropdowns --

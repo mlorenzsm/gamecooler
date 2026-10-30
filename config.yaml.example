@@ -128,3 +128,11 @@ label_language: de
 # scale:
 #   port: socket://127.0.0.1:8765
 #   baudrate: 9600
+
+# Vacuum bags for the packing page (/pack): tap the bag on the scale and its
+# weight is subtracted from the reading. Heaviest use first.
+# bags:
+# - name: 200×300
+#   weight_g: 10
+# - name: 300×400
+#   weight_g: 18

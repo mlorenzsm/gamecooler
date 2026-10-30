@@ -203,6 +203,19 @@ class Species(BaseModel):
         }
 
 
+class Bag(BaseModel):
+    """A vacuum bag size for the packing page's tare: its weight is
+    subtracted from the scale's reading, so the label carries the meat."""
+
+    name: str                 # e.g. "200×300"
+    weight_g: float
+
+    @field_validator("weight_g", mode="before")
+    @classmethod
+    def _german_decimal(cls, v):
+        return float(str(v).replace(",", "."))
+
+
 class ScaleSettings(BaseModel):
     """Bench scale on RS-232 (docs/scale.md). Empty port = no scale; the app
     is fully functional without one — the weight fields are just typed then.
@@ -241,6 +254,8 @@ class Config(BaseModel):
     label_language: str = "de"
     paperless: PaperlessSettings = PaperlessSettings()
     scale: ScaleSettings = ScaleSettings()
+    # Vacuum bags for the packing page's tare, heaviest use first.
+    bags: list[Bag] = []
 
     @field_validator("label_language", mode="before")
     @classmethod
@@ -407,6 +422,8 @@ def save_config(config: Config) -> None:
         data["paperless"] = config.paperless.model_dump()
     if config.scale != ScaleSettings():
         data["scale"] = config.scale.model_dump()
+    if config.bags:
+        data["bags"] = [b.model_dump() for b in config.bags]
     tmp_path = CONFIG_PATH.with_suffix(".yaml.tmp")
     with open(tmp_path, "w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
