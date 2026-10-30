@@ -372,11 +372,6 @@ EN = {
     # --- Scale (_scale.html, index.html, bulk.html) -------------------------------
     "Waage folgen (ein/aus)": "Follow the scale (on/off)",
 
-    # --- wildkammer.html (kiosk) ------------------------------------------------
-    "Wildkammer": "Game chamber",
-    "Teilstücke im Bestand": "cuts in stock",
-    "{weight} · Warenwert {value}": "{weight} · stock value {value}",
-
     # --- finances.html ----------------------------------------------------------
     "Finanzen": "Finances",
     "{year}: Einnahmen {income}, Ausgaben {expenses} — Ergebnis {result}":

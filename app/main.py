@@ -312,35 +312,6 @@ def inventory_page(request: Request, msg: str = ""):
     )
 
 
-@app.get("/wildkammer")
-def wildkammer_page(request: Request):
-    """Kiosk view for a wall-mounted touchscreen in the Wildkammer.
-
-    Not in the tab bar — the wall browser is pointed at /wildkammer once.
-    Glanceable stock figures, per-species breakdown, and three big tiles into
-    the jobs done standing at the wall: scan, bulk print, stock list.
-    """
-    inventory = registry.inventory()
-    by_species: dict[str, dict] = {}
-    for r in inventory:
-        group = by_species.setdefault(r.species, {"count": 0, "weight": 0.0})
-        group["count"] += 1
-        if r.weight_kg is not None:
-            group["weight"] += r.weight_kg
-    return templates.TemplateResponse(
-        request,
-        "wildkammer.html",
-        {
-            "config": config,
-            "count": len(inventory),
-            "weight": sum(r.weight_kg for r in inventory if r.weight_kg is not None),
-            "value": sum(r.total_price for r in inventory if r.total_price is not None),
-            "hint": _inventory_hint(inventory),
-            "by_species": dict(sorted(by_species.items(), key=lambda kv: -kv[1]["count"])),
-        },
-    )
-
-
 @app.get("/preview")
 def preview(
     hunter: str,
