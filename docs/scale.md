@@ -1,7 +1,18 @@
-# Scale integration (planned)
+# Scale integration
 
-Status: **Idea / not implemented yet.** A scale is to be bought later and then
-integrated. This document records the research so the decision doesn't have to
+Status: **Implemented against a simulator; awaiting the real hardware.**
+`app/scale.py` speaks the frame protocol below, `tools/scale_sim.py` plays
+the scale (same encoder, real TCP like the WLAN bridge), and the print forms
+have a weigh button when `scale:` is configured. When the SBS-TW-15C
+arrives, confirm the baud rate and the unit-byte values (`UNITS` in
+app/scale.py) — everything else should work unchanged.
+
+Try it without hardware:
+
+    .venv/bin/python tools/scale_sim.py        # then type a weight, e.g. 2.5
+    # config.yaml:  scale: {port: socket://127.0.0.1:8765}
+
+This document records the hardware research so the decision doesn't have to
 be made again.
 
 Goal: take the weight directly from the scale when filling in a bulk print row
@@ -13,11 +24,15 @@ The preferred model is the **Steinberg Systems SBS-TW-15** (Metro Marketplace
 link, see below) — a bench scale, **15 kg / 0.5 g**, with an **RS-232**
 interface.
 
-> **Still to be confirmed:** Metro blocks fetching the product page directly
-> (HTTP 403). The model identification comes from search results, not from the
-> page itself. Before buying, check the product description, especially whether
-> the **RS-232 data cable is included** or has to be ordered separately
-> (some retailers charge ~€20 extra for it).
+> **Confirmed (expondo product page, Oct 2026):** the model sold as
+> "Tischwaage 15 kg / 0,5 g" is the **SBS-TW-15C** (the C variant — see note
+> below), with RS-232. The **data cable is NOT included**: the Lieferumfang
+> lists only scale, 6V battery and power supply. Order a cable (and the
+> USB→RS-232 FTDI adapter) separately.
+>
+> Cheapest source was expondo directly (~€52), Metro ~€58, Amazon ~€79,
+> Otto ~€95. expondo is the manufacturer, so warranty handling is simplest
+> there.
 
 Steinberg Systems is expondo's house brand (`steinbergsystems.de`), not to be
 confused with Steinberg (audio software, `steinberg.net`) — search results mix
@@ -32,8 +47,9 @@ up the two brands heavily.
 | SBS-TW-30C | 30 kg | 1 g | RS-232 |
 
 The suffix **C** marks the counting-scale variant (piece counting) — irrelevant
-for this use case. Double-check exact model numbers and prices when buying; the
-product range changes.
+for this use case, but harmless: what expondo actually sells at 15 kg / 0.5 g
+**is the SBS-TW-15C**, and the counting feature simply goes unused. Double-check
+exact model numbers and prices when buying; the product range changes.
 
 ## Why a cheap one is good enough
 
@@ -53,7 +69,11 @@ and creep — realistically a few grams.
 
 ## Required hardware
 
-The Mac has no serial port, so a **USB→RS-232 adapter** is needed as well.
+Two ways to get the RS-232 signal to the Mac:
+
+### A: USB→RS-232 adapter (wired)
+
+The Mac has no serial port, so a **USB→RS-232 adapter** is needed.
 Important: get one with an **FTDI chipset** — in our experience CH340/PL2303
 cause more driver trouble on macOS.
 
@@ -61,39 +81,81 @@ The scale then shows up as `/dev/tty.usbserial-*` and can be accessed with
 `pyserial`. (USB scales with a *virtual* serial port (CDC-ACM) behave
 identically but show up as `/dev/tty.usbmodem*`.)
 
-## Open question: can the scale be polled?
+### B: WLAN bridge (serial device server) — preferred
 
-**This is the critical point and must be settled before buying.**
+A serial device server exposes the RS-232 port as a TCP socket over Wi-Fi:
+no USB adapter, no driver, and the scale doesn't have to sit near the Mac.
+A transparent TCP bridge forwards the scale's binary stream untouched; the
+app opens `socket://<ip>:<port>` instead of `/dev/tty.*` — same parser.
 
-RS-232 scales typically support several transmission modes:
+- **Hi-Flying Elfin-EW10** (~€20–37): tiny, plugs onto the DB9, needs 5V.
+- **USR-W610** (~€40–60): industrial, extra Ethernet port, watchdog.
 
-- **manual** — only on key press
-- **automatic when stable** — sends on every stable weighing
-- **continuous** — constant stream
-- **on request** — the software sends a command, the scale replies
+**Powering the EW10 from the scale itself:** the EW10 accepts **5–18 V DC**
+on pin 7/8 of its RJ45 connector (manual: 5–36 V module input, ~200 mA,
+<0.7 W). The scale runs on a **6 V/4 Ah** lead-acid battery (charged by an
+8 V/0.5 A supply) — squarely inside that range, so the EW10 can be wired
+directly to the battery terminals and the whole thing becomes one
+self-contained wireless scale with no second wall wart. Caveats:
 
-The integration needs **"on request"**. Some scales can only send
-continuously or only on key press — then a "weigh row" button in the UI
-wouldn't be possible; instead you'd have to physically press the key 12 times
-for 12 rows.
+- **Runtime:** ~0.7 W ≈ 115 mA at 6 V drains the 4 Ah battery in ~35 h by
+  itself; combined runtime drops from ~100 h to a day or two. Fine when the
+  scale usually sits plugged in.
+- Wire the EW10 **behind the scale's power switch** (if the switch is in
+  the battery path), or it drains the battery while the scale is "off".
+- Opening the scale and tapping the battery leads voids the warranty —
+  the zero-modification alternative is the EW10 with its own small USB
+  supply, velcroed to the scale.
+- Check DTE/DCE pinout of the scale's port; a null-modem adapter between
+  scale and bridge may be needed (cheap, but annoying when missing).
 
-The SBS-TW series manual has a section on RS-232 transmission, but the exact
-**command syntax** couldn't be extracted. Before implementing, read the
-included manual and check the mode (typically: 9600 baud, 8N1).
+## Transmission mode: continuous stream (settled, Oct 2026)
 
-If the scale **can't** be polled, the ESP32 variant (below) is the better
-choice.
+**Settled from the manual's RS-232 section.** The spec describes only an
+output format and no request command: the scale **streams frames on its
+own** (continuous mode). That is not the "on request" mode the first draft
+of this document hoped for — but it is just as good, arguably simpler:
+
+- a background thread reads the stream and keeps the **latest frame**
+- `GET /scale/weight` returns that value instantly — no command round-trip
+- the frame carries a **stable flag**, so the "weigh row" button can wait
+  for a stable reading instead of grabbing a mid-wobble value
+
+### Frame format (6 bytes, binary)
+
+"10-Bit UART signal" = 1 start + 8 data + 1 stop, i.e. plain **8N1**.
+The baud rate is not in this section of the manual — check the neighbouring
+pages when the scale arrives (9600 is the usual default for this series).
+
+| Byte | Content |
+|---|---|
+| 1 | `0xFF` — frame header (sync marker) |
+| 2 | status: bits 0–2 decimal point position, 3–4 mode (`00` weighing, `01` counting, `10` percent), 5 negative, 6 **stable**, 7 overload |
+| 3 | BCD1 — weight digits, LSB |
+| 4 | BCD2 |
+| 5 | BCD3 — HSB |
+| 6 | unit: kg or lb |
+
+Parsing: resync on `0xFF`, read 5 more bytes, decode the 6 BCD digits,
+place the decimal point per status bits 0–2. Accept only frames with
+mode = weighing, stable = 1, overload = 0; honour the sign bit.
+
+Example: 2.5035 kg → digits `025035`, decimal position 4.
 
 ## Integration sketch
 
 Fits into the existing FastAPI app on the Mac, which already drives the
 printer — no second service needed:
 
-- `pyserial` opens `/dev/tty.usbserial-*`
-- reads in a separate thread (serial ports block)
-- endpoint e.g. `GET /scale/weight` → `{"ok": true, "weight_kg": 2.503}`
-- the frontend polls this endpoint; a "weigh row" button fills in the weight field
-- scale configurable in `config.yaml` (port, baud rate, model)
+- `pyserial` opens `/dev/tty.usbserial-*` — or, with the WLAN bridge below,
+  a plain TCP socket (`pyserial` handles both via `serial.serial_for_url`,
+  `socket://<ip>:<port>` for the bridge)
+- a separate thread reads the continuous stream and keeps the latest frame
+  (serial ports block; the stream must be drained either way)
+- endpoint e.g. `GET /scale/weight` → `{"ok": true, "weight_kg": 2.503, "stable": true}`
+- the frontend polls this endpoint; a "weigh row" button takes the next
+  stable value and fills in the weight field
+- scale configurable in `config.yaml` (serial port or host:port, baud rate)
 
 The weight is **nullable** — the integration is a convenience, not a
 prerequisite. The app must be fully functional without a scale.
@@ -129,6 +191,11 @@ which macOS doesn't support, so values can arrive garbled. Unsuitable for a
 
 - Metro Marketplace (SBS-TW-15):
   https://www.metro.de/marktplatz/product/78da41e1-e581-47fb-96a5-37cf35293abd
+- expondo (manufacturer, cheapest):
+  https://www.expondo.de/steinberg-systems-tischwaage-15-kg-0-5-g-21-x-27-cm-lcd-10030492
 - Steinberg Systems: https://www.steinbergsystems.de
+- Elfin-EW10 (Hi-Flying): http://www.hi-flying.com/elfin-ew10-elfin-ew11
+  (manual: Elfin-EW1X User Manual, power/pin specs on pp. 7–9)
+- USR-W610: https://shop.usriot.com/rs232/rs485-to-wifi-converters-usr-w610
 - `serial-scale-bench`: https://pypi.org/project/serial-scale-bench/
 - `serial-scale-hx711`: https://pypi.org/project/serial-scale-hx711/

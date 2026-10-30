@@ -4,12 +4,18 @@
 {% include "_msg.html" %}
 
 <h2 class="page-title">{{ t("Finanzen") }}</h2>
+{# The headline is always the current year, no matter what the list below is
+   filtered to — "2026" must not show another year's numbers. #}
 <p id="summary-line">
   {# The values are formatted numbers, so the translated sentence is safe to emit as markup. #}
-  {{ t("Einnahmen {income}, Ausgaben {expenses} — Ergebnis {result}",
-       income='<b id="sum-income">' ~ (income | de) ~ ' €</b>',
-       expenses='<b id="sum-expenses">' ~ (expenses | de) ~ ' €</b>',
-       result='<b id="sum-result">' ~ (result | de) ~ ' €</b>') | safe }}
+  {{ t("{year}: Einnahmen {income}, Ausgaben {expenses} — Ergebnis {result}",
+       year=year,
+       income='<b>' ~ (income | de) ~ ' €</b>',
+       expenses='<b>' ~ (expenses | de) ~ ' €</b>',
+       result='<b>' ~ (result | de) ~ ' €</b>') | safe }}
+  {% if last_result is not none %}
+  <span class="hint">{{ t("Ergebnis {year}: {result}", year=last_year, result=(last_result | de) ~ ' €') }}</span>
+  {% endif %}
 </p>
 
 {# New entry. Expenses are the main use (ammo, lease, butcher); an income row
@@ -51,6 +57,8 @@
   </select>
   <input id="f-search" type="search" placeholder="{{ t("Suche…") }}">
 </div>
+{# totals of the filtered list; empty while nothing is filtered #}
+<p class="hint" id="filter-sums"></p>
 
 <table class="responsive finances">
   <tr>
@@ -101,6 +109,10 @@
 </div>
 
 <script>
+const T = {{ {
+  "Einnahmen {income}, Ausgaben {expenses} — Ergebnis {result}":
+      t("Einnahmen {income}, Ausgaben {expenses} — Ergebnis {result}"),
+} | tojson }};
 const DEC = {{ decimal_separator() | tojson }};
 const rows = [...document.querySelectorAll('.fin-row')];
 const fYear = document.getElementById('f-year');
@@ -109,9 +121,12 @@ const fSearch = document.getElementById('f-search');
 
 function fmt(n) { return n.toFixed(2).replace('.', DEC); }
 
+// The headline stays the current year (rendered by the server). The filters
+// get their own totals line, so a filtered view still adds up.
 function applyFilter() {
   const year = fYear.value, kind = fKind.value;
   const search = fSearch.value.trim().toLowerCase();
+  const filtered = year || kind || search;
   let shown = 0, income = 0, expenses = 0;
   for (const row of rows) {
     const match =
@@ -126,9 +141,12 @@ function applyFilter() {
     }
   }
   document.getElementById('no-match').hidden = shown > 0 || !rows.length;
-  document.getElementById('sum-income').textContent = fmt(income) + ' €';
-  document.getElementById('sum-expenses').textContent = fmt(expenses) + ' €';
-  document.getElementById('sum-result').textContent = fmt(income - expenses) + ' €';
+  document.getElementById('filter-sums').textContent = filtered && shown
+    ? T['Einnahmen {income}, Ausgaben {expenses} — Ergebnis {result}']
+        .replace('{income}', fmt(income) + ' €')
+        .replace('{expenses}', fmt(expenses) + ' €')
+        .replace('{result}', fmt(income - expenses) + ' €')
+    : '';
 }
 
 [fYear, fKind].forEach(el => el.addEventListener('change', applyFilter));

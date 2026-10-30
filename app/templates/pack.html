@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+{# Packing workstation (/pack): the step after cutting — vacuum, weigh,
+   label. Runs fullscreen on a wall-mounted touchscreen next to the scale.
+   Deliberately NOT extending base.html: no tab bar, no language switch; the
+   loop per piece must be one tap. Set hunter/species/kill date/mark once per
+   animal in the top bar; then: piece on the scale -> weight appears -> tap
+   the part -> 2 labels print -> next piece. #}
+<html lang="{{ get_lang() }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Gamecooler – {{ t("Packen") }}</title>
+  <link rel="icon" href="/static/icon-192.png">
+  <meta name="color-scheme" content="light dark">
+  <link rel="preload" href="/static/fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/app.css?v={{ asset_version }}">
+  <style>
+    /* Workstation sizing: gloved, often damp hands — nothing under 56px,
+       the part tiles far bigger. Unlayered, so it wins over app.css. */
+    html, body { height: 100%; }
+    body { display: flex; flex-direction: column; gap: var(--s-3); overflow: hidden;
+           padding: var(--s-3) max(var(--s-3), env(safe-area-inset-right)) max(var(--s-3), env(safe-area-inset-bottom)) max(var(--s-3), env(safe-area-inset-left)); }
+
+    /* Animal bar: set once, then glanced at. Selects sized for touch. */
+    .animal-bar { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; }
+    .animal-bar select, .animal-bar input { min-height: 56px; font-size: var(--text-lg); border-radius: var(--r-md);
+                                            border: 1px solid var(--line); background: var(--surface); padding: 0 var(--s-3); }
+    .animal-bar input[name=mark] { width: 11rem; }
+    .animal-bar .spacer { flex: 1; }
+    .animal-bar .home { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px;
+                        border-radius: var(--r-md); border: 1px solid var(--line); background: var(--surface); color: var(--muted); }
+
+    /* Bag chips: which vacuum bag is on the scale — its weight is the tare.
+       Same row style as the animal bar, but they sit with the weight. */
+    .bag-bar { display: flex; flex-wrap: wrap; gap: var(--s-2); justify-content: center; }
+    .bag-bar button { min-height: 56px; padding: 0 var(--s-4); font-size: var(--text-lg); font-weight: 600;
+                      border-radius: var(--r-pill); border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+    .bag-bar button .bag-weight { font-size: var(--text-sm); font-weight: 400; color: var(--muted); margin-left: var(--s-1); }
+    .bag-bar button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+    .bag-bar button[aria-pressed="true"] .bag-weight { color: var(--accent-ink); opacity: 0.8; }
+
+    /* The weight: the biggest thing on the screen, readable from the vacuum
+       sealer. Amber while settling, ink when stable (scale.html colors). */
+    .weight-zone { display: flex; align-items: baseline; justify-content: center; gap: var(--s-4); min-height: 18vh; }
+    .tare-note { text-align: center; font-size: var(--text-sm); color: var(--muted); min-height: 1.2em; }
+    .weight-value { font-size: clamp(4rem, 16vmin, 10rem); line-height: 1; font-weight: 650; letter-spacing: -0.02em;
+                    font-variant-numeric: tabular-nums; }
+    .weight-value.settling { color: var(--warn); }
+    .weight-value.gone { color: var(--faint); }
+    .weight-unit { font-size: var(--text-2xl); color: var(--muted); }
+    /* no scale (or gone): the zone is a button that opens manual entry */
+    .weight-zone input { font-size: clamp(3rem, 10vmin, 6rem); width: 7ch; text-align: right; font-weight: 650;
+                         border: none; border-bottom: 3px solid var(--line); background: transparent; }
+
+    /* Part tiles: the one tap per piece. Grid fills the middle of the wall. */
+    .part-tiles { flex: 1; overflow-y: auto; display: grid; gap: var(--s-3);
+                  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); align-content: start; }
+    .part-tiles button { min-height: 96px; font-size: var(--text-xl); font-weight: 600; border-radius: var(--r-lg);
+                         border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+                         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s-1);
+                         padding: var(--s-2) var(--s-3); text-align: center; min-width: 0;
+                         overflow-wrap: break-word; hyphens: auto; }
+    .part-tiles button .tile-price { font-size: var(--text-sm); font-weight: 400; color: var(--muted); }
+    .part-tiles button:active { background: var(--accent-soft); border-color: var(--accent); }
+    .part-tiles button[disabled] { opacity: 0.4; }
+    .part-tiles .kind-head { grid-column: 1 / -1; margin: var(--s-2) 0 0; font-size: var(--text-sm); color: var(--faint);
+                             font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+
+    /* Result flash + session log: what just printed, what was packed. */
+    .pack-result { min-height: 2.2rem; font-size: var(--text-lg); font-weight: 600; text-align: center; }
+    .pack-result.ok { color: var(--accent); }
+    .pack-result.warn { color: var(--warn); }
+    .pack-result.error { color: var(--danger); }
+    .pack-log { max-height: 20vh; overflow-y: auto; margin: 0; padding: 0; list-style: none;
+                border-top: 1px solid var(--line); }
+    .pack-log li { display: flex; gap: var(--s-3); padding: var(--s-1) var(--s-2); font-size: var(--text-md);
+                   border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+    .pack-log li .num { margin-left: auto; }
+    .pack-count { text-align: center; font-size: var(--text-sm); color: var(--muted); padding-bottom: var(--s-1); }
+  </style>
+</head>
+<body>
+
+<div class="animal-bar">
+  <select id="hunter" aria-label="{{ t("Jäger") }}">
+    {% for h in config.hunters %}<option>{{ h.name }}</option>{% endfor %}
+  </select>
+  <select id="species" aria-label="{{ t("Wildart") }}">
+    {% for s in config.species %}<option>{{ s.name }}</option>{% endfor %}
+  </select>
+  <input type="date" id="killed" value="{{ today() }}" max="{{ today() }}" aria-label="{{ t("Erlegt") }}">
+  <input id="mark" name="mark" autocomplete="off" autocapitalize="characters" maxlength="40"
+         placeholder="{{ t("Nr. der Wildmarke") }}" aria-label="{{ t("Wildmarke") }}" hidden>
+  {% if config.printers | length > 1 %}
+  <select id="printer" aria-label="{{ t("Drucker") }}">
+    {% for p in config.printers %}<option value="{{ p.name }}" {% if p.name == config.default_printer %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+  </select>
+  {% endif %}
+  <span class="spacer"></span>
+  <a class="home" href="/" title="{{ t("Zur App") }}" aria-label="{{ t("Zur App") }}">{{ icon('snowflake') }}</a>
+</div>
+
+{% if config.dry_run %}<div class="dry-run">{{ t("Testmodus aktiv (dry_run) – es wird nicht gedruckt.") }}</div>{% endif %}
+
+{# Bag tare: tap the bag that's on the scale, its weight comes off the
+   reading. "Ohne" = weighing without a bag. Configured in config.yaml. #}
+{% if config.bags %}
+<div class="bag-bar" role="group" aria-label="{{ t("Beutel") }}">
+  <button type="button" class="bag-btn" data-tare="0" aria-pressed="true">{{ t("Ohne Beutel") }}</button>
+  {% for b in config.bags %}
+  <button type="button" class="bag-btn" data-tare="{{ b.weight_g }}" aria-pressed="false">
+    {{ b.name }}<span class="bag-weight">−{{ b.weight_g | de(0) }} g</span>
+  </button>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="weight-zone">
+  {% if scale_on %}
+  <span class="weight-value gone" id="weight">–,–––</span>
+  <span class="weight-unit">kg</span>
+  {% else %}
+  <input id="weight-manual" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="0,000"
+         aria-label="{{ t("Gewicht (kg)") }}"><span class="weight-unit">kg</span>
+  {% endif %}
+</div>
+<p class="tare-note" id="tare-note"></p>
+
+<div class="pack-result" id="result" aria-live="polite"></div>
+
+<div class="part-tiles" id="tiles"></div>
+
+<p class="pack-count" id="count" hidden></p>
+<ul class="pack-log" id="log"></ul>
+
+<script>
+const SPECIES = {{ config.species | species_json | tojson }};
+const PART_KINDS = {{ PART_KINDS | map_kinds | tojson }};
+const DEC = {{ decimal_separator() | tojson }};
+const SCALE_ON = {{ scale_on | tojson }};
+const T = {{ {
+  "Gedruckt": t("Gedruckt"),
+  "Gespeichert (Testmodus, nicht gedruckt)": t("Gespeichert (Testmodus, nicht gedruckt)"),
+  "Gespeichert, aber Druck fehlgeschlagen ({error}) — über Bestand nachdrucken": t("Gespeichert, aber Druck fehlgeschlagen ({error}) — über Bestand nachdrucken"),
+  "Fehler — Verbindung prüfen": t("Fehler — Verbindung prüfen"),
+  "Kein Gewicht — Teilstück auf die Waage legen": t("Kein Gewicht — Teilstück auf die Waage legen"),
+  "Waage nicht erreichbar — Gewicht antippen und eintippen": t("Waage nicht erreichbar — Gewicht antippen und eintippen"),
+  "{n} Teilstücke gepackt, {total} €": t("{n} Teilstücke gepackt, {total} €"),
+  "{price} €/kg": t("{price} €/kg"),
+  "abzüglich Beutel ({g} g)": t("abzüglich Beutel ({g} g)"),
+} | tojson }};
+
+const weightEl = document.getElementById('weight');
+const manualEl = document.getElementById('weight-manual');
+let liveKg = null;          // last stable NET weight (scale minus bag)
+let settling = false;
+
+function fmt(n, d = 3) { return n.toFixed(d).replace('.', DEC); }
+function num(s) { return parseFloat((s || '').replace(',', '.')); }
+
+// --- bag tare: the selected bag's weight comes off every reading ----------
+let tareKg = 0;
+const tareNote = document.getElementById('tare-note');
+document.querySelectorAll('.bag-btn').forEach(btn => btn.addEventListener('click', () => {
+  document.querySelectorAll('.bag-btn').forEach(b => b.setAttribute('aria-pressed', 'false'));
+  btn.setAttribute('aria-pressed', 'true');
+  tareKg = parseFloat(btn.dataset.tare) / 1000;
+  tareNote.textContent = tareKg > 0 ? T['abzüglich Beutel ({g} g)'].replace('{g}', fmt(tareKg * 1000, 0)) : '';
+}));
+
+// --- scale: always following, no toggle — this page exists to weigh -------
+{% if scale_on %}
+async function tick() {
+  try {
+    const d = await (await fetch('/scale/weight')).json();
+    if (d.ok) {
+      // the bag is on the scale with the meat: show and pack the net weight.
+      // An empty platform with a bag selected reads slightly negative — show
+      // 0 and treat it as "nothing on the scale".
+      const net = Math.max(0, d.weight_kg - tareKg);
+      settling = !d.stable;
+      if (d.stable) liveKg = net;
+      weightEl.textContent = fmt(net);
+      weightEl.className = 'weight-value' + (settling ? ' settling' : '');
+    } else {
+      liveKg = null;
+      weightEl.textContent = '–,–––';
+      weightEl.className = 'weight-value gone';
+    }
+  } catch (e) { /* one lost poll changes nothing */ }
+  setTimeout(tick, 400);
+}
+tick();
+{% endif %}
+
+function currentWeight() {
+  if (SCALE_ON) return liveKg != null && liveKg >= 0.005 ? liveKg : null;
+  // typed from the scale's own display, which includes the bag
+  const v = num(manualEl.value) - tareKg;
+  return isFinite(v) && v > 0.005 ? v : null;
+}
+
+// --- part tiles: one per part of the species, grouped like the dropdowns --
+const speciesSel = document.getElementById('species');
+const markInput = document.getElementById('mark');
+function fillTiles() {
+  const sp = SPECIES[speciesSel.value] || { parts: {} };
+  markInput.hidden = !sp.needs_mark;
+  if (!sp.needs_mark) markInput.value = '';
+  const tiles = document.getElementById('tiles');
+  tiles.replaceChildren();
+  for (const [kind, heading] of Object.entries(PART_KINDS)) {
+    const names = Object.keys(sp.parts).filter(n => (sp.parts[n].kind || 'cut') === kind);
+    if (!names.length) continue;
+    const head = document.createElement('h3');
+    head.className = 'kind-head';
+    head.textContent = heading;
+    tiles.append(head);
+    for (const name of names) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      const price = sp.parts[name].price;
+      btn.innerHTML = `<span></span><span class="tile-price"></span>`;
+      btn.firstChild.textContent = name;
+      if (price != null) btn.lastChild.textContent = T['{price} €/kg'].replace('{price}', price.toFixed(2).replace('.', DEC));
+      btn.addEventListener('click', () => pack(name, price));
+      tiles.append(btn);
+    }
+  }
+}
+speciesSel.addEventListener('change', fillTiles);
+fillTiles();
+
+// --- the loop: tap a part -> record + print -------------------------------
+let packed = 0, packedTotal = 0;
+const resultEl = document.getElementById('result');
+function show(text, kind) {
+  resultEl.textContent = text;
+  resultEl.className = 'pack-result ' + kind;
+}
+
+async function pack(part, defaultPrice) {
+  const kg = currentWeight();
+  if (kg == null) {
+    show(SCALE_ON && liveKg == null && weightEl.classList.contains('gone')
+         ? T['Waage nicht erreichbar — Gewicht antippen und eintippen']
+         : T['Kein Gewicht — Teilstück auf die Waage legen'], 'warn');
+    return;
+  }
+  const fd = new FormData();
+  fd.append('hunter', document.getElementById('hunter').value);
+  fd.append('species', speciesSel.value);
+  fd.append('part', part);
+  fd.append('weight_kg', fmt(kg));
+  fd.append('price_per_kg', defaultPrice != null ? String(defaultPrice).replace('.', DEC) : '');
+  fd.append('killed_on', document.getElementById('killed').value);
+  fd.append('mark', markInput.value);
+  fd.append('printer', document.getElementById('printer')?.value || '');
+  document.querySelectorAll('.part-tiles button').forEach(b => b.disabled = true);
+  try {
+    const resp = await fetch('/pack/print', { method: 'POST', body: fd });
+    const d = await resp.json();
+    if (!d.ok) { show(d.error, 'error'); return; }
+    if (d.printed) show(`${T['Gedruckt']}: ${d.species} – ${d.part}, ${d.amount}`, 'ok');
+    else if (d.dry_run) show(T['Gespeichert (Testmodus, nicht gedruckt)'], 'warn');
+    else show(T['Gespeichert, aber Druck fehlgeschlagen ({error}) — über Bestand nachdrucken'].replace('{error}', d.error), 'error');
+    packed++;
+    if (d.total_price) packedTotal += num(d.total_price);
+    const li = document.createElement('li');
+    li.textContent = `${d.species} – ${d.part}, ${d.amount}`;
+    if (d.total_price) {
+      const price = document.createElement('span');
+      price.className = 'num';
+      price.textContent = `${d.total_price} €`;
+      li.append(price);
+    }
+    document.getElementById('log').prepend(li);
+    const count = document.getElementById('count');
+    count.hidden = false;
+    count.textContent = T['{n} Teilstücke gepackt, {total} €'].replace('{n}', packed).replace('{total}', fmt(packedTotal, 2));
+    if (!SCALE_ON) manualEl.value = '';
+    if (navigator.vibrate) navigator.vibrate(100);
+  } catch (e) {
+    show(T['Fehler — Verbindung prüfen'], 'error');
+  } finally {
+    document.querySelectorAll('.part-tiles button').forEach(b => b.disabled = false);
+  }
+}
+</script>
+</body>
+</html>
