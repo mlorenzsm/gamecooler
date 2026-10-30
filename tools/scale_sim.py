@@ -52,7 +52,11 @@ class SimState:
             self.target = kg
 
     def frame(self) -> bytes | None:
-        """The next frame, ~1/10 s of scale behaviour, or None when off."""
+        """The next frame, ~1/10 s of scale behaviour, or None when off.
+
+        Like the real SBS-TW-15C (presumably): grams with one decimal,
+        quantized to the 0.5 g readability — 2.5 kg goes out as 2500.0 g.
+        """
         with self.lock:
             if not self.powered:
                 return None
@@ -66,7 +70,8 @@ class SimState:
                 stable = not self.hold
             if self.hold:
                 self.current = self.target + random.uniform(-0.01, 0.01)
-            return encode_frame(round(self.current, 4), stable=stable,
+            grams = round(self.current * 1000 / 0.5) * 0.5      # 0.5 g steps
+            return encode_frame(grams, decimals=1, unit="g", stable=stable,
                                 overload=self.current > 15.0)
 
 

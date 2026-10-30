@@ -62,7 +62,16 @@ r = roundtrip(123, mode=MODE_COUNT, decimals=0)
 check("counting mode and 0 decimals", r is not None and r.mode == MODE_COUNT and r.weight_kg == 123)
 
 r = roundtrip(2.5, unit="lb")
-check("lb unit", r is not None and r.unit == "lb")
+check("lb unit converts to kg", r is not None and r.unit == "lb" and abs(r.weight_kg - 1.1340) < 0.001)
+
+# The scale presumably reads in grams, 0.5 g steps, one decimal: 2.5 kg on
+# the platform goes over the wire as 2500.0 g and must come back as kg.
+r = roundtrip(2500.0, decimals=1, unit="g")
+check("gram frame -> kg", r is not None and r.unit == "g" and r.weight_kg == 2.5)
+r = roundtrip(10.5, decimals=1, unit="g")
+check("half-gram step", r is not None and r.weight_kg == 0.0105)
+r = roundtrip(15000.0, decimals=1, unit="g")
+check("full capacity in grams fits the digits", r is not None and not r.overload and r.weight_kg == 15.0)
 
 # --- decoder robustness -------------------------------------------------------
 

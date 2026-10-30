@@ -29,9 +29,13 @@ HEADER = 0xFF
 # no bit value; read as "bit 7 set" until the hardware says otherwise.
 MODE_WEIGH, MODE_COUNT, MODE_PERCENT = 0, 1, 2
 
-# Unit byte values: an assumption — the manual only names the units.
+# Unit byte values: an assumption — the manual only names kg and lb.
 # To be confirmed against the real scale; the simulator uses the same table.
-UNITS = {0x00: "kg", 0x01: "lb"}
+# The scale most likely reads in grams (15 kg at 0.5 g = 150000.0 g fits the
+# 6 BCD digits with one decimal), so "g" is expected to be the native unit;
+# decode_frame converts everything to kg for the app.
+UNITS = {0x00: "kg", 0x01: "lb", 0x02: "g"}
+_TO_KG = {"kg": 1.0, "g": 0.001, "lb": 0.45359237}
 
 
 @dataclass
@@ -78,13 +82,15 @@ def decode_frame(frame: bytes) -> Reading | None:
         digits += [hi, lo]
     value = int("".join(map(str, digits))) / 10 ** (status & 0b111)
     negative = bool(status & 1 << 5)
+    unit = UNITS.get(frame[5], "kg")
+    kg = round(value * _TO_KG[unit], 6)          # weight_kg is always kg
     return Reading(
-        weight_kg=-value if negative else value,
+        weight_kg=-kg if negative else kg,
         stable=bool(status & 1 << 6),
         negative=negative,
         overload=bool(status & 1 << 7),
         mode=status >> 3 & 0b11,
-        unit=UNITS.get(frame[5], "kg"),
+        unit=unit,
     )
 
 
