@@ -1,56 +1,76 @@
-{# Weigh buttons (app/scale.py): poll /scale/weight, wait for a stable
-   reading, fill the weight field. Included by the print forms BEFORE their
-   own script blocks — bulk.html's addRow() needs attachScaleButton().
-   The buttons only show while the scale actually answers (body.scale-ready),
-   so a missing or switched-off scale leaves the forms exactly as they were. #}
+{# Weigh buttons (app/scale.py): a toggle per weight field. Active, it
+   follows the scale — every stable reading fills the field, so the flow is
+   "cut on the platform, value appears, print, next cut". Included by the
+   print forms BEFORE their own script blocks — bulk.html's addRow() needs
+   attachScaleButton(). The buttons only show while the scale actually
+   answers (body.scale-ready), so a missing or switched-off scale leaves the
+   forms exactly as they were. #}
 {% if config.scale.port %}
 <style>
   .weigh-btn { display: none; }
   body.scale-ready .weigh-btn { display: inline-flex; }
-  .weigh-btn[disabled] .icon { animation: weigh-pulse 0.8s ease-in-out infinite; }
-  @keyframes weigh-pulse { 50% { opacity: 0.3; } }
+  .weigh-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .weigh-btn[aria-pressed="true"] .icon { animation: weigh-pulse 1.6s ease-in-out infinite; }
+  @keyframes weigh-pulse { 50% { opacity: 0.4; } }
 </style>
 <script>
 (function () {
-  async function read() {
-    return (await fetch('/scale/weight')).json();
+  // One live target at a time: the field the scale currently writes into.
+  // On the bulk page the button moves from row to row as cuts are weighed.
+  let live = null;                      // {btn, input} | null
+
+  function setLive(target) {
+    if (live) live.btn.setAttribute('aria-pressed', 'false');
+    live = target;
+    if (live) live.btn.setAttribute('aria-pressed', 'true');
   }
-  // Wait for a stable reading, up to 5 s — putting meat on the platform
-  // wobbles first. null = scale gone or never settled.
-  async function stableWeight() {
-    for (let i = 0; i < 25; i++) {
-      const data = await read();
-      if (!data.ok) return null;
-      if (data.stable) return data.weight_kg;
-      await new Promise(r => setTimeout(r, 200));
-    }
-    return null;
+
+  function fill(input, kg) {
+    const text = kg.toFixed(3).replace('.', typeof DEC === 'undefined' ? ',' : DEC);
+    if (input.value === text) return;
+    input.value = text;
+    // the pages' own listeners (preview, totals) hang on these events
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
   }
+
   window.attachScaleButton = function (btn, input) {
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
-      try {
-        const kg = await stableWeight();
-        if (kg == null) { check(); return; }
-        input.value = kg.toFixed(3).replace('.', typeof DEC === 'undefined' ? ',' : DEC);
-        // the pages' own listeners (preview, totals) hang on these events
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        input.dispatchEvent(new Event('change', { bubbles: true }));
-      } catch (e) {
-        check();
-      } finally {
-        btn.disabled = false;
-      }
+    btn.setAttribute('aria-pressed', 'false');
+    btn.addEventListener('click', () => {
+      setLive(live && live.btn === btn ? null : { btn, input });
+    });
+    // typing into the field by hand means taking over: stop following
+    input.addEventListener('keydown', () => {
+      if (live && live.input === input) setLive(null);
     });
   };
-  function check() {
-    read().then(d => document.body.classList.toggle('scale-ready', d.ok))
-          .catch(() => document.body.classList.remove('scale-ready'));
+
+  // One poll loop for everything: fast while a field is live, slow while
+  // only the buttons' visibility needs refreshing. An empty platform keeps
+  // the last value — the cut is lifted off before printing.
+  let failures = 0;
+  async function tick() {
+    try {
+      const data = await (await fetch('/scale/weight')).json();
+      failures = 0;
+      document.body.classList.toggle('scale-ready', data.ok);
+      if (!data.ok && live) setLive(null);
+      if (live && data.ok && data.stable && data.weight_kg >= 0.005) {
+        fill(live.input, data.weight_kg);
+      }
+    } catch (e) {
+      // one lost poll (phone asleep, Wi-Fi blip) must not kill live mode
+      if (++failures >= 3) {
+        document.body.classList.remove('scale-ready');
+        if (live) setLive(null);
+      }
+    }
+    setTimeout(tick, live ? 400 : 5000);
   }
+
   document.querySelectorAll('.weigh-btn[data-weigh]').forEach(btn =>
     attachScaleButton(btn, document.getElementById(btn.dataset.weigh)));
-  check();
-  setInterval(check, 5000);
+  tick();
 })();
 </script>
 {% endif %}

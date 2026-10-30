@@ -115,6 +115,16 @@ def main() -> None:
     serve(state, args.host, args.port)
 
     print("commands: <kg> | tare | hold | ok | off | on | q")
+    run_commands(state)
+    # Without a terminal (background, nohup, systemd) stdin is empty or
+    # closed: keep streaming anyway instead of exiting with the read loop.
+    if not sys.stdin.isatty():
+        print("stdin closed — streaming on (kill the process to stop)")
+        while True:
+            time.sleep(3600)
+
+
+def run_commands(state: SimState) -> None:
     for line in sys.stdin:
         cmd = line.strip().lower().replace(",", ".")
         if cmd in ("q", "quit", "exit"):

@@ -51,7 +51,7 @@
       <input name="weight_kg" enterkeyhint="next" pattern="[0-9]+([.,][0-9]+)?|[0-9]+ *[xX]" placeholder="{{ t("1,25 oder 5x") }}" id="weight-input" autocomplete="off">
       {% if config.scale.port %}
       <button type="button" class="small icon-only weigh-btn" data-weigh="weight-input"
-              title="{{ t("Von der Waage übernehmen") }}" aria-label="{{ t("Von der Waage übernehmen") }}">{{ icon('scale') }}</button>
+              title="{{ t("Waage folgen (ein/aus)") }}" aria-label="{{ t("Waage folgen (ein/aus)") }}">{{ icon('scale') }}</button>
       {% endif %}
       <span class="list-unit" id="weight-unit">kg</span>
     </label>

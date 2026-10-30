@@ -101,11 +101,17 @@ try:
         time.sleep(0.1)
     check("reader settles on the new weight", settled is not None)
 
-    # simulator off -> reading goes stale -> latest() is None
+    # simulator off -> reading goes stale -> latest() is None. Not a fixed
+    # sleep: the off command and in-flight frames add up to a second.
     sim.stdin.write("off\n")
     sim.stdin.flush()
-    time.sleep(ScaleReader.STALE_S + 0.5)
-    check("stale stream reads as no scale", reader.latest() is None)
+    gone = False
+    for _ in range(int((ScaleReader.STALE_S + 3) * 10)):
+        if reader.latest() is None:
+            gone = True
+            break
+        time.sleep(0.1)
+    check("stale stream reads as no scale", gone)
 finally:
     sim.kill()
 

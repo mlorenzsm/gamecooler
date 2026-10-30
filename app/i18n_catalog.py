@@ -370,7 +370,7 @@ EN = {
         "Weight in kg, or “5x” for a piece count with a fixed price. Leave empty to keep it off the label.",
 
     # --- Scale (_scale.html, index.html, bulk.html) -------------------------------
-    "Von der Waage übernehmen": "Take from the scale",
+    "Waage folgen (ein/aus)": "Follow the scale (on/off)",
 
     # --- wildkammer.html (kiosk) ------------------------------------------------
     "Wildkammer": "Game chamber",
