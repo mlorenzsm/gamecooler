@@ -312,6 +312,69 @@ def inventory_page(request: Request, msg: str = ""):
     )
 
 
+# --- Packen (Wildkammer workstation) -------------------------------------------
+#
+# The step after cutting: vacuum, weigh, label. A wall-mounted touchscreen
+# next to the scale; the loop per piece is "piece on the scale -> tap the
+# part -> 2 labels print". Hunter, species, kill date and mark are set once
+# per animal, like on the bulk page. Not in the tab bar — the wall browser
+# is pointed at /pack once.
+
+
+@app.get("/pack")
+def pack_page(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "pack.html",
+        {"config": config, "scale_on": bool(config.scale.port)},
+    )
+
+
+@app.post("/pack/print")
+def pack_print(
+    hunter: str = Form(...),
+    species: str = Form(...),
+    part: str = Form(...),
+    weight_kg: str = Form(""),
+    price_per_kg: str = Form(""),
+    killed_on: str = Form(""),
+    mark: str = Form(""),
+    printer: str = Form(""),
+):
+    """One packed piece: record + 2 labels. JSON, not a redirect — the
+    workstation page stays put and shows the result inline."""
+    if mark_missing(species, mark):
+        return JSONResponse({"ok": False, "error": t("Wildursprungsmarke fehlt — bei {species} Pflicht", species=species)}, status_code=400)
+    try:
+        part_in = PartIn(
+            hunter=hunter, species=species, part=part,
+            weight_kg=weight_kg, price_per_kg=price_per_kg,
+            killed_on=killed_on, mark=mark,
+            ingredients=part_ingredients(species, part),
+        )
+    except (ValidationError, ValueError) as e:
+        return JSONResponse({"ok": False, "error": _invalid_message(e)}, status_code=400)
+    record = PartRecord.from_input(part_in, printed=False)
+    images = [
+        render_info_label(record, find_hunter(hunter), config.label_language),
+        render_qr_label(record, config.best_before_months, config.label_language),
+    ]
+    registry.append(record)
+    error = print_safely(images, config.printer(printer), config.dry_run)
+    if not error and not config.dry_run:
+        registry.mark_printed([record.uuid])
+    return JSONResponse({
+        "ok": True,
+        "printed": not error and not config.dry_run,
+        "dry_run": config.dry_run,
+        "error": error,
+        "part": part, "species": species,
+        "amount": format_amount(record),
+        "total_price": format_de(record.total_price) if record.total_price is not None else None,
+        "uuid": record.uuid,
+    })
+
+
 @app.get("/preview")
 def preview(
     hunter: str,
