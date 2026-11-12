@@ -17,7 +17,7 @@ from markupsafe import Markup, escape
 from PIL import Image
 from pydantic import ValidationError
 
-from . import certificates, ledger, paperless, registry, sales
+from . import certificates, ledger, paperless, registry, sales, scale
 from .config import LOGO_PATH, PART_KINDS, UNITS, Hunter, PartDefaults, Preset, PresetItem, Recipe, RecipeItem, Species, load_config, save_config
 from .i18n import LANGUAGES, decimal_separator, format_date, get_lang, pick_language, reset_lang, set_lang, t
 from .labels import render_info_label, render_qr_label
@@ -148,6 +148,32 @@ templates.env.policies["json.dumps_kwargs"] = {"sort_keys": False}
 templates.env.filters["preset_text"] = preset_text
 
 config = load_config()
+
+# Scale: optional (docs/scale.md). The reader thread only exists when a port
+# is configured; without one /scale/weight says "no scale" and the weight
+# fields are simply typed.
+scale_reader: scale.ScaleReader | None = None
+if config.scale.port:
+    scale_reader = scale.ScaleReader(config.scale.port, config.scale.baudrate)
+    scale_reader.start()
+
+
+@app.get("/scale/weight")
+def scale_weight():
+    """The scale's latest reading, for the weigh buttons on the print forms.
+
+    ok=false covers everything from "no scale configured" to "stream went
+    quiet" — the button greys out either way, the form keeps working.
+    """
+    reading = scale_reader.latest() if scale_reader else None
+    if reading is None or reading.mode != scale.MODE_WEIGH or reading.overload or reading.negative:
+        return JSONResponse({"ok": False})
+    return JSONResponse({
+        "ok": True,
+        "weight_kg": reading.weight_kg,
+        "stable": reading.stable,
+    })
+
 
 LANG_COOKIE = "lang"
 
@@ -284,6 +310,69 @@ def inventory_page(request: Request, msg: str = ""):
             "inventory_hint": _inventory_hint(inventory),
         },
     )
+
+
+# --- Packen (Wildkammer workstation) -------------------------------------------
+#
+# The step after cutting: vacuum, weigh, label. A wall-mounted touchscreen
+# next to the scale; the loop per piece is "piece on the scale -> tap the
+# part -> 2 labels print". Hunter, species, kill date and mark are set once
+# per animal, like on the bulk page. Not in the tab bar — the wall browser
+# is pointed at /pack once.
+
+
+@app.get("/pack")
+def pack_page(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "pack.html",
+        {"config": config, "scale_on": bool(config.scale.port)},
+    )
+
+
+@app.post("/pack/print")
+def pack_print(
+    hunter: str = Form(...),
+    species: str = Form(...),
+    part: str = Form(...),
+    weight_kg: str = Form(""),
+    price_per_kg: str = Form(""),
+    killed_on: str = Form(""),
+    mark: str = Form(""),
+    printer: str = Form(""),
+):
+    """One packed piece: record + 2 labels. JSON, not a redirect — the
+    workstation page stays put and shows the result inline."""
+    if mark_missing(species, mark):
+        return JSONResponse({"ok": False, "error": t("Wildursprungsmarke fehlt — bei {species} Pflicht", species=species)}, status_code=400)
+    try:
+        part_in = PartIn(
+            hunter=hunter, species=species, part=part,
+            weight_kg=weight_kg, price_per_kg=price_per_kg,
+            killed_on=killed_on, mark=mark,
+            ingredients=part_ingredients(species, part),
+        )
+    except (ValidationError, ValueError) as e:
+        return JSONResponse({"ok": False, "error": _invalid_message(e)}, status_code=400)
+    record = PartRecord.from_input(part_in, printed=False)
+    images = [
+        render_info_label(record, find_hunter(hunter), config.label_language),
+        render_qr_label(record, config.best_before_months, config.label_language),
+    ]
+    registry.append(record)
+    error = print_safely(images, config.printer(printer), config.dry_run)
+    if not error and not config.dry_run:
+        registry.mark_printed([record.uuid])
+    return JSONResponse({
+        "ok": True,
+        "printed": not error and not config.dry_run,
+        "dry_run": config.dry_run,
+        "error": error,
+        "part": part, "species": species,
+        "amount": format_amount(record),
+        "total_price": format_de(record.total_price) if record.total_price is not None else None,
+        "uuid": record.uuid,
+    })
 
 
 @app.get("/preview")
@@ -774,20 +863,36 @@ def _finance_rows() -> list[dict]:
     return rows
 
 
+def _year_totals(rows: list[dict], year: int) -> tuple[float, float]:
+    """(income, expenses) of one year; sales count as income."""
+    of_year = [r for r in rows if r["date"].startswith(str(year))]
+    income = sum(r["amount"] for r in of_year if r["kind"] in ("income", "sale"))
+    expenses = sum(r["amount"] for r in of_year if r["kind"] == "expense")
+    return income, expenses
+
+
 @app.get("/finances")
 def finances_page(request: Request, msg: str = ""):
     rows = _finance_rows()
-    income = sum(r["amount"] for r in rows if r["kind"] in ("income", "sale"))
-    expenses = sum(r["amount"] for r in rows if r["kind"] == "expense")
+    # The headline is the current year — that's the figure that matters for the
+    # season and the tax year. Last year's result stays visible for comparison;
+    # anything older is reachable through the year filter.
+    year = date.today().year
+    income, expenses = _year_totals(rows, year)
+    last_income, last_expenses = _year_totals(rows, year - 1)
+    has_last_year = any(r["date"].startswith(str(year - 1)) for r in rows)
     return templates.TemplateResponse(
         request,
         "finances.html",
         {
             "config": config, "msg": msg, "active": "finances",
             "rows": rows,
+            "year": year,
             "income": income,
             "expenses": expenses,
             "result": round(income - expenses, 2),
+            "last_year": year - 1,
+            "last_result": round(last_income - last_expenses, 2) if has_last_year else None,
             "years": sorted({r["date"][:4] for r in rows}, reverse=True),
         },
     )

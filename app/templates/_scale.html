@@ -1,0 +1,99 @@
+{# Weigh buttons (app/scale.py): a toggle per weight field. Active, it
+   follows the scale — every stable reading fills the field, so the flow is
+   "cut on the platform, value appears, print, next cut". Included by the
+   print forms BEFORE their own script blocks — bulk.html's addRow() needs
+   attachScaleButton(). The buttons only show while the scale actually
+   answers (body.scale-ready), so a missing or switched-off scale leaves the
+   forms exactly as they were. #}
+{% if config.scale.port %}
+<style>
+  .weigh-btn { display: none; }
+  body.scale-ready .weigh-btn { display: inline-flex; }
+  .weigh-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .weigh-btn[aria-pressed="true"] .icon { animation: weigh-pulse 1.6s ease-in-out infinite; }
+  @keyframes weigh-pulse { 50% { opacity: 0.4; } }
+  /* the wobble, shown live like on the scale's display: visibly provisional */
+  input.weigh-settling { color: var(--warn); font-style: italic; }
+</style>
+<script>
+(function () {
+  // One live target at a time: the field the scale currently writes into.
+  // On the bulk page the button moves from row to row as cuts are weighed.
+  let live = null;                      // {btn, input} | null
+
+  function setLive(target) {
+    if (live) {
+      live.btn.setAttribute('aria-pressed', 'false');
+      // a provisional value may be standing in the field: unmark it and let
+      // the page see it, so preview and totals match what the field shows
+      if (live.input.classList.contains('weigh-settling')) {
+        live.input.classList.remove('weigh-settling');
+        live.input.dispatchEvent(new Event('input', { bubbles: true }));
+        live.input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }
+    live = target;
+    if (live) {
+      live.btn.setAttribute('aria-pressed', 'true');
+      // the loop may be sleeping its slow 5 s — don't make the first
+      // reading wait for that
+      clearTimeout(timer);
+      tick();
+    }
+  }
+
+  // A settling value is shown like on the scale's display but marked
+  // provisional (amber, italic) and fires no events — preview and totals
+  // only follow the stable value that ends the wobble.
+  function fill(input, kg, settling) {
+    const text = kg.toFixed(3).replace('.', typeof DEC === 'undefined' ? ',' : DEC);
+    input.classList.toggle('weigh-settling', settling);
+    if (input.value === text) return;
+    input.value = text;
+    if (settling) return;
+    // the pages' own listeners (preview, totals) hang on these events
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  window.attachScaleButton = function (btn, input) {
+    btn.setAttribute('aria-pressed', 'false');
+    btn.addEventListener('click', () => {
+      setLive(live && live.btn === btn ? null : { btn, input });
+    });
+    // typing into the field by hand means taking over: stop following
+    input.addEventListener('keydown', () => {
+      if (live && live.input === input) setLive(null);
+    });
+  };
+
+  // One poll loop for everything: fast while a field is live, slow while
+  // only the buttons' visibility needs refreshing. An empty platform keeps
+  // the last value — the cut is lifted off before printing.
+  let failures = 0;
+  let timer;
+  async function tick() {
+    try {
+      const data = await (await fetch('/scale/weight')).json();
+      failures = 0;
+      document.body.classList.toggle('scale-ready', data.ok);
+      if (!data.ok && live) setLive(null);
+      if (live && data.ok && data.weight_kg >= 0.005) {
+        fill(live.input, data.weight_kg, !data.stable);
+      }
+    } catch (e) {
+      // one lost poll (phone asleep, Wi-Fi blip) must not kill live mode
+      if (++failures >= 3) {
+        document.body.classList.remove('scale-ready');
+        if (live) setLive(null);
+      }
+    }
+    timer = setTimeout(tick, live ? 400 : 5000);
+  }
+
+  document.querySelectorAll('.weigh-btn[data-weigh]').forEach(btn =>
+    attachScaleButton(btn, document.getElementById(btn.dataset.weigh)));
+  tick();
+})();
+</script>
+{% endif %}

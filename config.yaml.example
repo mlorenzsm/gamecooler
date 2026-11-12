@@ -119,3 +119,20 @@ dry_run: true
 # Language of the printed labels and the invoice: de or en. Independent of
 # the web UI language, which each browser picks for itself.
 label_language: de
+
+# Bench scale on RS-232 (docs/scale.md) — optional; without it the weight
+# fields are typed by hand. port is a pyserial URL:
+#   /dev/tty.usbserial-XXXX     USB adapter on the Mac
+#   socket://192.168.1.50:8899  WLAN bridge (Elfin-EW10)
+#   socket://127.0.0.1:8765     simulator (tools/scale_sim.py)
+# scale:
+#   port: socket://127.0.0.1:8765
+#   baudrate: 9600
+
+# Vacuum bags for the packing page (/pack): tap the bag on the scale and its
+# weight is subtracted from the reading. Heaviest use first.
+# bags:
+# - name: 200×300
+#   weight_g: 10
+# - name: 300×400
+#   weight_g: 18

@@ -369,8 +369,27 @@ EN = {
     "Gewicht in kg, oder „5x“ für eine Stückzahl mit Festpreis. Leer lassen, damit es nicht aufs Etikett kommt.":
         "Weight in kg, or “5x” for a piece count with a fixed price. Leave empty to keep it off the label.",
 
+    # --- Scale (_scale.html, index.html, bulk.html) -------------------------------
+    "Waage folgen (ein/aus)": "Follow the scale (on/off)",
+
+    # --- pack.html (Wildkammer workstation) ---------------------------------------
+    "Packen": "Packing",
+    "Zur App": "To the app",
+    "Gewicht (kg)": "Weight (kg)",
+    "Gedruckt": "Printed",
+    "Kein Gewicht — Teilstück auf die Waage legen": "No weight — put the cut on the scale",
+    "Waage nicht erreichbar — Gewicht antippen und eintippen": "Scale unreachable — tap the weight and type it in",
+    "{n} Teilstücke gepackt, {total} €": "{n} cuts packed, {total} €",
+    "{price} €/kg": "{price} €/kg",
+    "Beutel": "Bag",
+    "Ohne Beutel": "No bag",
+    "abzüglich Beutel ({g} g)": "minus bag ({g} g)",
+
     # --- finances.html ----------------------------------------------------------
     "Finanzen": "Finances",
+    "{year}: Einnahmen {income}, Ausgaben {expenses} — Ergebnis {result}":
+        "{year}: income {income}, expenses {expenses} — result {result}",
+    "Ergebnis {year}: {result}": "Result {year}: {result}",
     "Einnahmen {income}, Ausgaben {expenses} — Ergebnis {result}":
         "Income {income}, expenses {expenses} — result {result}",
     "Art": "Type",
