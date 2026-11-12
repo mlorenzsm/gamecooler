@@ -12,6 +12,19 @@
   <input name="weight_kg" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
          value="{{ p.weight_kg | de(3) if p and p.weight_kg is not none else '' }}" placeholder="{{ t('optional') }}">
 </label>
+{# Ein Stückpreis-Paket (Bratwurst: 4 Stück für 7,50 €). Der kg-Preis bleibt
+   daneben stehen; das Druckformular füllt bei solchen Teilen "4x" und den
+   Paketpreis vor. Nur für Zubereitungen — ein Teilstück wird gewogen. #}
+{% if kind == 'prep' %}
+<label class="field">{{ t("Stück pro Paket") }}
+  <input name="pieces" inputmode="numeric" pattern="[0-9]+"
+         value="{{ p.pieces if p and p.pieces is not none else '' }}" placeholder="{{ t('optional') }}">
+</label>
+<label class="field">{{ t("Paketpreis (€)") }}
+  <input name="piece_price" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?"
+         value="{{ p.piece_price | de if p and p.piece_price is not none else '' }}" placeholder="–">
+</label>
+{% endif %}
 {# Rezepte gibt es nur für Zubereitungen — ein Teilstück hat keins. #}
 {% if kind == 'prep' and sp.recipes %}
 <label class="field">{{ t("Rezept") }}

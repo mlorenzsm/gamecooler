@@ -206,6 +206,32 @@ EN = {
     "Kein Bestand": "No stock",
     "Wildbret aus eigener Jagd. Preis je Paket; Angebot freibleibend, solange der Vorrat reicht.":
         "Game from own hunting. Price per pack; offer non-binding, while stocks last.",
+    "Preisliste": "Price list",
+    "Preisliste als PDF": "Price list (PDF)",
+    "Keine Preise hinterlegt": "No prices set up",
+    "pro kg": "per kg",
+    "{n} Stück": "{n} pieces",
+    "Wildbret aus eigener Jagd. Preise inkl. Verpackung, solange der Vorrat reicht.":
+        "Game from own hunting. Prices include packaging, while stocks last.",
+    "Preisliste (eine Zeile je Artikel)": "Price list (one line per item)",
+    "z. B. 4x Bratwurst, Hackfleisch, Keule oder Blatt": "e.g. 4x Bratwurst, Hackfleisch, Keule oder Blatt",
+    "Eine Zeile je Artikel, in dieser Reihenfolge. Der Preis kommt vom Teilstück: „4x …“ zeigt ein Paket (Stückzahl und Paketpreis am Teilstück), „A oder B“ zwei Teilstücke zu einem Preis, „Anzeige = Teilstück“ druckt einen anderen Namen. Leer = diese Wildart steht nicht auf der Preisliste.":
+        "One line per item, in this order. The price comes from the cut: “4x …” shows a pack (count and pack price on the cut), “A oder B” two cuts at one price, “label = cut” prints a different name. Empty = this species is not on the price list.",
+    "Anzeigename": "Display name",
+    "Auf der Preisliste; leer = Name der Wildart. Etiketten und Rechnungen bleiben unverändert.":
+        "On the price list; empty = the species name. Labels and invoices stay unchanged.",
+    "Ansehen": "View",
+    "{species}: Preisliste heißt „{name}“": "{species}: price list shows “{name}”",
+    "{species}: Preisliste nutzt den Wildart-Namen": "{species}: price list uses the species name",
+    "{species}: Preisliste gespeichert ({n} Zeilen)": "{species}: price list saved ({n} lines)",
+    "Zeile {line}: unbekannt bei {species}: {parts}": "Line {line}: not found in {species}: {parts}",
+    "Zeile {line}: „{parts}“ haben verschiedene Preise": "Line {line}: “{parts}” have different prices",
+    "Zeile {line}: „{name}“ ist kein Paket": "Line {line}: “{name}” is not a pack",
+    "Zeile {line}: Stückzahl passt nicht zu „{name}“ ({pieces} Stück)":
+        "Line {line}: count does not match “{name}” ({pieces} pieces)",
+    "Zeile {line}: „{name}“ hat keinen Preis": "Line {line}: “{name}” has no price",
+    "Stück pro Paket": "Pieces per pack",
+    "Paketpreis (€)": "Pack price (€)",
     "Ungültiges Erlegungsdatum — nicht in der Zukunft": "Invalid kill date — not in the future",
     "fix": "fixed",
     "Gespeichert": "Saved",
