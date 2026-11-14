@@ -24,6 +24,18 @@ hunters:
 #   kind:        cut (cut, default) or prep (preparation)
 #   ingredients: ingredients, in small print at the bottom of the info label
 #   recipe:      name of a recipe of this species — replaces "ingredients"
+#   pieces:      piece count of a package (e.g. 4 for a Bratwurst pack)
+#   piece_price: price of that package; the print form pre-fills "4x" with it
+#
+# Per species:
+#   price_list_name: name on the price list, e.g. "Schwarzwild" for Wildschwein
+#   price_list:      which cuts the price list shows, one per line:
+#                      Hackfleisch                  price per kg
+#                      4x Bratwurst                 a package (pieces/piece_price)
+#                      Keule oder Blatt             two cuts at one price
+#                      Keule oder Blatt = Keule ohne Knochen
+#                                                   printed label ≠ priced cut
+#                    Empty = the species is not on the price list.
 #
 # Presets for bulk print pre-fill the rows and may only use cuts of the same
 # species.

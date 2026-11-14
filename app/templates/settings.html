@@ -167,6 +167,37 @@
   <noscript><div class="list-row list-actions"><button class="small" type="submit">{{ t("Speichern") }}</button></div></noscript>
 </form>
 
+{# --- Preisliste ---------------------------------------------------------
+   Der Name, unter dem die Wildart auf der Preisliste steht ("Schwarzwild"
+   für Wildschwein), und welche Teilstücke dort erscheinen. Die Preise
+   selbst stehen am Teilstück — hier wird nur ausgewählt und sortiert. #}
+<section class="settings-card">
+  <div class="list-head">
+    <h4>{{ icon('coins') }}{{ t("Preisliste") }}</h4>
+    <a class="small" href="/prices.pdf" target="_blank">{{ t("Ansehen") }}</a>
+  </div>
+
+  <form method="post" action="/settings/species/price_list_name" class="list-group">
+    <input type="hidden" name="species" value="{{ sp.name }}">
+    <label class="list-row">
+      <span class="grow">{{ t("Anzeigename") }}
+        <span class="hint">{{ t("Auf der Preisliste; leer = Name der Wildart. Etiketten und Rechnungen bleiben unverändert.") }}</span>
+      </span>
+      <input name="price_list_name" value="{{ sp.price_list_name }}" placeholder="{{ sp.name }}">
+    </label>
+    <div class="list-row list-actions"><button class="small" type="submit">{{ icon('save') }}{{ t("Speichern") }}</button></div>
+  </form>
+
+  <form method="post" action="/settings/species/price_list">
+    <input type="hidden" name="species" value="{{ sp.name }}">
+    <label class="field wide">{{ t("Preisliste (eine Zeile je Artikel)") }}
+      <textarea name="price_list" rows="8" placeholder="{{ t('z. B. 4x Bratwurst, Hackfleisch, Keule oder Blatt') }}">{{ sp.price_list | join('\n') }}</textarea>
+    </label>
+    <p class="hint">{{ t("Eine Zeile je Artikel, in dieser Reihenfolge. Der Preis kommt vom Teilstück: „4x …“ zeigt ein Paket (Stückzahl und Paketpreis am Teilstück), „A oder B“ zwei Teilstücke zu einem Preis, „Anzeige = Teilstück“ druckt einen anderen Namen. Leer = diese Wildart steht nicht auf der Preisliste.") }}</p>
+    <div class="list-row list-actions"><button class="small print" type="submit">{{ icon('save') }}{{ t("Speichern") }}</button></div>
+  </form>
+</section>
+
 {# --- Teilstücke und Zubereitungen ---------------------------------------
    Jede Zeile ist kompakt und zeigt nur, was gesetzt ist. Ein Klick öffnet
    den Editor genau dieser Zeile (ein <details>), damit nicht 17 Formulare

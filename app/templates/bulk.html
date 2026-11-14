@@ -86,13 +86,17 @@ function currentParts() { return SPECIES[speciesSelect.value]?.parts || {}; }
 function currentPresets() { return SPECIES[speciesSelect.value]?.presets || {}; }
 
 function defaultWeight(part) {
-  const w = currentParts()[part]?.weight_kg;
-  return w != null ? w.toFixed(3).replace('.', DEC) : '';
+  const p = currentParts()[part];
+  // a package part pre-fills its piece count, so the price below is read as
+  // the package price — the same rule the single print form uses
+  if (p?.pieces != null && p?.piece_price != null) return p.pieces + 'x';
+  return p?.weight_kg != null ? p.weight_kg.toFixed(3).replace('.', DEC) : '';
 }
 
 function pricePlaceholder(part) {
-  const p = currentParts()[part]?.price;
-  return p != null ? fmt(p) : T['kein Preis'];
+  const p = currentParts()[part];
+  const price = p?.pieces != null && p?.piece_price != null ? p.piece_price : p?.price;
+  return price != null ? fmt(price) : T['kein Preis'];
 }
 
 function addRow(item = { part: null, count: 1 }) {

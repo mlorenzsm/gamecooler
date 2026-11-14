@@ -27,7 +27,8 @@ from app.i18n_catalog import EN  # noqa: E402
 CALL = re.compile(r"""\bt\(\s*(?P<q>["'])(?P<text>(?:\\.|(?!(?P=q)).)*)(?P=q)""", re.S)
 # German keys that reach t() through a variable rather than a literal:
 # part-kind headings (PART_KINDS), PDF column headers, units.
-INDIRECT = {"Teilstücke", "Zubereitungen", "Pos.", "Artikel", "Menge", "€/kg", "Preis", "ID", "Stk."}
+INDIRECT = {"Teilstücke", "Zubereitungen", "Pos.", "Artikel", "Menge", "€/kg", "Preis", "ID", "Stk.",
+            "pro kg", "{n} Stück"}
 
 
 def used_keys() -> dict[str, str]:

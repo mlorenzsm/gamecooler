@@ -1,8 +1,11 @@
 import os
+import re
 from pathlib import Path
 
 import yaml
 from pydantic import BaseModel, field_validator, model_validator
+
+from .i18n import t
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 # A container mounts a state directory and points these at it. Keep config.yaml
@@ -64,6 +67,22 @@ class PartDefaults(BaseModel):
     # When a recipe is linked, the label text comes from the recipe instead.
     ingredients: str | None = None
     recipe: str | None = None
+    # A counted part sold as a package (the Bratwurst: 4 pieces). `price` stays
+    # per kg; `piece_price` is what the package costs, and the print form
+    # pre-fills "4x" with it instead of the per-kg number.
+    pieces: int | None = None
+    piece_price: float | None = None
+
+    @field_validator("pieces", mode="before")
+    @classmethod
+    def _counted_pieces(cls, v):
+        if v is None or v == "":
+            return None
+        try:
+            n = int(str(v).strip())
+        except ValueError:
+            return None                       # "4,5 Stück" is no count; ignore it
+        return n if n >= 1 else None
 
     @field_validator("ingredients", "recipe", mode="before")
     @classmethod
@@ -78,7 +97,7 @@ class PartDefaults(BaseModel):
     def _known_kind(cls, v):
         return v if v in PART_KINDS else "cut"
 
-    @field_validator("price", "weight_kg", mode="before")
+    @field_validator("price", "weight_kg", "piece_price", mode="before")
     @classmethod
     def _german_decimal(cls, v):
         if v is None or v == "":
@@ -167,17 +186,40 @@ class Species(BaseModel):
     # the default: on for Wildschwein (trichinae inspection), off otherwise.
     # Set per species in Settings.
     needs_mark: bool | None = None
+    # Name on the price list, where the trade word differs from the label:
+    # "Schwarzwild" for Wildschwein. Empty = the species name.
+    price_list_name: str = ""
+    # What the price list shows, one line per entry, in this order. Each line
+    # is a part name, "4x Name" for a package, or "Name oder Name2" for two
+    # cuts sold at one price. Empty = this species is not on the price list.
+    price_list: list[str] = []
 
     @field_validator("parts", mode="before")
     @classmethod
     def _scalar_is_price(cls, v):
         return _parts_dict(v)
 
+    @field_validator("price_list_name", mode="before")
+    @classmethod
+    def _blank_is_none(cls, v):
+        v = " ".join(str(v or "").split())
+        return v
+
+    @field_validator("price_list", mode="before")
+    @classmethod
+    def _clean_lines(cls, v):
+        return [" ".join(str(line).split()) for line in (v or []) if str(line).strip()]
+
     @property
     def mark_required(self) -> bool:
         if self.needs_mark is not None:
             return self.needs_mark
         return self.name.casefold() == "wildschwein"
+
+    @property
+    def list_name(self) -> str:
+        """The species name as the price list prints it."""
+        return self.price_list_name or self.name
 
     def find_recipe(self, name: str | None) -> Recipe | None:
         return next((r for r in self.recipes if r.name == name), None) if name else None
@@ -201,6 +243,58 @@ class Species(BaseModel):
             kind: {n: p for n, p in self.parts.items() if p.kind == kind}
             for kind in PART_KINDS
         }
+
+    def price_list_lines(self) -> list[dict]:
+        """The price list as rows: label, amount and price.
+
+        One line of `price_list` becomes one row:
+          - "Hackfleisch"        the part's per-kg price
+          - "4x Bratwurst"       a package (pieces + piece_price)
+          - "Keule oder Blatt"   two cuts at one price
+          - "Keule oder Blatt = Keule ohne Knochen"
+                                 a printed label different from the parts —
+                                 the price comes from the named part
+        A part without the price the line needs is skipped, so a half-filled
+        config doesn't print a blank row.
+        """
+        rows = []
+        for line in self.price_list:
+            # Left of "=" is the printed label, right of it the part(s) the
+            # price comes from. Without "=" both are the same text.
+            label, has_override, source = line.partition("=")
+            label = label.strip()
+            counted = re.match(r"^\s*(\d+)\s*x\s+", line, re.IGNORECASE)
+            count = int(counted.group(1)) if counted else None
+            if counted:
+                label = re.sub(r"^\s*\d+\s*x\s+", "", label, flags=re.IGNORECASE)
+            names = [n.strip() for n in re.split(r"\s+oder\s+", source.strip() or label, flags=re.IGNORECASE)]
+            parts = [self.parts.get(n) for n in names]
+            if not names or any(p is None for p in parts):
+                continue                      # validated on save; never crash a render
+            first = parts[0]
+            if count is not None or first.pieces is not None:
+                price = first.piece_price
+                if price is None:
+                    continue
+                amount = t("{n} Stück", n=count or first.pieces)
+            else:
+                price = first.price
+                if price is None:
+                    continue
+                amount = t("pro kg")
+            rows.append({"label": label if has_override else " oder ".join(names),
+                         "amount": amount, "price": price})
+        return rows
+
+
+def price_list_rows(sp: Species) -> list[dict]:
+    """The rows one species contributes to the price list.
+
+    An empty `price_list` means the species is not on the list. Falling back to
+    "everything that has a price" would put every species with a placeholder
+    price on the sheet, which is never what was meant.
+    """
+    return sp.price_list_lines()
 
 
 class Bag(BaseModel):
@@ -384,6 +478,8 @@ def _part_yaml(p: PartDefaults) -> dict:
         ({"kind": p.kind} if p.kind != "cut" else {})
         | ({"price": p.price} if p.price is not None else {})
         | ({"weight_kg": p.weight_kg} if p.weight_kg is not None else {})
+        | ({"pieces": p.pieces} if p.pieces is not None else {})
+        | ({"piece_price": p.piece_price} if p.piece_price is not None else {})
         | ({"ingredients": p.ingredients} if p.ingredients else {})
         | ({"recipe": p.recipe} if p.recipe else {})
     )
@@ -408,7 +504,10 @@ def save_config(config: Config) -> None:
                 "parts": {name: _part_yaml(p) for name, p in s.parts.items()},
                 "presets": [p.model_dump() for p in s.presets],
                 "recipes": [_recipe_yaml(r) for r in s.recipes],
-            } | ({"needs_mark": s.needs_mark} if s.needs_mark is not None else {})
+            }
+            | ({"needs_mark": s.needs_mark} if s.needs_mark is not None else {})
+            | ({"price_list_name": s.price_list_name} if s.price_list_name else {})
+            | ({"price_list": s.price_list} if s.price_list else {})
             for s in config.species
         ],
         "printers": [p.model_dump() for p in config.printers],
