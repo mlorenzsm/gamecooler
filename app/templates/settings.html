@@ -68,6 +68,55 @@
 </section>
 
 <section class="settings-card">
+  <h3>{{ icon('package') }}{{ t("Öffentliche Bestandsseite") }}</h3>
+  <p class="hint">{{ t("Adresse der Seite, die der QR-Code auf Preisliste und Angebot öffnet. Leer = keine Veröffentlichung; die PDFs tragen dann keinen QR-Code. Sie zeigt Wildart, Teilstück, Verfügbarkeit und bei Zubereitungen die Zutaten — keine Preise, Gewichte, Jäger oder Wildmarken.") }}</p>
+  <form method="post" action="/settings/public-url" class="list-group">
+    <label class="list-row">
+      <span class="grow">{{ t("Adresse") }}</span>
+      <input name="public_url" type="url" inputmode="url" autocomplete="off"
+             value="{{ config.public_url }}" placeholder="https://wildlorenz.de">
+    </label>
+    <label class="list-row">
+      <span class="grow">{{ t("Überschrift") }}
+        <span class="hint">{{ t("Steht als Überschrift über der Seite, z. B. „Wildbret aus dem Taunus, 65321 Heidenrod“. Leer = nur „Wildbret“.") }}</span>
+      </span>
+      <input name="public_region" value="{{ config.public_region }}"
+             placeholder="{{ t('Wildbret aus dem Taunus, 65321 Heidenrod') }}">
+    </label>
+    <label class="list-row">
+      <span class="grow">{{ t("Bestelladresse") }}
+        <span class="hint">{{ t("E-Mail für Bestellungen, steht unten auf der Seite. Leer = keine Bestellzeile.") }}</span>
+      </span>
+      <input name="public_email" type="email" inputmode="email" autocomplete="off"
+             value="{{ config.public_email }}" placeholder="bestellung@wildlorenz.de">
+    </label>
+    <div class="list-row list-actions">
+      <button class="small" type="submit">{{ icon('save') }}{{ t("Speichern") }}</button>
+      {% if config.public_url %}<a class="small" href="/stock" target="_blank">{{ t("Ansehen") }}</a>{% endif %}
+    </div>
+  </form>
+  {# The page on the web host is a copy: it shows what was in stock when it was
+     uploaded. Every stock change uploads it again; this button does it now. #}
+  {% if publish_on %}
+  <div class="list-row list-actions">
+    <form method="post" action="/settings/publish">
+      <button class="small" type="submit">{{ icon('package') }}{{ t("Jetzt veröffentlichen") }}</button>
+    </form>
+    <span class="hint">
+      {% if publish_last.at %}
+        {{ t("Zuletzt: {time}", time=publish_last.at) }}
+        — {{ t("erfolgreich") if publish_last.ok else t("fehlgeschlagen: {error}", error=publish_last.error) }}
+      {% else %}
+        {{ t("Noch nicht veröffentlicht.") }}
+      {% endif %}
+    </span>
+  </div>
+  {% else %}
+  <p class="hint">{{ t("Veröffentlichen ist nicht eingerichtet: PUBLISH_HOST, PUBLISH_USER und PUBLISH_PASSWORD fehlen in der Umgebung des Dienstes.") }}</p>
+  {% endif %}
+</section>
+
+<section class="settings-card">
   <h3>{{ icon('file-text') }}{{ t("Rechnungslogo") }}</h3>
   <p class="hint">{{ t("Steht oben links auf jeder Rechnung. Am besten ein PNG mit transparentem Hintergrund; es wird zugeschnitten und verkleinert.") }}</p>
   {% if has_logo %}

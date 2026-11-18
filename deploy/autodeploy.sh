@@ -155,6 +155,14 @@ apply_caddy() {
 		rm -f "$rendered"
 		return 1
 	fi
+	# No other placeholder exists. A leftover one from a future edit would be
+	# caught by the caddy validate below, which names the offending line.
+	if grep -q '__[A-Z_]*__' "$rendered"; then
+		log "Caddyfile contains an unknown placeholder — only __HOST__ is rendered"
+		grep -n '__[A-Z_]*__' "$rendered" >&2
+		rm -f "$rendered"
+		return 1
+	fi
 	if ! install -m644 "$rendered" /etc/caddy/Caddyfile; then
 		log "could not install the Caddyfile"
 		rm -f "$rendered"

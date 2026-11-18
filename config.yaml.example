@@ -132,6 +132,12 @@ dry_run: true
 # the web UI language, which each browser picks for itself.
 label_language: de
 
+# Public address of the stock page (Settings -> Allgemein), e.g.
+# "https://wildbret.example.de". It becomes the QR code on the price list and
+# the offer sheet. Empty = the app is not published and the PDFs carry no QR.
+# Publishing itself is a deployment matter — see docs/deploy.md.
+# public_url: https://wildbret.example.de
+
 # Bench scale on RS-232 (docs/scale.md) — optional; without it the weight
 # fields are typed by hand. port is a pyserial URL:
 #   /dev/tty.usbserial-XXXX     USB adapter on the Mac

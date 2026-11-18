@@ -175,6 +175,34 @@ def format_amount(item, lang: str | None = None) -> str:
         return f"{format_de(item.weight_kg, 3, lang)} kg"
     return "–"
 
+# Availability on the public stock page. No number is shown there — a stranger
+# doesn't need to know whether there are two packs or twenty.
+AVAILABLE = "available"       # plenty
+FEW = "few"                   # one or two left
+
+def public_stock(records: list[PartRecord]) -> list[dict]:
+    """What is in stock, as the public page shows it.
+
+    Grouped by species + cut only: weight and price are deliberately left out,
+    so two packs and twenty of the same cut are one line. Returns one dict per
+    group with the availability marker and, for processed meat, the
+    ingredients — everything else about a record (hunter, mark, uuid) is
+    personal and never reaches this list.
+    """
+    groups: dict[tuple[str, str], dict] = {}
+    for r in records:
+        if r.consumed_at is not None:
+            continue
+        g = groups.setdefault((r.species, r.part), {
+            "species": r.species, "part": r.part, "count": 0, "ingredients": None,
+        })
+        g["count"] += 1
+        if g["ingredients"] is None and r.ingredients:
+            g["ingredients"] = r.ingredients
+    for g in groups.values():
+        g["availability"] = AVAILABLE if g["count"] >= 3 else FEW
+    return list(groups.values())
+
 
 class SaleItem(BaseModel):
     uuid: str

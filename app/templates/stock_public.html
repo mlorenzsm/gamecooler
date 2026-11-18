@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+{# Öffentliche Bestandsseite — was ein Fremder nach dem Scannen des QR-Codes
+   sieht. Steht bewusst NICHT auf base.html: die Navigation (Finanzen,
+   Einstellungen) darf hier nicht auftauchen. Inhalt ist absichtlich knapp —
+   Wildart, Teilstück, Verfügbarkeit, bei Zubereitungen die Zutaten. Keine
+   Preise, keine Gewichte, keine Jäger, keine Wildmarken, keine IDs. #}
+<html lang="{{ get_lang() }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{{ t("Wildbret") }} · {{ t("Bestand") }}</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#F3F4EF" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0F130F" media="(prefers-color-scheme: dark)">
+  {# Tab icon and home-screen icon. The bundle carries favicon.png next to
+     index.html; the app serves the same file from /static/. #}
+  <link rel="icon" type="image/png" href="{{ favicon_href | default('/static/favicon-32.png') }}">
+  <link rel="apple-touch-icon" href="{{ apple_icon_href | default('/static/icon-180.png') }}">
+  {# The stylesheet URL differs by how the page is served: the app links
+     /static/app.css, the uploaded bundle has app.css next to index.html.
+     css_href is passed in by both renderers so this file stays one source. #}
+  <link rel="stylesheet" href="{{ css_href | default('/static/app.css') }}">
+  <style>
+    /* Nur was diese eine Seite braucht: eine schmale Spalte, größere Schrift
+       fürs Handy, und die Wildart als ruhiger Abschnittskopf. body bringt die
+       seitlichen Ränder schon mit (app.css), hier also keine zweiten. */
+    /* Wide enough that the heading fits on one line on a laptop. It can't on
+       a phone (a 630 px line in a 358 px column), so below that width the
+       heading steps down instead of wrapping mid-sentence. */
+    .public-page { max-width: 44rem; margin: 0 auto; padding: 1.5rem 0 3rem; }
+    .public-page h1 { font-family: var(--font-display); font-size: var(--text-2xl);
+                      margin: 0; line-height: 1.15; text-wrap: balance; }
+    /* Kicker under the headline: where it comes from, quiet and tracked out
+       like the species headings, so it reads as a label not a second title. */
+    .public-kicker { margin: .35rem 0 1.5rem; color: var(--muted);
+                     font-size: var(--text-md); letter-spacing: .02em; }
+    .public-page h1 + h2, .public-page h1 + .public-kicker + h2 { margin-top: 2rem; }
+    @media (max-width: 44rem) {
+      .public-page h1 { font-size: var(--text-xl); }
+    }
+    /* The logo sits behind the list as a watermark, not above it. It is black
+       ink on transparency, so it is faded right down to stay out of the text's
+       way, and inverted in dark mode where black ink would disappear.
+       Absolute (not fixed): it is centred in the page and scrolls with the
+       content, so it travels with the list instead of hanging in the viewport. */
+    .public-page.has-logo { position: relative; }
+    .public-page.has-logo::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      /* logo_src: "logo.png" in the uploaded bundle, "/settings/logo.png"
+         when the app serves this page. */
+      background: url("{{ logo_src | default('logo.png') }}") center / min(70vmin, 420px) no-repeat;
+      opacity: .07;
+      pointer-events: none;
+      z-index: 0;
+    }
+    @media (prefers-color-scheme: dark) {
+      .public-page.has-logo::before { filter: invert(1); opacity: .1; }
+    }
+    .public-page > * { position: relative; z-index: 1; }
+    .public-page h2 { font-size: var(--text-sm); letter-spacing: .08em; text-transform: uppercase;
+                      color: var(--accent); margin: 2rem 0 .5rem; }
+    .public-item { padding: .7rem 0; border-bottom: 1px solid var(--line); }
+    .public-item:last-child { border-bottom: 0; }
+    .public-item .row { display: flex; align-items: baseline; justify-content: space-between;
+                        gap: .75rem; flex-wrap: wrap; }
+    .public-item .name { font-weight: 600; font-size: var(--text-lg); min-width: 0;
+                         overflow-wrap: anywhere; }
+    .public-item .state { color: var(--muted); font-size: var(--text-sm); white-space: nowrap;
+                          flex-shrink: 0; }
+    .public-item .ingredients { color: var(--faint); font-size: var(--text-xs); margin-top: .2rem;
+                                overflow-wrap: anywhere; }
+    .public-empty { color: var(--muted); padding: 2rem 0; }
+    .public-order { margin: 2rem 0 0; padding: .75rem 1rem; border-radius: var(--r-sm);
+                    background: var(--accent-soft); color: var(--ink); font-size: var(--text-sm); }
+    .public-order a { color: var(--accent); font-weight: 600; }
+    .public-foot { color: var(--faint); font-size: var(--text-xs); margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <main class="public-page{{ ' has-logo' if has_logo else '' }}">
+    {# The region is one setting ("Wildbret aus dem Taunus, 65321 Heidenrod").
+       The part after the last comma becomes a kicker line: the headline says
+       what it is, the line under it where it comes from. Without a comma the
+       whole text stays in the headline. #}
+    {% set head, _, place = (region or "").rpartition(", ") %}
+    <h1>{{ head or region or t("Wildbret") }}</h1>
+    {% if place %}<p class="public-kicker">{{ place }}</p>{% endif %}
+
+    {% for species, items in groups %}
+    <h2>{{ species }}</h2>
+    {% for item in items %}
+    <div class="public-item">
+      <div class="row">
+        <span class="name">{{ item.part }}</span>
+        <span class="state">{{ t("verfügbar") if item.availability == "available" else t("wenige") }}</span>
+      </div>
+      {% if item.ingredients %}
+      <div class="ingredients">{{ t("Zutaten:") }} {{ item.ingredients }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="public-empty">{{ t("Zurzeit ist nichts verfügbar.") }}</p>
+    {% endfor %}
+    {% if order_email %}
+    <p class="public-order">{{ t("Bestellung und Reservierung:") }}
+      <a href="mailto:{{ order_email }}?subject={{ t("Bestellung Wildbret") | urlencode }}">{{ order_email }}</a></p>
+    {% endif %}
+    <p class="public-foot">{{ t("Wildbret aus eigener Jagd. Kein Ausweis der Umsatzsteuer (Kleinunternehmerregelung, § 19 UStG).") }}</p>
+  </main>
+</body>
+</html>

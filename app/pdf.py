@@ -1,7 +1,10 @@
+import io
 import logging
 from datetime import datetime
 
+import qrcode
 from fpdf import FPDF
+from qrcode.constants import ERROR_CORRECT_M
 
 logging.getLogger("fontTools").setLevel(logging.WARNING)
 
@@ -121,6 +124,36 @@ def seller_contact(hunter: Hunter | None, lang: str) -> tuple[str, str, str]:
 def page_text(lang: str) -> str:
     """The footer's "Seite x von y"; {nb} is filled in by fpdf2 on output."""
     return t("Seite {page} von {pages}", lang, page="{page}", pages="{nb}")
+
+
+def qr_png(url: str) -> bytes:
+    """A QR code for the public stock page, as PNG bytes for the PDFs."""
+    qr = qrcode.QRCode(error_correction=ERROR_CORRECT_M, box_size=10, border=1)
+    qr.add_data(url)
+    qr.make(fit=True)
+    buffer = io.BytesIO()
+    qr.make_image(fill_color="black", back_color="white").save(buffer)
+    return buffer.getvalue()
+
+
+def stock_qr(pdf: "InvoicePDF", public_url: str, y: float, lang: str) -> float:
+    """Draw "Bestand ansehen" with its QR code at (LEFT, y).
+
+    Returns the y below the block, so the caller's foot note starts after it.
+    Without a public URL nothing is drawn and y comes back unchanged — an
+    installation that never publishes keeps its documents as they were.
+    """
+    if not public_url:
+        return y
+    size = 22
+    pdf.image(io.BytesIO(qr_png(public_url)), x=LEFT, y=y, w=size, h=size)
+    pdf.set_xy(LEFT + size + 5, y + 3)
+    pdf.style(9, INK, bold=True)
+    pdf.cell(70, 4.5, t("Bestand ansehen", lang))
+    pdf.set_xy(LEFT + size + 5, y + 8)
+    pdf.style(7.5, MUTED, family="mono")
+    pdf.cell(120, 4, pdf.fit(public_url.replace("https://", "").replace("http://", ""), 120))
+    return y + size + 4
 
 
 def render_sale_pdf(sale: Sale, hunter: Hunter | None, lang: str = "de") -> bytes:
@@ -354,7 +387,8 @@ def _stock_groups(records: list[PartRecord], lang: str) -> list[dict]:
 
 
 def render_stock_pdf(records: list[PartRecord], hunter: Hunter | None,
-                     species_order: list[str], lang: str = "de") -> bytes:
+                     species_order: list[str], lang: str = "de",
+                     public_url: str = "") -> bytes:
     """The unsold stock as a dated offer sheet, grouped per species."""
     address, phone, email = seller_contact(hunter, lang)
     date = format_date(datetime.now().date(), lang)
@@ -428,7 +462,10 @@ def render_stock_pdf(records: list[PartRecord], hunter: Hunter | None,
         pdf.set_y(y + STOCK_ROW)
 
     # --- foot ----------------------------------------------------------------
-    pdf.set_xy(LEFT, pdf.get_y() + 6)
+    y = pdf.get_y() + 6
+    if public_url:
+        y = stock_qr(pdf, public_url, y, lang)
+    pdf.set_xy(LEFT, y)
     pdf.style(8.5, MUTED)
     pdf.multi_cell(WIDTH, 4.4, t("Wildbret aus eigener Jagd. Preis je Paket; Angebot freibleibend, solange der Vorrat reicht.", lang))
 
@@ -442,7 +479,8 @@ def render_stock_pdf(records: list[PartRecord], hunter: Hunter | None,
 PRICE_COLS = (110, 30, 30)
 PRICE_ROW = 7.5
 
-def render_price_list_pdf(species: list[Species], hunter: Hunter | None, lang: str = "de") -> bytes:
+def render_price_list_pdf(species: list[Species], hunter: Hunter | None, lang: str = "de",
+                          public_url: str = "") -> bytes:
     """The price list, grouped per species in config order."""
     address, phone, email = seller_contact(hunter, lang)
     date = format_date(datetime.now().date(), lang)
@@ -521,7 +559,10 @@ def render_price_list_pdf(species: list[Species], hunter: Hunter | None, lang: s
             pdf.set_y(y + PRICE_ROW)
 
     # --- foot ----------------------------------------------------------------
-    pdf.set_xy(LEFT, pdf.get_y() + 6)
+    y = pdf.get_y() + 6
+    if public_url:
+        y = stock_qr(pdf, public_url, y, lang)
+    pdf.set_xy(LEFT, y)
     pdf.style(8.5, MUTED)
     pdf.multi_cell(WIDTH, 4.4, t("Wildbret aus eigener Jagd. Preise inkl. Verpackung, solange der Vorrat reicht.", lang))
 
