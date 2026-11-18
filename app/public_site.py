@@ -31,7 +31,8 @@ def css_for_bundle() -> bytes:
 
 
 def build(env, groups: list, public_url: str = "", region: str = "",
-          order_email: str = "", logo: bytes | None = None) -> dict[str, bytes]:
+          order_email: str = "", logo: bytes | None = None,
+          note: str = "") -> dict[str, bytes]:
     """The bundle: {"index.html": …, "app.css": …, "fonts/…": …, ".htaccess": …}.
 
     `env` is the Jinja environment (templates.env), so the page comes from the
@@ -46,6 +47,7 @@ def build(env, groups: list, public_url: str = "", region: str = "",
         public_url=public_url,
         region=region,
         order_email=order_email,
+        note=note,
         has_logo=logo is not None,
     )
     files: dict[str, bytes] = {"index.html": html.encode("utf-8"), "app.css": css_for_bundle()}

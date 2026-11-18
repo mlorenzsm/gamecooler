@@ -86,9 +86,19 @@
     .public-item .ingredients { color: var(--faint); font-size: var(--text-xs); margin-top: .2rem;
                                 overflow-wrap: anywhere; }
     .public-empty { color: var(--muted); padding: 2rem 0; }
+    .public-note { margin: .75rem 0 1.5rem; padding: .6rem .9rem; border-radius: var(--r-sm);
+                   background: var(--frost-soft); color: var(--ink); font-size: var(--text-sm); }
     .public-order { margin: 2rem 0 0; padding: .75rem 1rem; border-radius: var(--r-sm);
                     background: var(--accent-soft); color: var(--ink); font-size: var(--text-sm); }
+    .public-order p { margin: 0; }
+    .public-order p + p { margin-top: .35rem; }
     .public-order a { color: var(--accent); font-weight: 600; }
+    .public-order-hint { color: var(--muted); font-size: var(--text-xs); }
+    /* The whole row is the label, so a tap anywhere ticks the cut — a 16px box
+       is a poor target on a phone. */
+    .public-item { cursor: pointer; }
+    .public-item .pick { width: 1.15rem; height: 1.15rem; margin: 0 .5rem 0 0;
+                         vertical-align: -0.15em; accent-color: var(--accent); }
     .public-foot { color: var(--faint); font-size: var(--text-xs); margin-top: 2rem; }
   </style>
 </head>
@@ -101,13 +111,21 @@
     {% set head, _, place = (region or "").rpartition(", ") %}
     <h1>{{ head or region or t("Wildbret") }}</h1>
     {% if place %}<p class="public-kicker">{{ place }}</p>{% endif %}
+    {% if note %}<p class="public-note">{{ note }}</p>{% endif %}
 
     {% for species, items in groups %}
     <h2>{{ species }}</h2>
     {% for item in items %}
-    <div class="public-item">
+    <label class="public-item">
       <div class="row">
-        <span class="name">{{ item.part }}</span>
+        <span class="name">
+          {% if order_email %}
+          {# Ticking a cut adds it to the order mail below. Without an order
+             address there is nothing to tick for, so the box is left out. #}
+          <input type="checkbox" class="pick" value="{{ species }} · {{ item.part }}">
+          {% endif %}
+          {{ item.part }}
+        </span>
         <span class="right">
           {% if item.price %}
           {# "7,50 € / 4 Stück" for a package, "34,50 € pro kg" for weighed
@@ -120,16 +138,43 @@
       {% if item.ingredients %}
       <div class="ingredients">{{ t("Zutaten:") }} {{ item.ingredients }}</div>
       {% endif %}
-    </div>
+    </label>
     {% endfor %}
     {% else %}
     <p class="public-empty">{{ t("Zurzeit ist nichts verfügbar.") }}</p>
     {% endfor %}
     {% if order_email %}
-    <p class="public-order">{{ t("Bestellung und Reservierung:") }}
-      <a href="mailto:{{ order_email }}?subject={{ t("Bestellung Wildbret") | urlencode }}">{{ order_email }}</a></p>
+    <div class="public-order">
+      <p>{{ t("Bestellung und Reservierung:") }}
+        <a id="order-link" href="mailto:{{ order_email }}?subject={{ t("Bestellung Wildbret") | urlencode }}">{{ order_email }}</a></p>
+      {% if groups %}
+      <p class="public-order-hint" id="order-hint">{{ t("Teilstücke oben anhaken — sie stehen dann in der E-Mail.") }}</p>
+      {% endif %}
+    </div>
     {% endif %}
     <p class="public-foot">{{ t("Wildbret aus eigener Jagd. Kein Ausweis der Umsatzsteuer (Kleinunternehmerregelung, § 19 UStG).") }}</p>
   </main>
+  {% if order_email and groups %}
+  <script>
+  // Ticking cuts writes them into the order mail, so the customer doesn't have
+  // to retype what they just selected. The subject stays fixed; the body lists
+  // the ticks, one per line. Without any tick the mail opens with an empty
+  // body, which is the old behaviour.
+  (function () {
+    const link = document.getElementById('order-link');
+    const hint = document.getElementById('order-hint');
+    if (!link) return;
+    const base = link.getAttribute('href');
+    function update() {
+      const picked = [...document.querySelectorAll('.pick:checked')].map(cb => '• ' + cb.value);
+      const body = picked.length ? '&body=' + encodeURIComponent(picked.join('\n') + '\n') : '';
+      link.setAttribute('href', base + body);
+      if (hint) hint.hidden = picked.length > 0;
+    }
+    document.querySelectorAll('.pick').forEach(cb => cb.addEventListener('change', update));
+    update();
+  })();
+  </script>
+  {% endif %}
 </body>
 </html>

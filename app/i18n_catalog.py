@@ -257,6 +257,13 @@ EN = {
     "Angebot nicht gefunden": "Offer not found",
     "Bezeichnung fehlt": "Name missing",
     "Unbekannte Wildart: {species}": "Unknown species: {species}",
+    "Teilstücke oben anhaken — sie stehen dann in der E-Mail.":
+        "Tick the cuts above — they will be in the email.",
+    "Hinweis": "Note",
+    "Steht unter der Überschrift, z. B. „Alle Teilstücke sind tiefgefroren bei −18 °C.“ Leer = kein Hinweis.":
+        "Shown under the heading, e.g. “All cuts are frozen at −18 °C”. Empty = no note.",
+    "Alle Teilstücke sind tiefgefroren bei −18 °C.":
+        "All cuts are deep-frozen at −18 °C.",
     "Adresse": "Address",
     "Die Adresse muss mit http:// oder https:// beginnen": "The address must start with http:// or https://",
     "Öffentliche Adresse: {url}": "Public address: {url}",

@@ -421,6 +421,7 @@ def public_stock_page(request: Request):
             request, "stock_public.html",
             {"groups": public_stock_groups(config),
              "region": config.public_region,
+             "note": config.public_note,
              "order_email": config.public_email,
              "has_logo": LOGO_PATH.exists(),
              "logo_src": "/settings/logo.png",
@@ -922,7 +923,8 @@ def _publish_now() -> None:
     try:
         files = public_site.build(templates.env, public_stock_groups(config), config.public_url,
                                   config.public_region, config.public_email,
-                                  LOGO_PATH.read_bytes() if LOGO_PATH.exists() else None)
+                                  LOGO_PATH.read_bytes() if LOGO_PATH.exists() else None,
+                                  config.public_note)
     finally:
         reset_lang(token)
     publish.publish(files)
@@ -1353,12 +1355,13 @@ def settings_label_language(label_language: str = Form(...)):
 
 @app.post("/settings/public-url")
 def settings_public_url(public_url: str = Form(""), public_region: str = Form(""),
-                        public_email: str = Form("")):
-    """The public page's address, heading and order address.
+                        public_email: str = Form(""), public_note: str = Form("")):
+    """The public page's address, heading, note and order address.
 
     The URL becomes the QR code on the price list and the offer sheet; the
-    region becomes the page's heading; the email is shown for orders. Empty
-    values switch the respective part off.
+    region becomes the page's heading; the note sits under it (storage
+    conditions and the like); the email is shown for orders. Empty values
+    switch the respective part off.
     """
     url = " ".join(public_url.split()).rstrip("/")
     if url and not url.startswith(("http://", "https://")):
@@ -1366,6 +1369,7 @@ def settings_public_url(public_url: str = Form(""), public_region: str = Form(""
     config.public_url = url
     config.public_region = public_region
     config.public_email = public_email
+    config.public_note = public_note
     return _settings_general(
         t("Öffentliche Adresse: {url}", url=url) if url else t("Keine öffentliche Adresse gesetzt")
     )

@@ -84,6 +84,13 @@
              placeholder="{{ t('Wildbret aus dem Taunus, 65321 Heidenrod') }}">
     </label>
     <label class="list-row">
+      <span class="grow">{{ t("Hinweis") }}
+        <span class="hint">{{ t("Steht unter der Überschrift, z. B. „Alle Teilstücke sind tiefgefroren bei −18 °C.“ Leer = kein Hinweis.") }}</span>
+      </span>
+      <input name="public_note" value="{{ config.public_note }}"
+             placeholder="{{ t('Alle Teilstücke sind tiefgefroren bei −18 °C.') }}">
+    </label>
+    <label class="list-row">
       <span class="grow">{{ t("Bestelladresse") }}
         <span class="hint">{{ t("E-Mail für Bestellungen, steht unten auf der Seite. Leer = keine Bestellzeile.") }}</span>
       </span>

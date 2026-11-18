@@ -420,6 +420,9 @@ class Config(BaseModel):
     # Where customers write to reserve a piece. Shown on the public page as a
     # mailto link. Empty = no order line.
     public_email: str = ""
+    # A line under the heading — storage conditions, an ordering note.
+    # Empty = no note.
+    public_note: str = ""
 
     @field_validator("public_url", mode="before")
     @classmethod
@@ -427,7 +430,7 @@ class Config(BaseModel):
         url = " ".join(str(v or "").split()).rstrip("/")
         return url if url.startswith(("http://", "https://")) else ""
 
-    @field_validator("public_region", mode="before")
+    @field_validator("public_region", "public_note", mode="before")
     @classmethod
     def _clean_public_region(cls, v):
         return " ".join(str(v or "").split())
@@ -614,6 +617,8 @@ def save_config(config: Config) -> None:
         data["public_region"] = config.public_region
     if config.public_email:
         data["public_email"] = config.public_email
+    if config.public_note:
+        data["public_note"] = config.public_note
     if config.public_offers:
         data["public_offers"] = [o.model_dump() for o in config.public_offers]
     if config.scale != ScaleSettings():
