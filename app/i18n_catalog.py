@@ -264,6 +264,11 @@ EN = {
     "E-Mail für Bestellungen, steht unten auf der Seite. Leer = keine Bestellzeile.":
         "Email for orders, shown at the bottom of the page. Empty = no order line.",
     "Bestellung und Reservierung:": "Orders and reservations:",
+    "Öffentliche Seite: unter": "Public page: under",
+    "Teilstücke dieser Wildart erscheinen unter dieser Überschrift. Leer = eigene Überschrift. Etiketten und Bestand bleiben unverändert.":
+        "Cuts of this species appear under this heading. Empty = a heading of its own. Labels and stock stay unchanged.",
+    "eigene Überschrift": "own heading",
+    "öffentlich unter „{name}“": "publicly under “{name}”",
     "Bestellung Wildbret": "Wildbret order",
     "Ungültiges Erlegungsdatum — nicht in der Zukunft": "Invalid kill date — not in the future",
     "fix": "fixed",

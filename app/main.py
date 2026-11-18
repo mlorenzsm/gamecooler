@@ -294,16 +294,31 @@ def public_stock_groups(cfg) -> list[tuple[str, list[dict]]]:
 
     Shared by the live page and the static bundle that gets uploaded to the
     web host, so the two can never show different things.
+
+    A species can name another one as its `public_group` — a Frischling is a
+    young boar, so its cuts belong under the Schwarzwild heading instead of a
+    heading of their own. The heading is always the *target* species' display
+    name, and its rows are merged, so one heading lists both.
     """
     rows = public_stock(registry.inventory())
-    # Customers know the trade names from the price list ("Schwarzwild"), not
-    # necessarily the species name the labels carry.
+    # Which heading a species ends up under: its own name, or its group's.
+    heading_of: dict[str, str] = {}
+    for s in cfg.species:
+        heading_of[s.name] = s.public_group or s.name
     list_names = {s.name: s.list_name for s in cfg.species}
+    # Order by the species that owns the heading, then its own position, so a
+    # merged group keeps the target species' place in the config.
     order = {s.name: i for i, s in enumerate(cfg.species)}
-    rows.sort(key=lambda r: (order.get(r["species"], len(order)), r["part"]))
+    rows.sort(key=lambda r: (
+        order.get(heading_of.get(r["species"], r["species"]), len(order)),
+        order.get(r["species"], len(order)),
+        r["part"],
+    ))
     groups: list[tuple[str, list[dict]]] = []
     for row in rows:
-        heading = list_names.get(row["species"], row["species"])
+        target = heading_of.get(row["species"], row["species"])
+        # Customers know the trade names from the price list ("Schwarzwild").
+        heading = list_names.get(target, target)
         if not groups or groups[-1][0] != heading:
             groups.append((heading, []))
         groups[-1][1].append(row)
@@ -1296,13 +1311,21 @@ def settings_species_mark(species: str = Form(...), needs_mark: str = Form("")):
 
 
 @app.post("/settings/species/price_list_name")
-def settings_species_price_list_name(species: str = Form(...), price_list_name: str = Form("")):
-    """The species name on the price list — "Schwarzwild" for Wildschwein.
-    Labels and invoices keep the real species name."""
+def settings_species_price_list_name(species: str = Form(...), price_list_name: str = Form(""),
+                                     public_group: str = Form("")):
+    """The species name on the price list — "Schwarzwild" for Wildschwein —
+    and the heading its cuts appear under on the public page.
+
+    Labels and invoices keep the real species name in both cases."""
     sp = _species_or_404(species)
     sp.price_list_name = price_list_name
+    # A species can't group under itself, and only a real species counts.
+    group = public_group.strip()
+    sp.public_group = group if group and group != sp.name and config.find_species(group) else ""
     msg = (t("{species}: Preisliste heißt „{name}“", species=sp.name, name=sp.list_name)
            if sp.price_list_name else t("{species}: Preisliste nutzt den Wildart-Namen", species=sp.name))
+    if sp.public_group:
+        msg += " · " + t("öffentlich unter „{name}“", name=sp.public_group)
     return _settings_redirect(msg, sp.name)
 
 

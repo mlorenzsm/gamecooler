@@ -193,13 +193,18 @@ class Species(BaseModel):
     # is a part name, "4x Name" for a package, or "Name oder Name2" for two
     # cuts sold at one price. Empty = this species is not on the price list.
     price_list: list[str] = []
+    # Show this species' stock under another species' heading on the public
+    # page — a Frischling is a young boar, so its cuts belong under
+    # Schwarzwild rather than in a heading of their own. Labels and the
+    # inventory keep the real species. Empty = its own heading.
+    public_group: str = ""
 
     @field_validator("parts", mode="before")
     @classmethod
     def _scalar_is_price(cls, v):
         return _parts_dict(v)
 
-    @field_validator("price_list_name", mode="before")
+    @field_validator("price_list_name", "public_group", mode="before")
     @classmethod
     def _blank_is_none(cls, v):
         v = " ".join(str(v or "").split())
@@ -535,6 +540,7 @@ def save_config(config: Config) -> None:
             | ({"needs_mark": s.needs_mark} if s.needs_mark is not None else {})
             | ({"price_list_name": s.price_list_name} if s.price_list_name else {})
             | ({"price_list": s.price_list} if s.price_list else {})
+            | ({"public_group": s.public_group} if s.public_group else {})
             for s in config.species
         ],
         "printers": [p.model_dump() for p in config.printers],
