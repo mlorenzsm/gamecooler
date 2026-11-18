@@ -269,6 +269,7 @@ EN = {
         "Cuts of this species appear under this heading. Empty = a heading of its own. Labels and stock stay unchanged.",
     "eigene Überschrift": "own heading",
     "öffentlich unter „{name}“": "publicly under “{name}”",
+    "Exportieren": "Export",
     "Bestellung Wildbret": "Wildbret order",
     "Ungültiges Erlegungsdatum — nicht in der Zukunft": "Invalid kill date — not in the future",
     "fix": "fixed",

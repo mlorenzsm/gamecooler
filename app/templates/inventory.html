@@ -54,6 +54,12 @@
     <button type="submit" formaction="/sell" class="small print">
       {{ icon('shopping-bag') }}{{ t("Verkaufen") }}
     </button>
+    {# Export the ticked rows as JSON. A plain link, built by the page script
+       from the ticked boxes — the form above posts, and a download has to be
+       a GET so the browser saves the response instead of showing it. #}
+    <a class="small sel-quiet" id="export-link" href="/parts.json" download>
+      {{ icon('file-text') }}{{ t("Exportieren") }}
+    </a>
   </div>
 </form>
 
@@ -216,6 +222,19 @@ function updateBar() {
   document.getElementById('consume-bar').hidden = n === 0;
   document.getElementById('consume-count').textContent = n;
   document.getElementById('sell-count').textContent = n;
+  // The export is a GET: repeated uuid parameters, one per ticked row, so the
+  // server returns exactly those entries. Without a selection the bar is
+  // hidden anyway, but the link stays honest if it is ever shown.
+  const picked = [...document.querySelectorAll('.pick:checked')].map(cb => cb.value);
+  const link = document.getElementById('export-link');
+  link.href = picked.length
+    ? '/parts.json?' + picked.map(u => 'uuid=' + encodeURIComponent(u)).join('&')
+    : '/parts.json';
+  // A descriptive name: the browser would otherwise save "parts.json" for
+  // every export, and a folder of those is useless.
+  link.download = picked.length === 1
+    ? `teilstueck-${picked[0].slice(0, 8)}.json`
+    : `teilstuecke-${picked.length}-${new Date().toISOString().slice(0, 10)}.json`;
   const picks = visiblePicks();
   document.getElementById('check-all').checked = picks.length > 0 && picks.every(cb => cb.checked);
 }

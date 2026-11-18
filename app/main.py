@@ -6,7 +6,7 @@ from datetime import date
 from urllib.parse import quote
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 # request.form() yields starlette's UploadFile, which fastapi's one subclasses
 # — an isinstance check on a hand-parsed form must use the base class
@@ -1591,5 +1591,15 @@ def recipe_delete(species: str = Form(...), original_name: str = Form(...)):
 
 
 @app.get("/parts.json")
-def export():
-    return JSONResponse([r.model_dump() for r in registry.load_all()])
+def export(uuid: list[str] = Query(default=[])):
+    """The registry as JSON — all of it, or only the rows named by `uuid`.
+
+    The Stock page passes the ticked rows, so a selection exports exactly
+    what was selected instead of the whole inventory. Repeated `uuid=…`
+    parameters are the natural shape for that and keep the unfiltered call
+    (a plain `GET /parts.json`) working as before.
+    """
+    if not uuid:
+        return JSONResponse([r.model_dump() for r in registry.load_all()])
+    wanted = [u.strip().lower() for u in uuid if u.strip()]
+    return JSONResponse([r.model_dump() for r in registry.get_many(wanted)])
