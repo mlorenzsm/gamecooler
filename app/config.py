@@ -277,7 +277,8 @@ class Species(BaseModel):
             if not names or any(p is None for p in parts):
                 continue                      # validated on save; never crash a render
             first = parts[0]
-            if count is not None or first.pieces is not None:
+            counted_row = count is not None or first.pieces is not None
+            if counted_row:
                 price = first.piece_price
                 if price is None:
                     continue
@@ -288,7 +289,14 @@ class Species(BaseModel):
                     continue
                 amount = t("pro kg")
             rows.append({"label": label if has_override else " oder ".join(names),
-                         "amount": amount, "price": price})
+                         "amount": amount, "price": price,
+                         # A package price is "per pack", a weighed one "per
+                         # kg" — the caller needs the difference for the "€/…"
+                         # wording, and a translated string can't be parsed.
+                         "counted": counted_row,
+                         # The parts this row prices — used to match a stock
+                         # row to its price list line.
+                         "sources": names})
         return rows
 
 

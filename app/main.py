@@ -289,6 +289,42 @@ def _inventory_hint(records: list[PartRecord]) -> str:
     return f" ({', '.join(notes)})" if notes else ""
 
 
+def _public_price(cfg, species: str, part: str) -> dict | None:
+    """The price a customer sees for one cut, or None if it has none.
+
+    Prices live on the part (`price` per kg, or `piece_price` for a counted
+    part such as the 4-piece Bratwurst). The price list may print a cut under
+    another name ("Keule oder Blatt = Keule ohne Knochen"), so the lookup goes
+    through the species' price-list lines: a line that points at this part
+    wins, because that is the wording and the price the customer is told.
+
+    A species grouped under another one (Frischling -> Wildschwein) falls back
+    to the group's price for the same cut, so a young boar's rücken isn't
+    silently unpriced.
+    """
+    sp = cfg.find_species(species)
+    if sp is None:
+        return None
+    # Direct hit on the part itself.
+    direct = sp.parts.get(part)
+    if direct is not None:
+        for row in price_list_rows(sp):
+            # The row knows the printed label; the part it prices is the one
+            # whose name appears on the right of "=" (or the label itself).
+            if part in row.get("sources", []) or row["label"] == part:
+                return {"price": row["price"], "unit": row["amount"],
+                        "counted": row.get("counted", False)}
+        if direct.pieces is not None and direct.piece_price is not None:
+            return {"price": direct.piece_price, "unit": t("{n} Stück", n=direct.pieces),
+                    "counted": True}
+        if direct.price is not None:
+            return {"price": direct.price, "unit": t("pro kg"), "counted": False}
+    # Grouped species: ask the species it is shown under.
+    if sp.public_group:
+        return _public_price(cfg, sp.public_group, part)
+    return None
+
+
 def public_stock_groups(cfg) -> list[tuple[str, list[dict]]]:
     """The public page's groups: (heading, rows) in config species order.
 
@@ -321,6 +357,9 @@ def public_stock_groups(cfg) -> list[tuple[str, list[dict]]]:
         heading = list_names.get(target, target)
         if not groups or groups[-1][0] != heading:
             groups.append((heading, []))
+        # The price the customer is told, resolved through the price list so a
+        # renamed cut ("Keule oder Blatt") carries its price too.
+        row["price"] = _public_price(cfg, row["species"], row["part"])
         groups[-1][1].append(row)
     return groups
 
