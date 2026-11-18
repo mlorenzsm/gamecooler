@@ -16,6 +16,9 @@
 <div class="toolbar mb-4">
   <a class="btn-secondary" href="/inventory/offer.pdf" target="_blank">{{ icon('file-text') }}{{ t("Angebot als PDF") }}</a>
   <a class="btn-secondary" href="/prices.pdf" target="_blank">{{ icon('coins') }}{{ t("Preisliste als PDF") }}</a>
+  {# What a stranger sees after scanning the QR code — the same page, so it can
+     be checked before the address is published. #}
+  <a class="btn-secondary" href="/stock" target="_blank">{{ icon('package') }}{{ t("Bestand ansehen") }}</a>
 </div>
 
 <div class="filters mb-4">

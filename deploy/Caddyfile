@@ -57,3 +57,54 @@ __HOST__ {
 		output file /var/log/caddy/__HOST__.log
 	}
 }
+
+# --- public stock page (optional) -------------------------------------------
+#
+# Only rendered when GAMECOOLER_PUBLIC_HOST is set (deploy/autodeploy.sh). A
+# container that isn't published gets no block at all — better than a site
+# name nobody can resolve.
+#
+# This block is the only thing standing between the internet and an app with
+# NO authentication: every route is open, including /settings, /finances,
+# /parts.json (all UUIDs, hunters, Wildmarken) and /certificates/<mark>. So the
+# allowlist below is not tidiness — it is the access control. Do not replace it
+# with a single reverse_proxy.
+#
+# TLS is terminated at Cloudflare; the tunnel reaches Caddy over plain HTTP on
+# a loopback port, so there is deliberately no tls/cert here.
+
+http://__PUBLIC_HOST__:__PUBLIC_PORT__ {
+	# Only the tunnel in this container talks to this port. Binding loopback
+	# keeps it off the LAN as well, so there is one way in and it goes through
+	# the allowlist below.
+	bind 127.0.0.1
+
+	# The one page a stranger may see, plus the assets it needs.
+	handle /stock {
+		reverse_proxy 127.0.0.1:8010
+	}
+
+	handle /static/* {
+		reverse_proxy 127.0.0.1:8010
+	}
+
+	handle /robots.txt {
+		# Two real lines. A "\n" inside a Caddyfile string is literal, not a
+		# newline, so the body is built from a heredoc.
+		respond <<ROBOTS
+User-agent: *
+Disallow: /
+ROBOTS
+	}
+
+	# Everything else — settings, finances, sales, parts.json, certificates —
+	# does not exist as far as the internet is concerned.
+	handle {
+		respond 404
+	}
+
+	# Its own log, so public traffic is separable from household traffic.
+	log {
+		output file /var/log/caddy/__PUBLIC_HOST__.log
+	}
+}

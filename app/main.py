@@ -17,7 +17,7 @@ from markupsafe import Markup, escape
 from PIL import Image
 from pydantic import ValidationError
 
-from . import certificates, ledger, paperless, registry, sales, scale
+from . import certificates, ledger, paperless, public_site, publish, registry, sales, scale
 from .config import LOGO_PATH, PART_KINDS, UNITS, Hunter, PartDefaults, Preset, PresetItem, Recipe, RecipeItem, Species, load_config, price_list_rows, save_config
 from .i18n import LANGUAGES, decimal_separator, format_date, get_lang, pick_language, reset_lang, set_lang, t
 from .labels import render_info_label, render_qr_label
@@ -33,6 +33,7 @@ from .models import (
     parse_amount,
     parse_german_decimal,
     parse_optional_decimal,
+    public_stock,
 )
 from .pdf import render_price_list_pdf, render_sale_pdf, render_stock_pdf
 from .printer import print_labels
@@ -288,6 +289,55 @@ def _inventory_hint(records: list[PartRecord]) -> str:
     return f" ({', '.join(notes)})" if notes else ""
 
 
+def public_stock_groups(cfg) -> list[tuple[str, list[dict]]]:
+    """The public page's groups: (heading, rows) in config species order.
+
+    Shared by the live page and the static bundle that gets uploaded to the
+    web host, so the two can never show different things.
+    """
+    rows = public_stock(registry.inventory())
+    # Customers know the trade names from the price list ("Schwarzwild"), not
+    # necessarily the species name the labels carry.
+    list_names = {s.name: s.list_name for s in cfg.species}
+    order = {s.name: i for i, s in enumerate(cfg.species)}
+    rows.sort(key=lambda r: (order.get(r["species"], len(order)), r["part"]))
+    groups: list[tuple[str, list[dict]]] = []
+    for row in rows:
+        heading = list_names.get(row["species"], row["species"])
+        if not groups or groups[-1][0] != heading:
+            groups.append((heading, []))
+        groups[-1][1].append(row)
+    return groups
+
+
+@app.get("/stock")
+def public_stock_page(request: Request):
+    """What is in stock, for people who scanned the QR code on a document.
+
+    Deliberately a standalone page, not one of the app's: it shows only
+    species, cut, availability and (for processed meat) ingredients. No
+    prices, weights, hunter, Wildmarke or IDs — and no navigation, because
+    every other page of this app is private.
+
+    Species follow the config order, like the price list; a group's
+    availability comes from how many packs are left, but the count itself is
+    never printed.
+    """
+    token = set_lang(config.label_language)
+    try:
+        return templates.TemplateResponse(
+            request, "stock_public.html",
+            {"groups": public_stock_groups(config),
+             "region": config.public_region,
+             "order_email": config.public_email,
+             "has_logo": LOGO_PATH.exists(),
+             "logo_src": "/settings/logo.png",
+             "css_href": f"/static/app.css?v={ASSET_VERSION}"},
+        )
+    finally:
+        reset_lang(token)
+
+
 @app.get("/inventory")
 def inventory_page(request: Request, msg: str = ""):
     inventory = registry.inventory()
@@ -332,6 +382,7 @@ def pack_page(request: Request):
 
 @app.post("/pack/print")
 def pack_print(
+    background: BackgroundTasks,
     hunter: str = Form(...),
     species: str = Form(...),
     part: str = Form(...),
@@ -360,6 +411,7 @@ def pack_print(
         render_qr_label(record, config.best_before_months, config.label_language),
     ]
     registry.append(record)
+    _schedule_publish(background)
     error = print_safely(images, config.printer(printer), config.dry_run)
     if not error and not config.dry_run:
         registry.mark_printed([record.uuid])
@@ -472,6 +524,7 @@ async def bulk_print(request: Request, background: BackgroundTasks):
     # Save first: printing can fail (printer off, agent host asleep) and must
     # not take the recorded parts down with it.
     registry.append_many(records)
+    _schedule_publish(background)
     error = print_safely(images, printer, config.dry_run)
     if not error and not config.dry_run:
         registry.mark_printed([r.uuid for r in records])
@@ -517,6 +570,7 @@ async def create_part(
         render_qr_label(record, config.best_before_months, config.label_language),
     ]
     registry.append(record)
+    _schedule_publish(background)
     error = print_safely(images, config.printer(printer), config.dry_run)
     if not error and not config.dry_run:
         registry.mark_printed([record.uuid])
@@ -570,7 +624,8 @@ templates.env.globals["price_text"] = _price_text
 
 
 @app.post("/parts/{part_uuid}/edit")
-def edit_part(part_uuid: str, weight_kg: str = Form(""), price_per_kg: str = Form(""), killed_on: str = Form("")):
+def edit_part(part_uuid: str, background: BackgroundTasks,
+              weight_kg: str = Form(""), price_per_kg: str = Form(""), killed_on: str = Form("")):
     """Correct amount and price of an entry, from the Stock row. Everything
     else stays as entered; the uuid and date too, so the label on the package
     still scans. Reprinting afterwards prints labels for the same uuid."""
@@ -589,6 +644,7 @@ def edit_part(part_uuid: str, weight_kg: str = Form(""), price_per_kg: str = For
         return JSONResponse({"ok": False, "error": _invalid_message(e)}, status_code=400)
     record = record.edited(part_in)
     registry.update(record)
+    _schedule_publish(background)
     return JSONResponse(_row_json(record))
 
 
@@ -630,7 +686,7 @@ def part_lookup(part_uuid: str):
 
 
 @app.post("/parts/{part_uuid}/consume")
-def consume(part_uuid: str):
+def consume(part_uuid: str, background: BackgroundTasks):
     result = registry.mark_consumed(part_uuid.strip().lower())
     if result is None:
         return JSONResponse(
@@ -638,18 +694,22 @@ def consume(part_uuid: str):
             status_code=404,
         )
     record, already_consumed = result
+    if not already_consumed:
+        _schedule_publish(background)
     return JSONResponse(
         {"ok": True, "already_consumed": already_consumed, "part": record.model_dump()}
     )
 
 
 @app.post("/parts/consume-many")
-async def consume_many(request: Request):
+async def consume_many(request: Request, background: BackgroundTasks):
     form = await request.form()
     uuids = [u.strip().lower() for u in form.getlist("uuid")]
     if not uuids:
         return RedirectResponse(url="/inventory?msg=" + quote(t("Nichts ausgewählt")), status_code=303)
     changed = registry.mark_consumed_many(uuids)
+    if changed:
+        _schedule_publish(background)
     return RedirectResponse(
         url="/inventory?msg=" + quote(t("{n} Teilstücke entnommen", n=changed)), status_code=303
     )
@@ -664,7 +724,8 @@ def stock_pdf(hunter: str = ""):
         raise HTTPException(status_code=404, detail=t("Kein Bestand"))
     hunter_config = find_hunter(hunter) or (config.hunters[0] if config.hunters else None)
     pdf_bytes = render_stock_pdf(records, hunter_config,
-                                 [s.name for s in config.species], config.label_language)
+                                 [s.name for s in config.species], config.label_language,
+                                 config.public_url)
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
@@ -679,7 +740,8 @@ def price_list_pdf(hunter: str = ""):
     if not any(price_list_rows(s) for s in config.species):
         raise HTTPException(status_code=404, detail=t("Keine Preise hinterlegt"))
     hunter_config = find_hunter(hunter) or (config.hunters[0] if config.hunters else None)
-    pdf_bytes = render_price_list_pdf(config.species, hunter_config, config.label_language)
+    pdf_bytes = render_price_list_pdf(config.species, hunter_config, config.label_language,
+                                      config.public_url)
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
@@ -727,6 +789,32 @@ def _schedule_paperless(background: BackgroundTasks, sale: Sale) -> None:
     if paperless.enabled():
         background.add_task(paperless.upload_sale, sale.sale_id, find_hunter(sale.hunter),
                             config.paperless, config.label_language)
+
+
+def _publish_now() -> None:
+    """Build the static bundle and upload it; failures only get logged."""
+    if not publish.enabled():
+        return
+    token = set_lang(config.label_language)
+    try:
+        files = public_site.build(templates.env, public_stock_groups(config), config.public_url,
+                                  config.public_region, config.public_email,
+                                  LOGO_PATH.read_bytes() if LOGO_PATH.exists() else None)
+    finally:
+        reset_lang(token)
+    publish.publish(files)
+
+
+def _schedule_publish(background: BackgroundTasks) -> None:
+    """Re-publish the public page after the response is sent.
+
+    Every change to the stock makes the page on the web host stale, so the
+    upload follows the change — a few seconds behind, never a live view. A
+    slow host must not hold up printing, consuming or selling; the upload
+    records its own result for the settings page.
+    """
+    if publish.enabled():
+        background.add_task(_publish_now)
 
 
 @app.post("/sell/confirm")
@@ -791,6 +879,7 @@ async def sell_confirm(request: Request, background: BackgroundTasks):
     )
     sales.append(sale)
     registry.mark_sold([i.uuid for i in items if i.uuid], sale.sale_id)
+    _schedule_publish(background)
     _schedule_paperless(background, sale)
     return RedirectResponse(url=f"/sales/{sale.sale_id}", status_code=303)
 
@@ -1013,6 +1102,8 @@ def settings_page(request: Request, msg: str = "", species: str = "", tab: str =
             },
             "paperless_on": paperless.enabled(),
             "paperless_url": paperless.base_url(),
+            "publish_on": publish.enabled(),
+            "publish_last": publish.last_result(),
             "has_logo": LOGO_PATH.exists(),
         },
     )
@@ -1135,6 +1226,35 @@ def settings_label_language(label_language: str = Form(...)):
     if label_language in LANGUAGES:
         config.label_language = label_language
     return _settings_general(t("Etikettensprache: {language}", language=LANGUAGES[config.label_language]))
+
+
+@app.post("/settings/public-url")
+def settings_public_url(public_url: str = Form(""), public_region: str = Form(""),
+                        public_email: str = Form("")):
+    """The public page's address, heading and order address.
+
+    The URL becomes the QR code on the price list and the offer sheet; the
+    region becomes the page's heading; the email is shown for orders. Empty
+    values switch the respective part off.
+    """
+    url = " ".join(public_url.split()).rstrip("/")
+    if url and not url.startswith(("http://", "https://")):
+        return _settings_general(t("Die Adresse muss mit http:// oder https:// beginnen"))
+    config.public_url = url
+    config.public_region = public_region
+    config.public_email = public_email
+    return _settings_general(
+        t("Öffentliche Adresse: {url}", url=url) if url else t("Keine öffentliche Adresse gesetzt")
+    )
+
+
+@app.post("/settings/publish")
+def settings_publish(background: BackgroundTasks):
+    """Build and upload the public page now, without waiting for a stock change."""
+    if not publish.enabled():
+        return _settings_general(t("Veröffentlichen ist nicht eingerichtet (publish.env fehlt)"))
+    background.add_task(_publish_now)
+    return _settings_general(t("Wird veröffentlicht …"))
 
 
 @app.post("/settings/species")

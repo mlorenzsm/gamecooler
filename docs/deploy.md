@@ -565,6 +565,100 @@ uses existing functions and loses no data.
 11. Let the Mac sleep, test printing → cuts must still be saved
     (after the code change from point 1)
 
+## Public stock page on wint.global
+
+The price list and the offer sheet can carry a QR code that opens a page with
+what is currently in stock. That page lives on **shared hosting at wint.global**
+(Plesk), not on the LXC.
+
+**Why a separate host:** the app has no authentication. Every route is open —
+`/settings`, `/finances`, `/sales/<id>/pdf` (buyer names and addresses),
+`/parts.json` (all UUIDs, hunters, Wildmarken), `/certificates/<mark>`. What
+keeps them private is only that the app is unreachable from outside the LAN.
+Publishing a *copy* of one page to another server means nothing there can reach
+those routes, because the app isn't on that machine at all.
+
+**It is a snapshot, not a live view.** The page shows what was in stock when it
+was uploaded. The app re-uploads after every change to the stock (print,
+consume, edit, sale), so it is seconds behind — but if nobody changes anything
+it stays as it was.
+
+### How it works
+
+| Piece | Where |
+|---|---|
+| `GET /stock` | the same page, served by the app for previewing |
+| `app/public_site.py` | renders the bundle: `index.html`, `app.css`, `fonts/`, `.htaccess` |
+| `app/publish.py` | uploads it over **FTPS** (FTP + TLS) |
+| `_schedule_publish()` in `app/main.py` | called after every stock change |
+
+The bundle uses **relative paths**, so it works whether the domain serves
+`httpdocs/` directly or a subdirectory. The page carries no navigation and no
+prices, weights, hunters, marks or IDs — only species, cut, availability and,
+for processed meat, the ingredients.
+
+### Setup
+
+#### 1. FTP account in Plesk
+
+**Websites & Domains → Web Hosting Access** (or **FTP Access**) → the FTP user
+for the domain. Note host, user and password. wint.global's plan has **no SSH**,
+so SFTP is not available; FTPS is, and that is what the uploader speaks.
+
+The domain is served from **`httpdocs/`** (Plesk's document root — not cPanel's
+`public_html/`).
+
+#### 2. Credentials on the server
+
+`/etc/gamecooler/publish.env`, mode `0640`, `root:gamecooler`:
+
+```sh
+cp deploy/publish.env.example /etc/gamecooler/publish.env
+chmod 640 /etc/gamecooler/publish.env
+chown root:gamecooler /etc/gamecooler/publish.env
+$EDITOR /etc/gamecooler/publish.env
+```
+
+Fill in `PUBLISH_HOST`, `PUBLISH_USER`, `PUBLISH_PASSWORD`. Keep the password in
+the password manager; it must never reach the repo, `config.yaml` or a ticket.
+The service unit reads this file (`EnvironmentFile=-/etc/gamecooler/publish.env`).
+
+Without these settings the app simply doesn't publish — every upload is a no-op
+and the stock changes work as before.
+
+#### 3. Address in the app
+
+**Settings → Allgemein → Öffentliche Bestandsseite**: enter
+`https://wildlorenz.de`. That address becomes the QR code on the price list and
+the offer sheet. Without it, both PDFs carry no QR.
+
+#### 4. First publish
+
+Settings → **„Jetzt veröffentlichen"**. The line next to it shows the result.
+Then open `https://wildlorenz.de` on a phone.
+
+### Verifying
+
+```sh
+# from the LXC: the bundle the app would upload
+curl -s http://127.0.0.1:8010/stock | grep -c 'public-item'
+
+# the published copy must contain no private data
+curl -s https://wildlorenz.de | grep -iE 'wildmarke|uuid|€|kg' && echo LEAK || echo clean
+```
+
+After a stock change, the published page must change within a few seconds. If
+it doesn't, Settings shows the last publish result and its error.
+
+### Cloudflare Tunnel (not used)
+
+`deploy/Caddyfile` still has an optional public block, rendered only when
+`GAMECOOLER_PUBLIC_HOST` is set, and `deploy/autodeploy.env.example` documents
+it. With the static host it stays **unset**, so nothing public is served from
+home. It remains as an alternative if the page ever needs to be truly live —
+then the tunnel must point at Caddy's public port (`8443`), never at the app's
+`8010`, or the allowlist is bypassed.
+
 ## Alternative: publicly trusted certificate
 
 Instead of the internal CA, Caddy can obtain a real Let's Encrypt certificate
@@ -588,6 +682,9 @@ internal CA is less effort.
 - **Mac on Ethernet or Wi-Fi?** Decides whether Wake-on-LAN is possible.
 - **Code change** "save first, then print" not implemented yet.
 - **Caddyfile** is untested — Caddy wasn't installed locally.
+- **Public stock page**: the wint.global upload is written and tested against a
+  local FTPS server, but not yet run against the real host — no FTP account
+  exists yet.
 - **IP SAN** as a fallback in case Pi-hole is ever unreachable: Caddy's
   internal CA can also issue a certificate for an IP. Not tried yet.
 - **Scale** hangs off the Mac for the same reason as the printer — see

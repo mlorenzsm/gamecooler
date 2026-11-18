@@ -350,6 +350,33 @@ class Config(BaseModel):
     scale: ScaleSettings = ScaleSettings()
     # Vacuum bags for the packing page's tare, heaviest use first.
     bags: list[Bag] = []
+    # Public address of the stock page, e.g. "https://wildbret.example.de".
+    # Empty = the app is not published; the PDFs then carry no QR code.
+    public_url: str = ""
+    # Heading of the public page, e.g. "Wildbret aus dem Taunus, 65321
+    # Heidenrod". Empty = just "Wildbret".
+    public_region: str = ""
+    # Where customers write to reserve a piece. Shown on the public page as a
+    # mailto link. Empty = no order line.
+    public_email: str = ""
+
+    @field_validator("public_url", mode="before")
+    @classmethod
+    def _clean_public_url(cls, v):
+        url = " ".join(str(v or "").split()).rstrip("/")
+        return url if url.startswith(("http://", "https://")) else ""
+
+    @field_validator("public_region", mode="before")
+    @classmethod
+    def _clean_public_region(cls, v):
+        return " ".join(str(v or "").split())
+
+    @field_validator("public_email", mode="before")
+    @classmethod
+    def _clean_public_email(cls, v):
+        email = "".join(str(v or "").split())
+        # A bare address only: anything else in a mailto link is a footgun.
+        return email if "@" in email and " " not in email else ""
 
     @field_validator("label_language", mode="before")
     @classmethod
@@ -519,6 +546,12 @@ def save_config(config: Config) -> None:
     # only written once someone changed it, so existing files stay as they are
     if config.paperless != PaperlessSettings():
         data["paperless"] = config.paperless.model_dump()
+    if config.public_url:
+        data["public_url"] = config.public_url
+    if config.public_region:
+        data["public_region"] = config.public_region
+    if config.public_email:
+        data["public_email"] = config.public_email
     if config.scale != ScaleSettings():
         data["scale"] = config.scale.model_dump()
     if config.bags:

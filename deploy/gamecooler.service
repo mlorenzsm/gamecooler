@@ -25,6 +25,7 @@ Environment=GAMECOOLER_STATE_DIR=/var/lib/gamecooler
 # A file rather than Environment= lines because the token must not live in a
 # unit that sits in the repo.
 EnvironmentFile=-/etc/gamecooler/paperless.env
+EnvironmentFile=-/etc/gamecooler/publish.env
 ExecStart=/opt/gamecooler/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8010
 
 Restart=on-failure
