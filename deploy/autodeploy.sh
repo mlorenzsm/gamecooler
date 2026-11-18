@@ -46,17 +46,11 @@ die() { echo "[autodeploy] ERROR: $*" >&2; exit 1; }
 
 BRANCH=dev
 HOST=
-PUBLIC_HOST=
-PUBLIC_PORT=8443
 if [ -r "$BRANCH_FILE" ]; then
 	# shellcheck disable=SC1090
 	. "$BRANCH_FILE"
 	BRANCH="${GAMECOOLER_BRANCH:-dev}"
 	HOST="${GAMECOOLER_HOST:-}"
-	# Optional: the public name for the stock page (Cloudflare Tunnel). Unset =
-	# not published, and the Caddyfile gets no public block at all.
-	PUBLIC_HOST="${GAMECOOLER_PUBLIC_HOST:-}"
-	PUBLIC_PORT="${GAMECOOLER_PUBLIC_PORT:-8443}"
 fi
 
 # Only the two branches that actually exist. A typo must not silently deploy
@@ -161,25 +155,11 @@ apply_caddy() {
 		rm -f "$rendered"
 		return 1
 	fi
-	if [ -n "$PUBLIC_HOST" ]; then
-		if ! sed -i "s|__PUBLIC_HOST__|$PUBLIC_HOST|g; s|__PUBLIC_PORT__|$PUBLIC_PORT|g" "$rendered"; then
-			log "could not render the public site block"
-			rm -f "$rendered"
-			return 1
-		fi
-	else
-		# Not published: drop the public block entirely rather than leave a
-		# placeholder or a site name nobody can resolve. The block starts at
-		# the "public stock page (optional)" comment and runs to the end of
-		# the file, which is where it is kept in deploy/Caddyfile.
-		sed -i '/^# --- public stock page (optional) ---/,$d' "$rendered" || {
-			log "could not strip the public site block"
-			rm -f "$rendered"
-			return 1
-		}
-	fi
-	if grep -q '__PUBLIC_' "$rendered"; then
-		log "Caddyfile still contains __PUBLIC_ — placeholder not replaced?"
+	# No other placeholder exists. A leftover one from a future edit would be
+	# caught by the caddy validate below, which names the offending line.
+	if grep -q '__[A-Z_]*__' "$rendered"; then
+		log "Caddyfile contains an unknown placeholder — only __HOST__ is rendered"
+		grep -n '__[A-Z_]*__' "$rendered" >&2
 		rm -f "$rendered"
 		return 1
 	fi

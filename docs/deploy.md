@@ -650,14 +650,20 @@ curl -s https://wildlorenz.de | grep -iE 'wildmarke|uuid|€|kg' && echo LEAK ||
 After a stock change, the published page must change within a few seconds. If
 it doesn't, Settings shows the last publish result and its error.
 
-### Cloudflare Tunnel (not used)
+### A tunnel would need its own Caddyfile edit
 
-`deploy/Caddyfile` still has an optional public block, rendered only when
-`GAMECOOLER_PUBLIC_HOST` is set, and `deploy/autodeploy.env.example` documents
-it. With the static host it stays **unset**, so nothing public is served from
-home. It remains as an alternative if the page ever needs to be truly live —
-then the tunnel must point at Caddy's public port (`8443`), never at the app's
-`8010`, or the allowlist is bypassed.
+There is deliberately no public site block in `deploy/Caddyfile`. One was
+written and removed: it used `__PUBLIC_HOST__`/`__PUBLIC_PORT__` placeholders,
+and the deploy renders the Caddyfile with the script from the **previous**
+commit (the wrapper copies it before it overwrites itself), so the new
+placeholders were never substituted and Caddy rejected the file with
+`invalid port '__PUBLIC_PORT__'`. Adding placeholders and the code that
+renders them in the same commit can never work.
+
+If the page ever needs to be truly live, add a public block that needs **no
+new placeholder** — derive the name from `GAMECOOLER_HOST` in the existing
+`sed`, or hard-code a loopback port. And it must point the tunnel at Caddy,
+never at the app's `8010`, or the allowlist is bypassed.
 
 ## Alternative: publicly trusted certificate
 
