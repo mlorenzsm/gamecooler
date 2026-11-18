@@ -6,7 +6,7 @@ from datetime import date
 from urllib.parse import quote
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 # request.form() yields starlette's UploadFile, which fastapi's one subclasses
 # — an isinstance check on a hand-parsed form must use the base class
@@ -289,23 +289,77 @@ def _inventory_hint(records: list[PartRecord]) -> str:
     return f" ({', '.join(notes)})" if notes else ""
 
 
+def _public_price(cfg, species: str, part: str) -> dict | None:
+    """The price a customer sees for one cut, or None if it has none.
+
+    Prices live on the part (`price` per kg, or `piece_price` for a counted
+    part such as the 4-piece Bratwurst). The price list may print a cut under
+    another name ("Keule oder Blatt = Keule ohne Knochen"), so the lookup goes
+    through the species' price-list lines: a line that points at this part
+    wins, because that is the wording and the price the customer is told.
+
+    A species grouped under another one (Frischling -> Wildschwein) falls back
+    to the group's price for the same cut, so a young boar's rücken isn't
+    silently unpriced.
+    """
+    sp = cfg.find_species(species)
+    if sp is None:
+        return None
+    # Direct hit on the part itself.
+    direct = sp.parts.get(part)
+    if direct is not None:
+        for row in price_list_rows(sp):
+            # The row knows the printed label; the part it prices is the one
+            # whose name appears on the right of "=" (or the label itself).
+            if part in row.get("sources", []) or row["label"] == part:
+                return {"price": row["price"], "unit": row["amount"],
+                        "counted": row.get("counted", False)}
+        if direct.pieces is not None and direct.piece_price is not None:
+            return {"price": direct.piece_price, "unit": t("{n} Stück", n=direct.pieces),
+                    "counted": True}
+        if direct.price is not None:
+            return {"price": direct.price, "unit": t("pro kg"), "counted": False}
+    # Grouped species: ask the species it is shown under.
+    if sp.public_group:
+        return _public_price(cfg, sp.public_group, part)
+    return None
+
+
 def public_stock_groups(cfg) -> list[tuple[str, list[dict]]]:
     """The public page's groups: (heading, rows) in config species order.
 
     Shared by the live page and the static bundle that gets uploaded to the
     web host, so the two can never show different things.
+
+    A species can name another one as its `public_group` — a Frischling is a
+    young boar, so its cuts belong under the Schwarzwild heading instead of a
+    heading of their own. The heading is always the *target* species' display
+    name, and its rows are merged, so one heading lists both.
     """
     rows = public_stock(registry.inventory())
-    # Customers know the trade names from the price list ("Schwarzwild"), not
-    # necessarily the species name the labels carry.
+    # Which heading a species ends up under: its own name, or its group's.
+    heading_of: dict[str, str] = {}
+    for s in cfg.species:
+        heading_of[s.name] = s.public_group or s.name
     list_names = {s.name: s.list_name for s in cfg.species}
+    # Order by the species that owns the heading, then its own position, so a
+    # merged group keeps the target species' place in the config.
     order = {s.name: i for i, s in enumerate(cfg.species)}
-    rows.sort(key=lambda r: (order.get(r["species"], len(order)), r["part"]))
+    rows.sort(key=lambda r: (
+        order.get(heading_of.get(r["species"], r["species"]), len(order)),
+        order.get(r["species"], len(order)),
+        r["part"],
+    ))
     groups: list[tuple[str, list[dict]]] = []
     for row in rows:
-        heading = list_names.get(row["species"], row["species"])
+        target = heading_of.get(row["species"], row["species"])
+        # Customers know the trade names from the price list ("Schwarzwild").
+        heading = list_names.get(target, target)
         if not groups or groups[-1][0] != heading:
             groups.append((heading, []))
+        # The price the customer is told, resolved through the price list so a
+        # renamed cut ("Keule oder Blatt") carries its price too.
+        row["price"] = _public_price(cfg, row["species"], row["part"])
         groups[-1][1].append(row)
     return groups
 
@@ -710,6 +764,37 @@ def consume(part_uuid: str, background: BackgroundTasks):
         _schedule_publish(background)
     return JSONResponse(
         {"ok": True, "already_consumed": already_consumed, "part": record.model_dump()}
+    )
+
+
+@app.post("/parts/publish")
+async def publish_selection(request: Request, background: BackgroundTasks):
+    """Publish exactly the ticked entries to the public page.
+
+    The public page shows only what is marked public once anyone has chosen
+    anything — so this narrows it to the selection, and everything not ticked
+    disappears from wildlorenz.de. That is the point: it is a curated list,
+    not a dump of the freezer.
+    """
+    form = await request.form()
+    uuids = [u.strip().lower() for u in form.getlist("uuid")]
+    if not uuids:
+        return RedirectResponse(url="/inventory?msg=" + quote(t("Nichts ausgewählt")), status_code=303)
+    count = registry.set_public(uuids)
+    _schedule_publish(background)
+    return RedirectResponse(
+        url="/inventory?msg=" + quote(t("{n} Teilstücke veröffentlicht", n=count)), status_code=303
+    )
+
+
+@app.post("/parts/unpublish")
+def unpublish_all(background: BackgroundTasks):
+    """Forget every choice: the page goes back to showing everything in stock."""
+    registry.clear_public()
+    _schedule_publish(background)
+    return RedirectResponse(
+        url="/inventory?msg=" + quote(t("Veröffentlichung zurückgesetzt — es erscheint wieder alles im Bestand")),
+        status_code=303,
     )
 
 
@@ -1296,13 +1381,21 @@ def settings_species_mark(species: str = Form(...), needs_mark: str = Form("")):
 
 
 @app.post("/settings/species/price_list_name")
-def settings_species_price_list_name(species: str = Form(...), price_list_name: str = Form("")):
-    """The species name on the price list — "Schwarzwild" for Wildschwein.
-    Labels and invoices keep the real species name."""
+def settings_species_price_list_name(species: str = Form(...), price_list_name: str = Form(""),
+                                     public_group: str = Form("")):
+    """The species name on the price list — "Schwarzwild" for Wildschwein —
+    and the heading its cuts appear under on the public page.
+
+    Labels and invoices keep the real species name in both cases."""
     sp = _species_or_404(species)
     sp.price_list_name = price_list_name
+    # A species can't group under itself, and only a real species counts.
+    group = public_group.strip()
+    sp.public_group = group if group and group != sp.name and config.find_species(group) else ""
     msg = (t("{species}: Preisliste heißt „{name}“", species=sp.name, name=sp.list_name)
            if sp.price_list_name else t("{species}: Preisliste nutzt den Wildart-Namen", species=sp.name))
+    if sp.public_group:
+        msg += " · " + t("öffentlich unter „{name}“", name=sp.public_group)
     return _settings_redirect(msg, sp.name)
 
 
@@ -1568,5 +1661,15 @@ def recipe_delete(species: str = Form(...), original_name: str = Form(...)):
 
 
 @app.get("/parts.json")
-def export():
-    return JSONResponse([r.model_dump() for r in registry.load_all()])
+def export(uuid: list[str] = Query(default=[])):
+    """The registry as JSON — all of it, or only the rows named by `uuid`.
+
+    The Stock page passes the ticked rows, so a selection exports exactly
+    what was selected instead of the whole inventory. Repeated `uuid=…`
+    parameters are the natural shape for that and keep the unfiltered call
+    (a plain `GET /parts.json`) working as before.
+    """
+    if not uuid:
+        return JSONResponse([r.model_dump() for r in registry.load_all()])
+    wanted = [u.strip().lower() for u in uuid if u.strip()]
+    return JSONResponse([r.model_dump() for r in registry.get_many(wanted)])

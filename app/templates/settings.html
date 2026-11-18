@@ -234,6 +234,20 @@
       </span>
       <input name="price_list_name" value="{{ sp.price_list_name }}" placeholder="{{ sp.name }}">
     </label>
+    {# A Frischling is a young boar: its cuts belong under Schwarzwild on the
+       public page instead of a heading of their own. Labels and the inventory
+       keep the real species. #}
+    <label class="list-row">
+      <span class="grow">{{ t("Öffentliche Seite: unter") }}
+        <span class="hint">{{ t("Teilstücke dieser Wildart erscheinen unter dieser Überschrift. Leer = eigene Überschrift. Etiketten und Bestand bleiben unverändert.") }}</span>
+      </span>
+      <select name="public_group">
+        <option value="">— {{ t("eigene Überschrift") }} —</option>
+        {% for other in config.species if other.name != sp.name %}
+        <option value="{{ other.name }}" {% if sp.public_group == other.name %}selected{% endif %}>{{ other.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <div class="list-row list-actions"><button class="small" type="submit">{{ icon('save') }}{{ t("Speichern") }}</button></div>
   </form>
 

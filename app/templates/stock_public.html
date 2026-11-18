@@ -64,12 +64,25 @@
                       color: var(--accent); margin: 2rem 0 .5rem; }
     .public-item { padding: .7rem 0; border-bottom: 1px solid var(--line); }
     .public-item:last-child { border-bottom: 0; }
+    /* One line per cut: the name shrinks, the price and availability keep
+       their width. Wrapping the price onto its own line under a long cut
+       name reads as a separate item. */
     .public-item .row { display: flex; align-items: baseline; justify-content: space-between;
-                        gap: .75rem; flex-wrap: wrap; }
+                        gap: .75rem; }
     .public-item .name { font-weight: 600; font-size: var(--text-lg); min-width: 0;
                          overflow-wrap: anywhere; }
     .public-item .state { color: var(--muted); font-size: var(--text-sm); white-space: nowrap;
                           flex-shrink: 0; }
+    /* Price and availability share the right-hand column: the price leads
+       (it's what a customer looks for), the availability follows it small.
+       On a narrow phone the availability gives way first. */
+    .public-item .right { display: flex; align-items: baseline; gap: .6rem; flex-shrink: 0; }
+    @media (max-width: 26rem) {
+      .public-item .right { gap: .4rem; }
+      .public-item .state { font-size: var(--text-xs); }
+    }
+    .public-item .price { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .public-item .price .unit { color: var(--muted); font-weight: 400; font-size: var(--text-sm); }
     .public-item .ingredients { color: var(--faint); font-size: var(--text-xs); margin-top: .2rem;
                                 overflow-wrap: anywhere; }
     .public-empty { color: var(--muted); padding: 2rem 0; }
@@ -95,7 +108,14 @@
     <div class="public-item">
       <div class="row">
         <span class="name">{{ item.part }}</span>
-        <span class="state">{{ t("verfügbar") if item.availability == "available" else t("wenige") }}</span>
+        <span class="right">
+          {% if item.price %}
+          {# "7,50 € / 4 Stück" for a package, "34,50 € pro kg" for weighed
+             meat — the slash only reads right before a counted unit. #}
+          <span class="price">{{ item.price.price | de }} €{% if item.price.counted %}<span class="unit"> / {{ item.price.unit }}</span>{% else %}<span class="unit"> {{ item.price.unit }}</span>{% endif %}</span>
+          {% endif %}
+          <span class="state">{{ t("verfügbar") if item.availability == "available" else t("wenige") }}</span>
+        </span>
       </div>
       {% if item.ingredients %}
       <div class="ingredients">{{ t("Zutaten:") }} {{ item.ingredients }}</div>

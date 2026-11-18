@@ -107,6 +107,10 @@ class PartRecord(BaseModel):
     # back to the day they were entered — see `killed`.
     killed_on: str | None = None
     mark: str | None = None                    # Wildursprungsmarke
+    # Shown on the public stock page. None = not chosen either way, so an
+    # installation that never picks anything keeps publishing everything (the
+    # behaviour before this field existed). True/False = an explicit choice.
+    public: bool | None = None
 
     @property
     def killed(self) -> str:
@@ -188,7 +192,16 @@ def public_stock(records: list[PartRecord]) -> list[dict]:
     group with the availability marker and, for processed meat, the
     ingredients — everything else about a record (hunter, mark, uuid) is
     personal and never reaches this list.
+
+    Which entries appear depends on `PartRecord.public`:
+      - nothing chosen yet (every record None) -> everything in stock, which
+        is how the page behaved before the field existed;
+      - once anything is chosen -> only the records marked public.
+    So ticking a selection narrows the page, and a part printed later stays
+    off it until someone publishes it.
     """
+    if any(r.public is not None for r in records):
+        records = [r for r in records if r.public]
     groups: dict[tuple[str, str], dict] = {}
     for r in records:
         if r.consumed_at is not None:

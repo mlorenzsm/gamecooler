@@ -193,13 +193,18 @@ class Species(BaseModel):
     # is a part name, "4x Name" for a package, or "Name oder Name2" for two
     # cuts sold at one price. Empty = this species is not on the price list.
     price_list: list[str] = []
+    # Show this species' stock under another species' heading on the public
+    # page — a Frischling is a young boar, so its cuts belong under
+    # Schwarzwild rather than in a heading of their own. Labels and the
+    # inventory keep the real species. Empty = its own heading.
+    public_group: str = ""
 
     @field_validator("parts", mode="before")
     @classmethod
     def _scalar_is_price(cls, v):
         return _parts_dict(v)
 
-    @field_validator("price_list_name", mode="before")
+    @field_validator("price_list_name", "public_group", mode="before")
     @classmethod
     def _blank_is_none(cls, v):
         v = " ".join(str(v or "").split())
@@ -272,7 +277,8 @@ class Species(BaseModel):
             if not names or any(p is None for p in parts):
                 continue                      # validated on save; never crash a render
             first = parts[0]
-            if count is not None or first.pieces is not None:
+            counted_row = count is not None or first.pieces is not None
+            if counted_row:
                 price = first.piece_price
                 if price is None:
                     continue
@@ -283,7 +289,14 @@ class Species(BaseModel):
                     continue
                 amount = t("pro kg")
             rows.append({"label": label if has_override else " oder ".join(names),
-                         "amount": amount, "price": price})
+                         "amount": amount, "price": price,
+                         # A package price is "per pack", a weighed one "per
+                         # kg" — the caller needs the difference for the "€/…"
+                         # wording, and a translated string can't be parsed.
+                         "counted": counted_row,
+                         # The parts this row prices — used to match a stock
+                         # row to its price list line.
+                         "sources": names})
         return rows
 
 
@@ -535,6 +548,7 @@ def save_config(config: Config) -> None:
             | ({"needs_mark": s.needs_mark} if s.needs_mark is not None else {})
             | ({"price_list_name": s.price_list_name} if s.price_list_name else {})
             | ({"price_list": s.price_list} if s.price_list else {})
+            | ({"public_group": s.public_group} if s.public_group else {})
             for s in config.species
         ],
         "printers": [p.model_dump() for p in config.printers],

@@ -264,6 +264,18 @@ EN = {
     "E-Mail für Bestellungen, steht unten auf der Seite. Leer = keine Bestellzeile.":
         "Email for orders, shown at the bottom of the page. Empty = no order line.",
     "Bestellung und Reservierung:": "Orders and reservations:",
+    "Öffentliche Seite: unter": "Public page: under",
+    "Teilstücke dieser Wildart erscheinen unter dieser Überschrift. Leer = eigene Überschrift. Etiketten und Bestand bleiben unverändert.":
+        "Cuts of this species appear under this heading. Empty = a heading of its own. Labels and stock stay unchanged.",
+    "eigene Überschrift": "own heading",
+    "öffentlich unter „{name}“": "publicly under “{name}”",
+    "Exportieren": "Export",
+    "Veröffentlichen": "Publish",
+    "Nur die ausgewählten Teilstücke veröffentlichen?\n\nAlles andere verschwindet von der öffentlichen Seite.":
+        "Publish only the selected cuts?\n\nEverything else disappears from the public page.",
+    "{n} Teilstücke veröffentlicht": "{n} cuts published",
+    "Veröffentlichung zurückgesetzt — es erscheint wieder alles im Bestand":
+        "Publication reset — everything in stock is shown again",
     "Bestellung Wildbret": "Wildbret order",
     "Ungültiges Erlegungsdatum — nicht in der Zukunft": "Invalid kill date — not in the future",
     "fix": "fixed",
