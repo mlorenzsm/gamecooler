@@ -78,6 +78,50 @@ def mark_consumed_many(part_uuids: list[str]) -> int:
         return changed
 
 
+def set_public(part_uuids: list[str]) -> int:
+    """Publish exactly these entries; everything else stops being public.
+
+    This is the "publish a selection" action: the chosen rows get
+    `public=True`, every other entry `public=False`. Setting the others
+    explicitly (rather than leaving them None) is what makes the page show
+    only the selection — `public_stock` falls back to "everything" while all
+    entries are still unchosen.
+
+    Returns how many entries are now public.
+    """
+    wanted = set(part_uuids)
+    with _lock:
+        records = load_all()
+        for record in records:
+            record.public = record.uuid in wanted
+        _write([r.model_dump() for r in records])
+        return len(wanted & {r.uuid for r in records})
+
+
+def set_public_many(part_uuids: list[str], public: bool) -> int:
+    """Mark or unmark individual entries, leaving the rest as they are."""
+    wanted = set(part_uuids)
+    with _lock:
+        records = load_all()
+        changed = 0
+        for record in records:
+            if record.uuid in wanted and record.public is not public:
+                record.public = public
+                changed += 1
+        if changed:
+            _write([r.model_dump() for r in records])
+        return changed
+
+
+def clear_public() -> None:
+    """Forget every choice: the page goes back to showing everything in stock."""
+    with _lock:
+        records = load_all()
+        for record in records:
+            record.public = None
+        _write([r.model_dump() for r in records])
+
+
 def mark_sold(part_uuids: list[str], sale_id: str) -> int:
     """Marks parts consumed with a sale reference; returns count of newly sold."""
     wanted = set(part_uuids)

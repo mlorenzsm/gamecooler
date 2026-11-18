@@ -54,6 +54,14 @@
     <button type="submit" formaction="/sell" class="small print">
       {{ icon('shopping-bag') }}{{ t("Verkaufen") }}
     </button>
+    {# Curate the public page: only the ticked entries stay on
+       wildlorenz.de. Posts like the other two buttons — the form carries the
+       ticked uuid fields. #}
+    <button type="submit" formaction="/parts/publish" class="small sel-quiet"
+            data-confirm="{{ t("Nur die ausgewählten Teilstücke veröffentlichen?\n\nAlles andere verschwindet von der öffentlichen Seite.") }}"
+            data-confirm-ok="{{ t("Veröffentlichen") }}">
+      {{ icon('package') }}{{ t("Veröffentlichen") }}
+    </button>
     {# Export the ticked rows as JSON. A plain link, built by the page script
        from the ticked boxes — the form above posts, and a download has to be
        a GET so the browser saves the response instead of showing it. #}

@@ -767,6 +767,37 @@ def consume(part_uuid: str, background: BackgroundTasks):
     )
 
 
+@app.post("/parts/publish")
+async def publish_selection(request: Request, background: BackgroundTasks):
+    """Publish exactly the ticked entries to the public page.
+
+    The public page shows only what is marked public once anyone has chosen
+    anything — so this narrows it to the selection, and everything not ticked
+    disappears from wildlorenz.de. That is the point: it is a curated list,
+    not a dump of the freezer.
+    """
+    form = await request.form()
+    uuids = [u.strip().lower() for u in form.getlist("uuid")]
+    if not uuids:
+        return RedirectResponse(url="/inventory?msg=" + quote(t("Nichts ausgewählt")), status_code=303)
+    count = registry.set_public(uuids)
+    _schedule_publish(background)
+    return RedirectResponse(
+        url="/inventory?msg=" + quote(t("{n} Teilstücke veröffentlicht", n=count)), status_code=303
+    )
+
+
+@app.post("/parts/unpublish")
+def unpublish_all(background: BackgroundTasks):
+    """Forget every choice: the page goes back to showing everything in stock."""
+    registry.clear_public()
+    _schedule_publish(background)
+    return RedirectResponse(
+        url="/inventory?msg=" + quote(t("Veröffentlichung zurückgesetzt — es erscheint wieder alles im Bestand")),
+        status_code=303,
+    )
+
+
 @app.post("/parts/consume-many")
 async def consume_many(request: Request, background: BackgroundTasks):
     form = await request.form()

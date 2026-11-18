@@ -270,6 +270,12 @@ EN = {
     "eigene Überschrift": "own heading",
     "öffentlich unter „{name}“": "publicly under “{name}”",
     "Exportieren": "Export",
+    "Veröffentlichen": "Publish",
+    "Nur die ausgewählten Teilstücke veröffentlichen?\n\nAlles andere verschwindet von der öffentlichen Seite.":
+        "Publish only the selected cuts?\n\nEverything else disappears from the public page.",
+    "{n} Teilstücke veröffentlicht": "{n} cuts published",
+    "Veröffentlichung zurückgesetzt — es erscheint wieder alles im Bestand":
+        "Publication reset — everything in stock is shown again",
     "Bestellung Wildbret": "Wildbret order",
     "Ungültiges Erlegungsdatum — nicht in der Zukunft": "Invalid kill date — not in the future",
     "fix": "fixed",
