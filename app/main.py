@@ -18,7 +18,7 @@ from PIL import Image
 from pydantic import ValidationError
 
 from . import certificates, ledger, paperless, registry, sales, scale
-from .config import LOGO_PATH, PART_KINDS, UNITS, Hunter, PartDefaults, Preset, PresetItem, Recipe, RecipeItem, Species, load_config, save_config
+from .config import LOGO_PATH, PART_KINDS, UNITS, Hunter, PartDefaults, Preset, PresetItem, Recipe, RecipeItem, Species, load_config, price_list_rows, save_config
 from .i18n import LANGUAGES, decimal_separator, format_date, get_lang, pick_language, reset_lang, set_lang, t
 from .labels import render_info_label, render_qr_label
 from .models import (
@@ -34,7 +34,7 @@ from .models import (
     parse_german_decimal,
     parse_optional_decimal,
 )
-from .pdf import render_sale_pdf, render_stock_pdf
+from .pdf import render_price_list_pdf, render_sale_pdf, render_stock_pdf
 from .printer import print_labels
 
 logging.basicConfig(level=logging.INFO)
@@ -672,6 +672,21 @@ def stock_pdf(hunter: str = ""):
     )
 
 
+@app.get("/prices.pdf")
+def price_list_pdf(hunter: str = ""):
+    """The price list from the settings, as a page to hand to customers.
+    Rendered from the config every time — never a second copy of the prices."""
+    if not any(price_list_rows(s) for s in config.species):
+        raise HTTPException(status_code=404, detail=t("Keine Preise hinterlegt"))
+    hunter_config = find_hunter(hunter) or (config.hunters[0] if config.hunters else None)
+    pdf_bytes = render_price_list_pdf(config.species, hunter_config, config.label_language)
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="preisliste-{date.today().isoformat()}.pdf"'},
+    )
+
+
 @app.get("/certificates/{mark}/exists")
 def certificate_exists(mark: str):
     """For the print forms: shows the "Dokument vorhanden" link live."""
@@ -1148,6 +1163,60 @@ def settings_species_mark(species: str = Form(...), needs_mark: str = Form("")):
     return _settings_redirect(msg, sp.name)
 
 
+@app.post("/settings/species/price_list_name")
+def settings_species_price_list_name(species: str = Form(...), price_list_name: str = Form("")):
+    """The species name on the price list — "Schwarzwild" for Wildschwein.
+    Labels and invoices keep the real species name."""
+    sp = _species_or_404(species)
+    sp.price_list_name = price_list_name
+    msg = (t("{species}: Preisliste heißt „{name}“", species=sp.name, name=sp.list_name)
+           if sp.price_list_name else t("{species}: Preisliste nutzt den Wildart-Namen", species=sp.name))
+    return _settings_redirect(msg, sp.name)
+
+
+@app.post("/settings/species/price_list")
+def settings_species_price_list(species: str = Form(...), price_list: str = Form("")):
+    """Which parts the price list shows, one per line.
+
+    Lines are checked here, not at render time: an unknown part or a count that
+    contradicts the part's package would otherwise print a wrong sheet or drop
+    a row silently. The price itself always comes from the part.
+    """
+    sp = _species_or_404(species)
+    lines = [line.strip() for line in price_list.splitlines() if line.strip()]
+    problems = []
+    for i, line in enumerate(lines, start=1):
+        # "Anzeige = Teilstück": the printed label differs from the part(s) the
+        # price comes from ("Keule oder Blatt = Keule ohne Knochen"). Only the
+        # right-hand side names parts.
+        label, has_override, source = line.partition("=")
+        source = source.strip() or label.strip()
+        counted = re.match(r"^\s*(\d+)\s*x\s+(.+)$", source, re.IGNORECASE)
+        names = [n.strip() for n in re.split(r"\s+oder\s+", counted.group(2) if counted else source, flags=re.IGNORECASE)]
+        unknown = [n for n in names if n not in sp.parts]
+        if unknown:
+            problems.append(t("Zeile {line}: unbekannt bei {species}: {parts}",
+                              line=i, species=sp.name, parts=", ".join(unknown)))
+            continue
+        parts = [sp.parts[n] for n in names]
+        if len(parts) > 1 and len({p.price for p in parts}) > 1:
+            problems.append(t("Zeile {line}: „{parts}“ haben verschiedene Preise", line=i, parts=" oder ".join(names)))
+            continue
+        if counted:
+            want = int(counted.group(1))
+            if any(p.pieces is None or p.piece_price is None for p in parts):
+                problems.append(t("Zeile {line}: „{name}“ ist kein Paket", line=i, name=names[0]))
+            elif any(p.pieces != want for p in parts):
+                problems.append(t("Zeile {line}: Stückzahl passt nicht zu „{name}“ ({pieces} Stück)",
+                                  line=i, name=names[0], pieces=parts[0].pieces))
+        elif any(p.price is None for p in parts):
+            problems.append(t("Zeile {line}: „{name}“ hat keinen Preis", line=i, name=names[0]))
+    if problems:
+        return _settings_error(sp.name, " · ".join(problems))
+    sp.price_list = lines
+    return _settings_redirect(t("{species}: Preisliste gespeichert ({n} Zeilen)", species=sp.name, n=len(lines)), sp.name)
+
+
 @app.post("/settings/species/rename")
 def settings_species_rename(original_name: str = Form(...), name: str = Form(...)):
     sp = _species_or_404(original_name)
@@ -1180,6 +1249,8 @@ def settings_part_save(
     name: str = Form(...),
     price: str = Form(""),
     weight_kg: str = Form(""),
+    pieces: str = Form(""),
+    piece_price: str = Form(""),
     ingredients: str = Form(""),
     kind: str = Form("cut"),
     recipe: str = Form(""),
@@ -1193,6 +1264,8 @@ def settings_part_save(
     defaults = PartDefaults(
         price=parse_optional_decimal(price),
         weight_kg=parse_optional_decimal(weight_kg),
+        pieces=pieces or None,
+        piece_price=parse_optional_decimal(piece_price),
         # With a recipe linked the field only shows the recipe's text; keep the
         # part's own text as it was, so unlinking later brings it back.
         ingredients=(previous.ingredients if previous else None) if linked else ingredients,

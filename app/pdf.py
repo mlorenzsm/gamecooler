@@ -5,7 +5,7 @@ from fpdf import FPDF
 
 logging.getLogger("fontTools").setLevel(logging.WARNING)
 
-from .config import FONTS_DIR, LOGO_PATH, Hunter
+from .config import FONTS_DIR, LOGO_PATH, Hunter, Species, price_list_rows
 from .i18n import format_date, t
 from .models import PartRecord, Sale, format_amount, format_de
 
@@ -77,20 +77,63 @@ class InvoicePDF(FPDF):
         self.cell(w, 4, text.upper(), align=align)
         self.set_char_spacing(0)
 
+    def letterhead(self, name: str, address: str, phone: str, email: str):
+        """The seller block: logo and name left, contact right, rule below.
+
+        Shared by every document the app prints, so an invoice, an offer sheet
+        and the price list carry the same head.
+        """
+        name_x = LEFT
+        if LOGO_PATH.exists():
+            self.image(str(LOGO_PATH), x=LEFT, y=LOGO_TOP, h=LOGO_SIZE, keep_aspect_ratio=True)
+            name_x = LEFT + LOGO_SIZE + 4
+        self.set_xy(name_x, 18)
+        self.style(17, INK, family="bricolage", bold=True)
+        self.cell(WIDTH / 2 - (name_x - LEFT), 8, self.fit(name, WIDTH / 2 - (name_x - LEFT)))
+        self.set_xy(LEFT + WIDTH / 2, 18.5)
+        self.style(8.5, MUTED)
+        self.multi_cell(WIDTH / 2, 4.2, "\n".join(x for x in (address, phone, email) if x), align="R")
+        self.set_draw_color(*LINE)
+        self.set_line_width(0.3)
+        self.line(LEFT, 36, RIGHT, 36)
+
+    def table_head(self, heads: list[tuple[str, str]], cols: tuple[float, ...]):
+        """Column headings with a rule under them; the caller's y moves below."""
+        y = self.get_y()
+        x = LEFT
+        for (text, align), w in zip(heads, cols):
+            self.eyebrow(text, x + (2 if align == "L" else 0), y, w - (2 if align == "L" else 0), align)
+            x += w
+        self.set_draw_color(*INK)
+        self.set_line_width(0.35)
+        self.line(LEFT, y + 6, RIGHT, y + 6)
+        self.set_y(y + 6)
+
+
+def seller_contact(hunter: Hunter | None, lang: str) -> tuple[str, str, str]:
+    """Address, phone line and email for the letterhead, as the seller wrote them."""
+    if hunter is None:
+        return "", "", ""
+    phone = t("Tel. {phone}", lang, phone=hunter.phone) if hunter.phone else ""
+    return hunter.address, phone, hunter.email
+
+
+def page_text(lang: str) -> str:
+    """The footer's "Seite x von y"; {nb} is filled in by fpdf2 on output."""
+    return t("Seite {page} von {pages}", lang, page="{page}", pages="{nb}")
+
 
 def render_sale_pdf(sale: Sale, hunter: Hunter | None, lang: str = "de") -> bytes:
     """Invoice / delivery note. `lang` is the label language setting, like the
     labels: the document goes to the buyer, not the person clicking."""
-    address = hunter.address if hunter else ""
-    phone = t("Tel. {phone}", lang, phone=hunter.phone) if hunter and hunter.phone else ""
-    email = hunter.email if hunter else ""
+    address, phone, email = seller_contact(hunter, lang)
     date = format_date(datetime.fromisoformat(sale.created_at).date(), lang)
 
     # The footer names the document, not the seller again: that's what a
     # second page needs to be matched to the first.
     pdf = InvoicePDF(
         footer_text=f"{t('Rechnung / Lieferschein', lang)} {t('Nr.', lang)} {sale.number} · {date}",
-        page_text=t("Seite {page} von {pages}", lang, page="{page}", pages="{nb}"),
+        page_text=page_text(lang),
     )
     # Same sale, same bytes: the creation date is the sale's, not "now". A
     # re-upload is then an exact duplicate, which Paperless recognises by
@@ -106,21 +149,7 @@ def render_sale_pdf(sale: Sale, hunter: Hunter | None, lang: str = "de") -> byte
     pdf.line(4, HOLE_MARK, 11, HOLE_MARK)
 
     # --- header: the seller -----------------------------------------------
-    # With a logo (Settings -> General) it stands at the left and the name
-    # moves next to it; the header keeps its height either way.
-    name_x = LEFT
-    if LOGO_PATH.exists():
-        pdf.image(str(LOGO_PATH), x=LEFT, y=LOGO_TOP, h=LOGO_SIZE, keep_aspect_ratio=True)
-        name_x = LEFT + LOGO_SIZE + 4
-    pdf.set_xy(name_x, 18)
-    pdf.style(17, INK, family="bricolage", bold=True)
-    pdf.cell(WIDTH / 2 - (name_x - LEFT), 8, pdf.fit(sale.hunter, WIDTH / 2 - (name_x - LEFT)))
-    pdf.set_xy(LEFT + WIDTH / 2, 18.5)
-    pdf.style(8.5, MUTED)
-    pdf.multi_cell(WIDTH / 2, 4.2, "\n".join(x for x in (address, phone, email) if x), align="R")
-    pdf.set_draw_color(*LINE)
-    pdf.set_line_width(0.3)
-    pdf.line(LEFT, 36, RIGHT, 36)
+    pdf.letterhead(sale.hunter, address, phone, email)
 
     # --- address field (window envelope) ----------------------------------
     # the return line sits right above the address, small, so it shows in the
@@ -171,15 +200,7 @@ def render_sale_pdf(sale: Sale, hunter: Hunter | None, lang: str = "de") -> byte
              (t("€/kg", lang), "R"), (t("Betrag", lang), "R")]
 
     def table_head():
-        y = pdf.get_y()
-        x = LEFT
-        for (text, align), w in zip(heads, COLS):
-            pdf.eyebrow(text, x + (2 if align == "L" else 0), y, w - (2 if align == "L" else 0), align)
-            x += w
-        pdf.set_draw_color(*INK)
-        pdf.set_line_width(0.35)
-        pdf.line(LEFT, y + 6, RIGHT, y + 6)
-        pdf.set_y(y + 6)
+        pdf.table_head(heads, COLS)
 
     table_head()
     pdf.set_line_width(0.2)
@@ -335,32 +356,17 @@ def _stock_groups(records: list[PartRecord], lang: str) -> list[dict]:
 def render_stock_pdf(records: list[PartRecord], hunter: Hunter | None,
                      species_order: list[str], lang: str = "de") -> bytes:
     """The unsold stock as a dated offer sheet, grouped per species."""
-    address = hunter.address if hunter else ""
-    phone = t("Tel. {phone}", lang, phone=hunter.phone) if hunter and hunter.phone else ""
-    email = hunter.email if hunter else ""
+    address, phone, email = seller_contact(hunter, lang)
     date = format_date(datetime.now().date(), lang)
 
     pdf = InvoicePDF(
         footer_text=f"{t('Wildbret-Angebot', lang)} · {date}",
-        page_text=t("Seite {page} von {pages}", lang, page="{page}", pages="{nb}"),
+        page_text=page_text(lang),
     )
     pdf.add_page()
 
     # --- header: the seller, like the invoice -------------------------------
-    name = hunter.name if hunter else ""
-    name_x = LEFT
-    if LOGO_PATH.exists():
-        pdf.image(str(LOGO_PATH), x=LEFT, y=LOGO_TOP, h=LOGO_SIZE, keep_aspect_ratio=True)
-        name_x = LEFT + LOGO_SIZE + 4
-    pdf.set_xy(name_x, 18)
-    pdf.style(17, INK, family="bricolage", bold=True)
-    pdf.cell(WIDTH / 2 - (name_x - LEFT), 8, pdf.fit(name, WIDTH / 2 - (name_x - LEFT)))
-    pdf.set_xy(LEFT + WIDTH / 2, 18.5)
-    pdf.style(8.5, MUTED)
-    pdf.multi_cell(WIDTH / 2, 4.2, "\n".join(x for x in (address, phone, email) if x), align="R")
-    pdf.set_draw_color(*LINE)
-    pdf.set_line_width(0.3)
-    pdf.line(LEFT, 36, RIGHT, 36)
+    pdf.letterhead(hunter.name if hunter else "", address, phone, email)
 
     # --- title ---------------------------------------------------------------
     pdf.set_xy(LEFT, 44)
@@ -375,15 +381,7 @@ def render_stock_pdf(records: list[PartRecord], hunter: Hunter | None,
              (t("€/kg", lang), "R"), (t("Preis", lang), "R")]
 
     def table_head():
-        y = pdf.get_y()
-        x = LEFT
-        for (text, align), w in zip(heads, STOCK_COLS):
-            pdf.eyebrow(text, x + (2 if align == "L" else 0), y, w - (2 if align == "L" else 0), align)
-            x += w
-        pdf.set_draw_color(*INK)
-        pdf.set_line_width(0.35)
-        pdf.line(LEFT, y + 6, RIGHT, y + 6)
-        pdf.set_y(y + 6)
+        pdf.table_head(heads, STOCK_COLS)
 
     groups = _stock_groups(records, lang)
     order = {name: i for i, name in enumerate(species_order)}
@@ -433,5 +431,98 @@ def render_stock_pdf(records: list[PartRecord], hunter: Hunter | None,
     pdf.set_xy(LEFT, pdf.get_y() + 6)
     pdf.style(8.5, MUTED)
     pdf.multi_cell(WIDTH, 4.4, t("Wildbret aus eigener Jagd. Preis je Paket; Angebot freibleibend, solange der Vorrat reicht.", lang))
+
+    return bytes(pdf.output())
+
+# --- price list --------------------------------------------------------------
+# The prices from the settings, as a page to hand out. Built from the config
+# on every render — there is no second copy of the prices to keep in step.
+
+# Item, amount, price.
+PRICE_COLS = (110, 30, 30)
+PRICE_ROW = 7.5
+
+def render_price_list_pdf(species: list[Species], hunter: Hunter | None, lang: str = "de") -> bytes:
+    """The price list, grouped per species in config order."""
+    address, phone, email = seller_contact(hunter, lang)
+    date = format_date(datetime.now().date(), lang)
+
+    pdf = InvoicePDF(
+        footer_text=f"{t('Preisliste', lang)} · {date}",
+        page_text=page_text(lang),
+    )
+    pdf.add_page()
+    pdf.letterhead(hunter.name if hunter else "", address, phone, email)
+
+    # --- title ---------------------------------------------------------------
+    pdf.set_xy(LEFT, 44)
+    pdf.style(20, INK, family="bricolage", bold=True)
+    pdf.cell(WIDTH / 2, 10, t("Preisliste", lang))
+    pdf.set_xy(LEFT + WIDTH / 2, 47)
+    pdf.style(9.5, MUTED)
+    pdf.cell(WIDTH / 2, 5, t("Stand {date}", lang, date=date), align="R")
+    pdf.set_y(58)
+
+    heads = [(t("Artikel", lang), "L"), (t("Menge", lang), "R"), (t("Preis", lang), "R")]
+
+    def table_head():
+        pdf.table_head(heads, PRICE_COLS)
+
+    table_head()
+    pdf.set_line_width(0.2)
+
+    def species_heading(heading: str):
+        """The tracked capitals that separate one species from the next."""
+        pdf.set_xy(LEFT, pdf.get_y() + 4)
+        pdf.style(9, ACCENT, bold=True, spacing=0.6)
+        pdf.cell(WIDTH, 5, heading.upper())
+        pdf.set_char_spacing(0)
+        pdf.set_y(pdf.get_y() + 5.5)
+
+    last_species = None
+    for sp in species:
+        rows = price_list_rows(sp)
+        if not rows:
+            continue
+        heading = sp.list_name
+        if heading != last_species:
+            # the species heading and its first row travel together
+            if pdf.get_y() + PRICE_ROW + 10 > pdf.page_break_trigger:
+                pdf.add_page()
+                pdf.set_y(20)
+                table_head()
+                pdf.set_line_width(0.2)
+            species_heading(heading)
+            last_species = heading
+        for row in rows:
+            if pdf.get_y() + PRICE_ROW > pdf.page_break_trigger:
+                pdf.add_page()
+                pdf.set_y(20)
+                table_head()
+                pdf.set_line_width(0.2)
+                # a continued page repeats the species it is in
+                species_heading(heading)
+            y = pdf.get_y()
+            x = LEFT
+            pdf.set_xy(x + 2, y + 1.5)
+            pdf.style(10, INK, bold=True)
+            pdf.cell(PRICE_COLS[0] - 2, 4.5, pdf.fit(row["label"], PRICE_COLS[0] - 4))
+            x += PRICE_COLS[0]
+            for w, text, color, bold in (
+                (PRICE_COLS[1], row["amount"], MUTED, False),
+                (PRICE_COLS[2], f"{format_de(row['price'], 2, lang)} €", INK, True),
+            ):
+                pdf.set_xy(x, y + 1.5)
+                pdf.style(10, color, bold=bold)
+                pdf.cell(w, 4.5, text, align="R")
+                x += w
+            pdf.set_draw_color(*LINE)
+            pdf.line(LEFT, y + PRICE_ROW, RIGHT, y + PRICE_ROW)
+            pdf.set_y(y + PRICE_ROW)
+
+    # --- foot ----------------------------------------------------------------
+    pdf.set_xy(LEFT, pdf.get_y() + 6)
+    pdf.style(8.5, MUTED)
+    pdf.multi_cell(WIDTH, 4.4, t("Wildbret aus eigener Jagd. Preise inkl. Verpackung, solange der Vorrat reicht.", lang))
 
     return bytes(pdf.output())

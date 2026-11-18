@@ -99,6 +99,13 @@ const priceInput = document.getElementById('price-input');
 const weightInput = document.getElementById('weight-input');
 function fillDefaults() {
   const p = partDefaults();
+  // A package part (Bratwurst: 4 Stück für 7,50 €) fills the piece count and
+  // its package price — the per-kg price would be wrong for a fixed pack.
+  if (p.pieces != null && p.piece_price != null) {
+    weightInput.value = p.pieces + 'x';
+    priceInput.value = p.piece_price.toFixed(2).replace('.', DEC);
+    return;
+  }
   priceInput.value = p.price != null ? p.price.toFixed(2).replace('.', DEC) : '';
   weightInput.value = p.weight_kg != null ? p.weight_kg.toFixed(3).replace('.', DEC) : '';
 }
