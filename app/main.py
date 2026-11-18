@@ -7,7 +7,7 @@ from urllib.parse import quote
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 # request.form() yields starlette's UploadFile, which fastapi's one subclasses
 # — an isinstance check on a hand-parsed form must use the base class
 from starlette.datastructures import UploadFile as StarletteUploadFile
@@ -308,6 +308,18 @@ def public_stock_groups(cfg) -> list[tuple[str, list[dict]]]:
             groups.append((heading, []))
         groups[-1][1].append(row)
     return groups
+
+
+@app.get("/robots.txt", include_in_schema=False)
+def robots():
+    """Keep the public stock page out of search engines.
+
+    The page also carries a noindex meta tag and the bundle an .htaccess
+    header; this is the third layer, and the one the public Caddy block
+    proxies. Disallow everything — this is a private app with one public page,
+    and nothing here should be crawled.
+    """
+    return PlainTextResponse("User-agent: *\nDisallow: /\n")
 
 
 @app.get("/stock")

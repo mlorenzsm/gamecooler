@@ -88,13 +88,12 @@ http://__PUBLIC_HOST__:__PUBLIC_PORT__ {
 		reverse_proxy 127.0.0.1:8010
 	}
 
+	# robots.txt comes from the app, not from a heredoc: the heredoc syntax
+	# isn't understood by the Caddy in the containers (it failed with
+	# "unrecognized directive: User-agent:"), and a one-line respond can't
+	# carry the two lines a robots.txt needs. The app serves the file.
 	handle /robots.txt {
-		# Two real lines. A "\n" inside a Caddyfile string is literal, not a
-		# newline, so the body is built from a heredoc.
-		respond <<ROBOTS
-User-agent: *
-Disallow: /
-ROBOTS
+		reverse_proxy 127.0.0.1:8010
 	}
 
 	# Everything else — settings, finances, sales, parts.json, certificates —
