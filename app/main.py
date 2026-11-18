@@ -18,7 +18,7 @@ from PIL import Image
 from pydantic import ValidationError
 
 from . import certificates, ledger, paperless, public_site, publish, registry, sales, scale
-from .config import LOGO_PATH, PART_KINDS, UNITS, Hunter, PartDefaults, Preset, PresetItem, Recipe, RecipeItem, Species, load_config, price_list_rows, save_config
+from .config import LOGO_PATH, PART_KINDS, UNITS, Hunter, PartDefaults, Preset, PresetItem, PublicOffer, Recipe, RecipeItem, Species, load_config, price_list_rows, save_config
 from .i18n import LANGUAGES, decimal_separator, format_date, get_lang, pick_language, reset_lang, set_lang, t
 from .labels import render_info_label, render_qr_label
 from .models import (
@@ -335,8 +335,16 @@ def public_stock_groups(cfg) -> list[tuple[str, list[dict]]]:
     young boar, so its cuts belong under the Schwarzwild heading instead of a
     heading of their own. The heading is always the *target* species' display
     name, and its rows are merged, so one heading lists both.
+
+    Config `public_offers` are appended to their species' group: things you
+    offer that aren't in the freezer. They only appear while a selection is
+    published — the page is a curated list, and offers belong to that
+    selection, not to the "show everything" fallback.
     """
-    rows = public_stock(registry.inventory())
+    records = registry.inventory()
+    # Are we in the curated mode? True once any entry carries a public flag.
+    curated = any(r.public is not None for r in registry.load_all())
+    rows = public_stock(records)
     # Which heading a species ends up under: its own name, or its group's.
     heading_of: dict[str, str] = {}
     for s in cfg.species:
@@ -350,6 +358,23 @@ def public_stock_groups(cfg) -> list[tuple[str, list[dict]]]:
         order.get(r["species"], len(order)),
         r["part"],
     ))
+    if curated:
+        for offer in cfg.public_offers:
+            rows.append({
+                "species": offer.species, "part": offer.part,
+                "availability": offer.availability, "ingredients": None,
+                "offer": True,
+                "price": ({"price": offer.price, "counted": offer.unit == "piece",
+                           "unit": t("Stück") if offer.unit == "piece" else t("pro kg")}
+                          if offer.price is not None else None),
+            })
+        # Offers go last within their group, after the real stock.
+        rows.sort(key=lambda r: (
+            order.get(heading_of.get(r["species"], r["species"]), len(order)),
+            order.get(r["species"], len(order)),
+            1 if r.get("offer") else 0,
+            r["part"],
+        ))
     groups: list[tuple[str, list[dict]]] = []
     for row in rows:
         target = heading_of.get(row["species"], row["species"])
@@ -357,9 +382,10 @@ def public_stock_groups(cfg) -> list[tuple[str, list[dict]]]:
         heading = list_names.get(target, target)
         if not groups or groups[-1][0] != heading:
             groups.append((heading, []))
-        # The price the customer is told, resolved through the price list so a
-        # renamed cut ("Keule oder Blatt") carries its price too.
-        row["price"] = _public_price(cfg, row["species"], row["part"])
+        if "price" not in row:
+            # The price the customer is told, resolved through the price list so
+            # a renamed cut ("Keule oder Blatt") carries its price too.
+            row["price"] = _public_price(cfg, row["species"], row["part"])
         groups[-1][1].append(row)
     return groups
 
@@ -1343,6 +1369,31 @@ def settings_public_url(public_url: str = Form(""), public_region: str = Form(""
     return _settings_general(
         t("Öffentliche Adresse: {url}", url=url) if url else t("Keine öffentliche Adresse gesetzt")
     )
+
+
+@app.post("/settings/public-offers")
+def settings_public_offer_add(species: str = Form(...), part: str = Form(...),
+                              availability: str = Form("available"),
+                              price: str = Form(""), unit: str = Form("kg")):
+    """Add a line to the public page that isn't a stock entry."""
+    part = " ".join(part.split())
+    if not part:
+        return _settings_general(t("Bezeichnung fehlt"))
+    if not config.find_species(species):
+        return _settings_general(t("Unbekannte Wildart: {species}", species=species))
+    config.public_offers.append(PublicOffer(
+        species=species, part=part, availability=availability,
+        price=parse_optional_decimal(price), unit=unit,
+    ))
+    return _settings_general(t("Angebot „{name}“ hinzugefügt", name=part))
+
+
+@app.post("/settings/public-offers/delete")
+def settings_public_offer_delete(index: int = Form(...)):
+    if 0 <= index < len(config.public_offers):
+        removed = config.public_offers.pop(index)
+        return _settings_general(t("Angebot „{name}“ entfernt", name=removed.part))
+    return _settings_general(t("Angebot nicht gefunden"))
 
 
 @app.post("/settings/publish")

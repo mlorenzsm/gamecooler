@@ -69,7 +69,7 @@
 
 <section class="settings-card">
   <h3>{{ icon('package') }}{{ t("Öffentliche Bestandsseite") }}</h3>
-  <p class="hint">{{ t("Adresse der Seite, die der QR-Code auf Preisliste und Angebot öffnet. Leer = keine Veröffentlichung; die PDFs tragen dann keinen QR-Code. Sie zeigt Wildart, Teilstück, Verfügbarkeit und bei Zubereitungen die Zutaten — keine Preise, Gewichte, Jäger oder Wildmarken.") }}</p>
+  <p class="hint">{{ t("Adresse der Seite, die der QR-Code auf Preisliste und Angebot öffnet. Leer = keine Veröffentlichung; die PDFs tragen dann keinen QR-Code. Sie zeigt Wildart, Teilstück, Verfügbarkeit, Preis und bei Zubereitungen die Zutaten — keine Gewichte, Jäger oder Wildmarken.") }}</p>
   <form method="post" action="/settings/public-url" class="list-group">
     <label class="list-row">
       <span class="grow">{{ t("Adresse") }}</span>
@@ -114,6 +114,58 @@
   {% else %}
   <p class="hint">{{ t("Veröffentlichen ist nicht eingerichtet: PUBLISH_HOST, PUBLISH_USER und PUBLISH_PASSWORD fehlen in der Umgebung des Dienstes.") }}</p>
   {% endif %}
+
+  {# Angebote ohne Bestandseintrag: Dinge, die du anbietest, aber noch nicht
+     in der Truhe hast. Sie erscheinen zusammen mit einer veröffentlichten
+     Auswahl — nicht im „alles anzeigen“-Modus. #}
+  <h4 class="mt-4">{{ icon('tag') }}{{ t("Weitere Angebote") }}</h4>
+  <p class="hint">{{ t("Zeilen ohne Bestandseintrag, z. B. ein Teilstück, das es noch nicht in die Truhe geschafft hat. Sie stehen auf der Seite, sobald eine Auswahl veröffentlicht ist.") }}</p>
+  <ul class="list-group">
+    {% for o in config.public_offers %}
+    <li class="list-row">
+      <span class="grow"><b>{{ o.part }}</b>
+        <span class="hint">{{ o.species }} · {{ t("verfügbar") if o.availability == "available" else t("wenige") }}{% if o.price is not none %} · {{ o.price | de }} €{% if o.unit == "piece" %} / {{ t("Stück") }}{% else %} {{ t("pro kg") }}{% endif %}{% endif %}</span>
+      </span>
+      <form method="post" action="/settings/public-offers/delete">
+        <input type="hidden" name="index" value="{{ loop.index0 }}">
+        <button class="small danger" type="submit"
+                data-confirm="{{ t("Angebot „{name}“ entfernen?", name=o.part) }}" data-confirm-danger data-confirm-ok="{{ t('Entfernen') }}">{{ icon('trash-2') }}</button>
+      </form>
+    </li>
+    {% else %}
+    <li class="list-row"><span class="hint">{{ t("Noch keine weiteren Angebote.") }}</span></li>
+    {% endfor %}
+  </ul>
+  <form method="post" action="/settings/public-offers" class="list-group">
+    <label class="list-row">
+      <span class="grow">{{ t("Wildart") }}</span>
+      <select name="species" required>
+        {% for s in config.species %}<option>{{ s.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="list-row">
+      <span class="grow">{{ t("Bezeichnung") }}</span>
+      <input name="part" required placeholder="{{ t('z. B. Rehkeule') }}">
+    </label>
+    <label class="list-row">
+      <span class="grow">{{ t("Verfügbarkeit") }}</span>
+      <select name="availability">
+        <option value="available">{{ t("verfügbar") }}</option>
+        <option value="few">{{ t("wenige") }}</option>
+      </select>
+    </label>
+    <label class="list-row">
+      <span class="grow">{{ t("Preis (€)") }}</span>
+      <input name="price" inputmode="decimal" pattern="[0-9]+([.,][0-9]+)?" placeholder="{{ t('optional') }}">
+      <select name="unit" aria-label="{{ t('Einheit') }}">
+        <option value="kg">{{ t("pro kg") }}</option>
+        <option value="piece">{{ t("Stück") }}</option>
+      </select>
+    </label>
+    <div class="list-row list-actions">
+      <button class="small" type="submit">+ {{ t("Angebot hinzufügen") }}</button>
+    </div>
+  </form>
 </section>
 
 <section class="settings-card">
