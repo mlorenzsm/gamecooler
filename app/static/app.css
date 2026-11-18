@@ -456,16 +456,40 @@ nav.tabbar { view-transition-name: tabbar; }       /* the bar stays put while th
 @layer components {
   .selection-bar {
     position: fixed; z-index: 40; left: 0; right: 0; margin-inline: auto;
-    width: min(34rem, calc(100% - 2 * var(--s-3)));
+    /* Wide enough for count + Entnehmen + Verkaufen + Veröffentlichen +
+       Exportieren on one row; below that it wraps rather than letting an
+       item escape the rounded container. */
+    width: min(46rem, calc(100% - 2 * var(--s-3)));
     bottom: calc(var(--s-4) + env(safe-area-inset-bottom));
-    display: flex; align-items: center; gap: var(--s-2);
+    display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2);
     padding: var(--s-2) var(--s-2) var(--s-2) var(--s-4);
     background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
     box-shadow: var(--shadow-float);
   }
-  .selection-bar .sel-count { flex: 1; font-weight: 600; }
-  .selection-bar button { min-height: 40px; }
+  .selection-bar .sel-count { flex: 1 1 auto; font-weight: 600; white-space: nowrap; }
+  .selection-bar button, .selection-bar a.small { min-height: 40px; white-space: nowrap; }
+  /* The export is a link (a download has to be a GET), but it sits in a row of
+     buttons and must look like one. */
+  .selection-bar a.small {
+    display: inline-flex; align-items: center; gap: var(--s-1);
+    padding: 0 var(--s-3); border-radius: var(--r-sm);
+    border: 1px solid var(--line); background: var(--surface);
+    color: var(--ink); font-size: var(--text-sm); font-weight: 500;
+    text-decoration: none;
+  }
+  .selection-bar a.small:hover { background: var(--hover); }
   .selection-bar button.print { grid-column: auto; }
+  /* Narrow phones: the count takes its own line and the four actions sit two
+     per row, so nothing overflows the rounded container. calc(50% - 4px) is
+     half the row minus half the 8px gap. */
+  @media (max-width: 34rem) {
+    .selection-bar { padding: var(--s-2); }
+    .selection-bar .sel-count { flex: 1 1 100%; }
+    .selection-bar button, .selection-bar a.small {
+      flex: 1 1 calc(50% - 4px); justify-content: center; padding: 0 var(--s-2);
+      box-sizing: border-box;
+    }
+  }
   table.inventory { margin-bottom: 5rem; }   /* room to scroll past the bar */
   @media (max-width: 640px) {
     .selection-bar { bottom: calc(84px + env(safe-area-inset-bottom)); }

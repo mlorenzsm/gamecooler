@@ -110,6 +110,50 @@ class PresetItem(BaseModel):
     count: int
 
 
+class PublicOffer(BaseModel):
+    """A line on the public page that is not a stock entry.
+
+    For things you offer but haven't put in the freezer — an upcoming cut, a
+    cut that isn't labelled yet. It sits alongside the published selection and
+    is stored in config.yaml, so it survives a deploy and doesn't need a
+    registry record it would then have to keep consistent with.
+
+    Deliberately no weight and no Wildmarke: this is an offer, not a package.
+    """
+
+    species: str
+    part: str
+    # AVAILABLE / FEW from models.py, as plain strings so config stays free of
+    # the registry's vocabulary.
+    availability: str = "available"
+    # None = no price line (a cut you can't price yet). The unit follows the
+    # part: per kg, or per piece for something sold as a package.
+    price: float | None = None
+    unit: str = "kg"                  # "kg" | "piece"
+
+    @field_validator("species", "part", "availability", "unit", mode="before")
+    @classmethod
+    def _clean(cls, v):
+        return " ".join(str(v or "").split())
+
+    @field_validator("availability", mode="before")
+    @classmethod
+    def _known_availability(cls, v):
+        return v if v in ("available", "few") else "available"
+
+    @field_validator("unit", mode="before")
+    @classmethod
+    def _known_unit(cls, v):
+        return v if v in ("kg", "piece") else "kg"
+
+    @field_validator("price", mode="before")
+    @classmethod
+    def _german_decimal(cls, v):
+        if v is None or v == "":
+            return None
+        return float(str(v).replace(",", "."))
+
+
 class Preset(BaseModel):
     name: str
     items: list[PresetItem]
@@ -366,12 +410,19 @@ class Config(BaseModel):
     # Public address of the stock page, e.g. "https://wildbret.example.de".
     # Empty = the app is not published; the PDFs then carry no QR code.
     public_url: str = ""
+    # Lines on the public page that aren't stock entries — things you offer
+    # but haven't put in the freezer. Shown together with a published
+    # selection; see public_stock_groups.
+    public_offers: list[PublicOffer] = []
     # Heading of the public page, e.g. "Wildbret aus dem Taunus, 65321
     # Heidenrod". Empty = just "Wildbret".
     public_region: str = ""
     # Where customers write to reserve a piece. Shown on the public page as a
     # mailto link. Empty = no order line.
     public_email: str = ""
+    # A line under the heading — storage conditions, an ordering note.
+    # Empty = no note.
+    public_note: str = ""
 
     @field_validator("public_url", mode="before")
     @classmethod
@@ -379,7 +430,7 @@ class Config(BaseModel):
         url = " ".join(str(v or "").split()).rstrip("/")
         return url if url.startswith(("http://", "https://")) else ""
 
-    @field_validator("public_region", mode="before")
+    @field_validator("public_region", "public_note", mode="before")
     @classmethod
     def _clean_public_region(cls, v):
         return " ".join(str(v or "").split())
@@ -566,6 +617,10 @@ def save_config(config: Config) -> None:
         data["public_region"] = config.public_region
     if config.public_email:
         data["public_email"] = config.public_email
+    if config.public_note:
+        data["public_note"] = config.public_note
+    if config.public_offers:
+        data["public_offers"] = [o.model_dump() for o in config.public_offers]
     if config.scale != ScaleSettings():
         data["scale"] = config.scale.model_dump()
     if config.bags:

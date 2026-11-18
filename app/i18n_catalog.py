@@ -240,8 +240,30 @@ EN = {
     "Zutaten:": "Ingredients:",
     "Bestand ansehen": "See what is in stock",
     "Öffentliche Bestandsseite": "Public stock page",
-    "Adresse der Seite, die der QR-Code auf Preisliste und Angebot öffnet. Leer = keine Veröffentlichung; die PDFs tragen dann keinen QR-Code. Sie zeigt Wildart, Teilstück, Verfügbarkeit und bei Zubereitungen die Zutaten — keine Preise, Gewichte, Jäger oder Wildmarken.":
-        "Address of the page the QR code on the price list and the offer sheet opens. Empty = not published; the PDFs then carry no QR code. It shows species, cut, availability and — for processed meat — ingredients. No prices, weights, hunters or game tags.",
+    "Adresse der Seite, die der QR-Code auf Preisliste und Angebot öffnet. Leer = keine Veröffentlichung; die PDFs tragen dann keinen QR-Code. Sie zeigt Wildart, Teilstück, Verfügbarkeit, Preis und bei Zubereitungen die Zutaten — keine Gewichte, Jäger oder Wildmarken.":
+        "Address of the page the QR code on the price list and the offer sheet opens. Empty = not published; the PDFs then carry no QR code. It shows species, cut, availability, price and — for processed meat — ingredients. No weights, hunters or game tags.",
+    "Weitere Angebote": "More offers",
+    "Zeilen ohne Bestandseintrag, z. B. ein Teilstück, das es noch nicht in die Truhe geschafft hat. Sie stehen auf der Seite, sobald eine Auswahl veröffentlicht ist.":
+        "Lines without a stock entry, e.g. a cut that hasn't made it into the freezer yet. They appear on the page once a selection is published.",
+    "Noch keine weiteren Angebote.": "No further offers yet.",
+    "Angebot hinzufügen": "Add offer",
+    "z. B. Rehkeule": "e.g. roe deer leg",
+    "Verfügbarkeit": "Availability",
+    "Einheit": "Unit",
+    "Stück": "piece",
+    "Angebot „{name}“ hinzugefügt": "Offer “{name}” added",
+    "Angebot „{name}“ entfernt": "Offer “{name}” removed",
+    "Angebot „{name}“ entfernen?": "Remove offer “{name}”?",
+    "Angebot nicht gefunden": "Offer not found",
+    "Bezeichnung fehlt": "Name missing",
+    "Unbekannte Wildart: {species}": "Unknown species: {species}",
+    "Teilstücke oben anhaken — sie stehen dann in der E-Mail.":
+        "Tick the cuts above — they will be in the email.",
+    "Hinweis": "Note",
+    "Steht unter der Überschrift, z. B. „Alle Teilstücke sind tiefgefroren bei −18 °C.“ Leer = kein Hinweis.":
+        "Shown under the heading, e.g. “All cuts are frozen at −18 °C”. Empty = no note.",
+    "Alle Teilstücke sind tiefgefroren bei −18 °C.":
+        "All cuts are deep-frozen at −18 °C.",
     "Adresse": "Address",
     "Die Adresse muss mit http:// oder https:// beginnen": "The address must start with http:// or https://",
     "Öffentliche Adresse: {url}": "Public address: {url}",
